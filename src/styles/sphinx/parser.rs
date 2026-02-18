@@ -16,7 +16,7 @@
 
 use crate::error::ParseResult;
 use crate::ast::Spanned;
-use crate::sphinx::ast::SphinxDocstring;
+use crate::styles::sphinx::ast::SphinxDocstring;
 
 /// Parse a Sphinx-style docstring.
 ///

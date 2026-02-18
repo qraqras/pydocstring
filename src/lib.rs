@@ -22,25 +22,24 @@
 
 pub mod ast;
 pub mod error;
-pub mod google;
-pub mod numpy;
 pub mod parser;
-pub mod sphinx;
+pub mod styles;
 
 pub use ast::{
     AttributeView, Docstring, DocstringLike, ExceptionView, ParameterView, Position, ReturnsView,
     Span, Spanned, Style,
 };
 pub use error::ParseError;
-pub use google::{
-    GoogleArgument, GoogleAttribute, GoogleDocstring, GoogleException, GoogleReturns,
-};
-pub use numpy::{
-    NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod, NumPyParameter,
-    NumPyReference, NumPyReturns, NumPySection, NumPySectionBody, NumPySectionHeader, NumPyWarning,
-    SeeAlsoItem,
-};
 pub use parser::{detect_style, parse};
-pub use sphinx::{
-    SphinxDocstring, SphinxException, SphinxField, SphinxParameter, SphinxReturns, SphinxVariable,
+pub use styles::google::{
+    self, GoogleArgument, GoogleAttribute, GoogleDocstring, GoogleException, GoogleReturns,
+};
+pub use styles::numpy::{
+    self, NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod,
+    NumPyParameter, NumPyReference, NumPyReturns, NumPySection, NumPySectionBody,
+    NumPySectionHeader, NumPyWarning, SeeAlsoItem,
+};
+pub use styles::sphinx::{
+    self, SphinxDocstring, SphinxException, SphinxField, SphinxParameter, SphinxReturns,
+    SphinxVariable,
 };

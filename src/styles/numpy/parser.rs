@@ -21,7 +21,7 @@
 
 use crate::ast::{build_line_offsets, indent_len, make_span, make_spanned, Span, Spanned};
 use crate::error::ParseResult;
-use crate::numpy::ast::{
+use crate::styles::numpy::ast::{
     NumPyDeprecation, NumPyDocstring, NumPyException, NumPyParameter, NumPyReturns, NumPySection,
     NumPySectionBody, NumPySectionHeader,
 };
@@ -358,7 +358,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                     let (raises, ni) = parse_raises(&lines, i, &offsets)?;
                     let warns = raises
                         .into_iter()
-                        .map(|e| crate::numpy::ast::NumPyWarning {
+                        .map(|e| crate::styles::numpy::ast::NumPyWarning {
                             span: e.span,
                             warning_type: e.exception_type,
                             description: e.description,
@@ -390,7 +390,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                     let (params, ni) = parse_parameters(&lines, i, &offsets)?;
                     let attrs = params
                         .into_iter()
-                        .map(|p| crate::numpy::ast::NumPyAttribute {
+                        .map(|p| crate::styles::numpy::ast::NumPyAttribute {
                             span: p.span,
                             name: p
                                 .names
@@ -407,7 +407,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                     let (params, ni) = parse_parameters(&lines, i, &offsets)?;
                     let methods = params
                         .into_iter()
-                        .map(|p| crate::numpy::ast::NumPyMethod {
+                        .map(|p| crate::styles::numpy::ast::NumPyMethod {
                             span: p.span,
                             name: p
                                 .names
@@ -910,7 +910,7 @@ fn parse_see_also(
     lines: &[&str],
     start: usize,
     offsets: &[usize],
-) -> ParseResult<(Vec<crate::numpy::ast::SeeAlsoItem>, usize)> {
+) -> ParseResult<(Vec<crate::styles::numpy::ast::SeeAlsoItem>, usize)> {
     let mut items = Vec::new();
     let mut i = start;
 
@@ -952,7 +952,7 @@ fn parse_see_also(
         let names = parse_name_list(names_str, i, col, offsets);
         let entry_end_col = col + trimmed.len();
 
-        items.push(crate::numpy::ast::SeeAlsoItem {
+        items.push(crate::styles::numpy::ast::SeeAlsoItem {
             span: make_span(entry_start, col, entry_start, entry_end_col, offsets),
             names,
             description,
@@ -975,7 +975,7 @@ fn parse_references(
     lines: &[&str],
     start: usize,
     offsets: &[usize],
-) -> ParseResult<(Vec<crate::numpy::ast::NumPyReference>, usize)> {
+) -> ParseResult<(Vec<crate::styles::numpy::ast::NumPyReference>, usize)> {
     let mut refs = Vec::new();
     let mut i = start;
     let mut current_number: u32 = 0;
@@ -1002,7 +1002,7 @@ fn parse_references(
                     start_l
                 };
                 let end_col = current_col + content.lines().last().unwrap_or("").len();
-                refs.push(crate::numpy::ast::NumPyReference {
+                refs.push(crate::styles::numpy::ast::NumPyReference {
                     span: make_span(start_l, current_col, end_l, end_col, offsets),
                     number: current_number,
                     content: make_spanned(content, start_l, current_col, end_l, end_col, offsets),
@@ -1030,7 +1030,7 @@ fn parse_references(
                     start_l
                 };
                 let end_col = current_col + content.lines().last().unwrap_or("").len();
-                refs.push(crate::numpy::ast::NumPyReference {
+                refs.push(crate::styles::numpy::ast::NumPyReference {
                     span: make_span(start_l, current_col, end_l, end_col, offsets),
                     number: current_number,
                     content: make_spanned(content, start_l, current_col, end_l, end_col, offsets),
@@ -1063,7 +1063,7 @@ fn parse_references(
             start_l
         };
         let end_col = current_col + content.lines().last().unwrap_or("").len();
-        refs.push(crate::numpy::ast::NumPyReference {
+        refs.push(crate::styles::numpy::ast::NumPyReference {
             span: make_span(start_l, current_col, end_l, end_col, offsets),
             number: current_number,
             content: make_spanned(content, start_l, current_col, end_l, end_col, offsets),

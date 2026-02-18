@@ -9,9 +9,9 @@
 
 use core::fmt;
 
-use crate::google::GoogleDocstring;
-use crate::numpy::NumPyDocstring;
-use crate::sphinx::SphinxDocstring;
+use crate::styles::google::GoogleDocstring;
+use crate::styles::numpy::NumPyDocstring;
+use crate::styles::sphinx::SphinxDocstring;
 
 // =============================================================================
 // Source location types

@@ -66,9 +66,9 @@ pub fn detect_style(input: &str) -> Style {
 /// ```
 pub fn parse(input: &str) -> ParseResult<Docstring> {
     match detect_style(input) {
-        Style::NumPy => crate::numpy::parse_numpy(input).map(Docstring::NumPy),
-        Style::Google => crate::google::parse_google(input).map(Docstring::Google),
-        Style::Sphinx => crate::sphinx::parse_sphinx(input).map(Docstring::Sphinx),
+        Style::NumPy => crate::styles::numpy::parse_numpy(input).map(Docstring::NumPy),
+        Style::Google => crate::styles::google::parse_google(input).map(Docstring::Google),
+        Style::Sphinx => crate::styles::sphinx::parse_sphinx(input).map(Docstring::Sphinx),
     }
 }
 

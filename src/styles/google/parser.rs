@@ -16,7 +16,7 @@
 
 use crate::error::ParseResult;
 use crate::ast::Spanned;
-use crate::google::ast::GoogleDocstring;
+use crate::styles::google::ast::GoogleDocstring;
 
 /// Parse a Google-style docstring.
 ///
