@@ -1,8 +1,7 @@
 use core::fmt;
 
-use crate::span::{Span, Spanned};
-use crate::traits::DocstringLike;
-use crate::views::{AttributeView, ExceptionView, ParameterView, ReturnsView};
+use crate::ast::{Span, Spanned};
+use crate::ast::{AttributeView, DocstringLike, ExceptionView, ParameterView, ReturnsView};
 
 // =============================================================================
 // NumPy Style Types

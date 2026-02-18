@@ -1,6 +1,6 @@
 //! Integration tests for Sphinx-style docstring parser.
 
-use pydocstring::parser::sphinx::parse_sphinx;
+use pydocstring::sphinx::parse_sphinx;
 
 #[test]
 fn test_simple_summary() {

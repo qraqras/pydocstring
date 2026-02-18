@@ -1,6 +1,6 @@
 //! Example: Parsing Sphinx-style docstrings (placeholder)
 
-use pydocstring::parser::sphinx::parse_sphinx;
+use pydocstring::sphinx::parse_sphinx;
 
 fn main() {
     let docstring = r#"

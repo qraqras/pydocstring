@@ -1,11 +1,15 @@
-//! Docstring parser implementations for different styles.
+//! Top-level parsing interface and style detection.
+//!
+//! This module provides:
+//! - [`detect_style`] for automatic style detection
+//! - [`parse`] for automatic parsing
 
-pub mod google;
-pub mod numpy;
-pub mod sphinx;
-
+use crate::ast::{Docstring, Style};
 use crate::error::ParseResult;
-use crate::types::{Docstring, Style};
+
+// =============================================================================
+// Style detection
+// =============================================================================
 
 /// Detect the docstring style from its content.
 ///
@@ -31,22 +35,15 @@ use crate::types::{Docstring, Style};
 /// assert_eq!(detect_style(google), Style::Google);
 /// ```
 pub fn detect_style(input: &str) -> Style {
-    // Sphinx: look for field list markers like :param, :type, :returns, :rtype
     if has_sphinx_markers(input) {
         return Style::Sphinx;
     }
-
-    // NumPy: look for section header + underline pattern
     if has_numpy_sections(input) {
         return Style::NumPy;
     }
-
-    // Google: look for "Word:" section headers
     if has_google_sections(input) {
         return Style::Google;
     }
-
-    // Default to Google (simplest style, also handles plain summaries)
     Style::Google
 }
 
@@ -69,9 +66,9 @@ pub fn detect_style(input: &str) -> Style {
 /// ```
 pub fn parse(input: &str) -> ParseResult<Docstring> {
     match detect_style(input) {
-        Style::NumPy => numpy::parse_numpy(input).map(Docstring::NumPy),
-        Style::Google => google::parse_google(input).map(Docstring::Google),
-        Style::Sphinx => sphinx::parse_sphinx(input).map(Docstring::Sphinx),
+        Style::NumPy => crate::numpy::parse_numpy(input).map(Docstring::NumPy),
+        Style::Google => crate::google::parse_google(input).map(Docstring::Google),
+        Style::Sphinx => crate::sphinx::parse_sphinx(input).map(Docstring::Sphinx),
     }
 }
 
@@ -79,7 +76,6 @@ pub fn parse(input: &str) -> ParseResult<Docstring> {
 // Style detection helpers
 // =============================================================================
 
-/// Check for Sphinx-style field markers.
 fn has_sphinx_markers(input: &str) -> bool {
     for line in input.lines() {
         let trimmed = line.trim();
@@ -100,7 +96,6 @@ fn has_sphinx_markers(input: &str) -> bool {
     false
 }
 
-/// Check for NumPy-style section underlines.
 fn has_numpy_sections(input: &str) -> bool {
     let lines: Vec<&str> = input.lines().collect();
     for i in 0..lines.len().saturating_sub(1) {
@@ -117,7 +112,6 @@ fn has_numpy_sections(input: &str) -> bool {
     false
 }
 
-/// Known Google-style section headers.
 const GOOGLE_SECTIONS: &[&str] = &[
     "Args:",
     "Arguments:",
@@ -136,11 +130,10 @@ const GOOGLE_SECTIONS: &[&str] = &[
     "Warnings:",
 ];
 
-/// Check for Google-style section headers.
 fn has_google_sections(input: &str) -> bool {
     for line in input.lines() {
         let trimmed = line.trim();
-        if GOOGLE_SECTIONS.iter().any(|s| trimmed == *s) {
+        if GOOGLE_SECTIONS.contains(&trimmed) {
             return true;
         }
     }
@@ -150,7 +143,8 @@ fn has_google_sections(input: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::traits::DocstringLike;
+    use crate::ast::DocstringLike;
+    use crate::ast::Style;
 
     #[test]
     fn test_detect_sphinx() {

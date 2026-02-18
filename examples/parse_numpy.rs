@@ -1,6 +1,6 @@
 //! Example: Parsing NumPy-style docstrings
 
-use pydocstring::parser::numpy::parse_numpy;
+use pydocstring::numpy::parse_numpy;
 
 fn main() {
     let docstring = r#"

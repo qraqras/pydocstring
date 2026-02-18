@@ -1,6 +1,6 @@
 //! Example: Parsing Google-style docstrings (placeholder)
 
-use pydocstring::parser::google::parse_google;
+use pydocstring::google::parse_google;
 
 fn main() {
     let docstring = r#"

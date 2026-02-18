@@ -1,6 +1,6 @@
 //! Integration tests for Google-style docstring parser.
 
-use pydocstring::parser::google::parse_google;
+use pydocstring::google::parse_google;
 
 #[test]
 fn test_simple_summary() {

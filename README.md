@@ -26,7 +26,7 @@ pydocstring = "0.1.0"
 ### NumPy Style
 
 ```rust
-use pydocstring::parser::numpy::parse_numpy;
+use pydocstring::numpy::parse_numpy;
 
 let docstring = r#"
 Calculate the sum of two numbers.

@@ -5,7 +5,7 @@
 //! ## Example
 //!
 //! ```rust
-//! use pydocstring::parser::numpy::parse_numpy;
+//! use pydocstring::numpy::parse_numpy;
 //!
 //! let docstring = r#"
 //! Brief description.
@@ -20,46 +20,27 @@
 //! assert_eq!(result.summary.value, "Brief description.");
 //! ```
 
+pub mod ast;
 pub mod error;
+pub mod google;
+pub mod numpy;
 pub mod parser;
-pub mod span;
-pub mod traits;
-pub mod types;
-pub mod views;
+pub mod sphinx;
 
-pub use error::ParseError;
-pub use parser::{detect_style, parse};
-pub use span::{Position, Span, Spanned};
-pub use traits::DocstringLike;
-pub use types::{
-    Docstring,
-    // Google types
-    GoogleArgument,
-    GoogleAttribute,
-    GoogleDocstring,
-    GoogleException,
-    GoogleReturns,
-    NumPyAttribute,
-    NumPyDeprecation,
-    NumPyDocstring,
-    NumPyException,
-    NumPyMethod,
-    // NumPy types
-    NumPyParameter,
-    NumPyReference,
-    NumPyReturns,
-    NumPySection,
-    NumPySectionBody,
-    NumPySectionHeader,
-    NumPyWarning,
-    SeeAlsoItem,
-    SphinxDocstring,
-    SphinxException,
-    SphinxField,
-    // Sphinx types
-    SphinxParameter,
-    SphinxReturns,
-    SphinxVariable,
-    Style,
+pub use ast::{
+    AttributeView, Docstring, DocstringLike, ExceptionView, ParameterView, Position, ReturnsView,
+    Span, Spanned, Style,
 };
-pub use views::{AttributeView, ExceptionView, ParameterView, ReturnsView};
+pub use error::ParseError;
+pub use google::{
+    GoogleArgument, GoogleAttribute, GoogleDocstring, GoogleException, GoogleReturns,
+};
+pub use numpy::{
+    NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod, NumPyParameter,
+    NumPyReference, NumPyReturns, NumPySection, NumPySectionBody, NumPySectionHeader, NumPyWarning,
+    SeeAlsoItem,
+};
+pub use parser::{detect_style, parse};
+pub use sphinx::{
+    SphinxDocstring, SphinxException, SphinxField, SphinxParameter, SphinxReturns, SphinxVariable,
+};
