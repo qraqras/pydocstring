@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::span::Span;
+use crate::span::{Span, Spanned};
 use crate::traits::DocstringLike;
 use crate::views::{AttributeView, ExceptionView, ParameterView, ReturnsView};
 
@@ -17,12 +17,14 @@ use crate::views::{AttributeView, ExceptionView, ParameterView, ReturnsView};
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct GoogleDocstring {
+    /// Original source text of the docstring.
+    pub source: String,
     /// Source span of the entire docstring.
     pub span: Span,
     /// Brief summary (first line).
-    pub summary: String,
+    pub summary: Spanned<String>,
     /// Extended description.
-    pub description: Option<String>,
+    pub description: Option<Spanned<String>>,
     /// Function/method arguments.
     pub args: Vec<GoogleArgument>,
     /// Return value(s).
@@ -34,11 +36,11 @@ pub struct GoogleDocstring {
     /// Class attributes.
     pub attributes: Vec<GoogleAttribute>,
     /// Note section.
-    pub note: Option<String>,
+    pub note: Option<Spanned<String>>,
     /// Example section.
-    pub example: Option<String>,
+    pub example: Option<Spanned<String>>,
     /// Todo section.
-    pub todo: Vec<String>,
+    pub todo: Vec<Spanned<String>>,
 }
 
 /// Google-style argument.
@@ -46,14 +48,15 @@ pub struct GoogleDocstring {
 pub struct GoogleArgument {
     /// Source span.
     pub span: Span,
-    /// Argument name.
-    pub name: String,
-    /// Argument type (inside parentheses).
-    pub arg_type: Option<String>,
-    /// Argument description.
-    pub description: String,
-    /// Whether marked as optional.
-    pub optional: bool,
+    /// Argument name with its span.
+    pub name: Spanned<String>,
+    /// Argument type (inside parentheses) with its span.
+    pub arg_type: Option<Spanned<String>>,
+    /// Argument description with its span.
+    pub description: Spanned<String>,
+    /// Source span of the `optional` marker, if present.
+    /// `None` means not marked as optional, `Some(span)` gives the location of `optional` text.
+    pub optional: Option<Span>,
 }
 
 /// Google-style return or yield value.
@@ -61,10 +64,10 @@ pub struct GoogleArgument {
 pub struct GoogleReturns {
     /// Source span.
     pub span: Span,
-    /// Return type.
-    pub return_type: Option<String>,
-    /// Description.
-    pub description: String,
+    /// Return type with its span.
+    pub return_type: Option<Spanned<String>>,
+    /// Description with its span.
+    pub description: Spanned<String>,
 }
 
 /// Google-style exception.
@@ -72,10 +75,10 @@ pub struct GoogleReturns {
 pub struct GoogleException {
     /// Source span.
     pub span: Span,
-    /// Exception type.
-    pub exception_type: String,
-    /// Description.
-    pub description: String,
+    /// Exception type with its span.
+    pub exception_type: Spanned<String>,
+    /// Description with its span.
+    pub description: Spanned<String>,
 }
 
 /// Google-style attribute.
@@ -83,20 +86,21 @@ pub struct GoogleException {
 pub struct GoogleAttribute {
     /// Source span.
     pub span: Span,
-    /// Attribute name.
-    pub name: String,
-    /// Attribute type (inside parentheses).
-    pub attr_type: Option<String>,
-    /// Description.
-    pub description: String,
+    /// Attribute name with its span.
+    pub name: Spanned<String>,
+    /// Attribute type (inside parentheses) with its span.
+    pub attr_type: Option<Spanned<String>>,
+    /// Description with its span.
+    pub description: Spanned<String>,
 }
 
 impl GoogleDocstring {
     /// Creates a new empty Google-style docstring.
     pub fn new() -> Self {
         Self {
+            source: String::new(),
             span: Span::empty(),
-            summary: String::new(),
+            summary: Spanned::empty_string(),
             description: None,
             args: Vec::new(),
             returns: None,
@@ -118,26 +122,26 @@ impl Default for GoogleDocstring {
 
 impl fmt::Display for GoogleDocstring {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "GoogleDocstring(summary: {})", self.summary)
+        write!(f, "GoogleDocstring(summary: {})", self.summary.value)
     }
 }
 
 impl DocstringLike for GoogleDocstring {
     fn summary(&self) -> &str {
-        &self.summary
+        &self.summary.value
     }
 
     fn description(&self) -> Option<&str> {
-        self.description.as_deref()
+        self.description.as_ref().map(|s| s.value.as_str())
     }
 
     fn parameters(&self) -> Vec<ParameterView<'_>> {
         self.args
             .iter()
             .map(|a| ParameterView {
-                name: &a.name,
-                param_type: a.arg_type.as_deref(),
-                description: &a.description,
+                name: a.name.as_spanned_str(),
+                param_type: a.arg_type.as_ref().map(|t| t.as_spanned_str()),
+                description: a.description.as_spanned_str(),
                 optional: a.optional,
                 span: a.span,
             })
@@ -148,8 +152,8 @@ impl DocstringLike for GoogleDocstring {
         match &self.returns {
             Some(r) => vec![ReturnsView {
                 name: None,
-                return_type: r.return_type.as_deref(),
-                description: &r.description,
+                return_type: r.return_type.as_ref().map(|t| t.as_spanned_str()),
+                description: r.description.as_spanned_str(),
                 span: r.span,
             }],
             None => Vec::new(),
@@ -160,8 +164,8 @@ impl DocstringLike for GoogleDocstring {
         self.raises
             .iter()
             .map(|e| ExceptionView {
-                exception_type: &e.exception_type,
-                description: &e.description,
+                exception_type: e.exception_type.as_spanned_str(),
+                description: e.description.as_spanned_str(),
                 span: e.span,
             })
             .collect()
@@ -171,9 +175,9 @@ impl DocstringLike for GoogleDocstring {
         self.attributes
             .iter()
             .map(|a| AttributeView {
-                name: &a.name,
-                attr_type: a.attr_type.as_deref(),
-                description: &a.description,
+                name: a.name.as_spanned_str(),
+                attr_type: a.attr_type.as_ref().map(|t| t.as_spanned_str()),
+                description: a.description.as_spanned_str(),
                 span: a.span,
             })
             .collect()

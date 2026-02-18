@@ -4,32 +4,33 @@
 //! without copying data. They are returned by [`DocstringLike`](crate::traits::DocstringLike)
 //! trait methods.
 
-use crate::span::Span;
+use crate::span::{Span, Spanned};
 
 /// A borrowed view of a parameter (style-agnostic).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParameterView<'a> {
-    /// Parameter name.
-    pub name: &'a str,
-    /// Parameter type annotation.
-    pub param_type: Option<&'a str>,
-    /// Parameter description.
-    pub description: &'a str,
-    /// Whether the parameter is optional.
-    pub optional: bool,
-    /// Source span of the parameter definition.
+    /// Parameter name with its span.
+    pub name: Spanned<&'a str>,
+    /// Parameter type annotation with its span.
+    pub param_type: Option<Spanned<&'a str>>,
+    /// Parameter description with its span.
+    pub description: Spanned<&'a str>,
+    /// Source span of the `optional` marker, if present.
+    /// `None` means not marked as optional, `Some(span)` gives the location of `optional` text.
+    pub optional: Option<Span>,
+    /// Source span of the entire parameter definition.
     pub span: Span,
 }
 
 /// A borrowed view of a return value (style-agnostic).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReturnsView<'a> {
-    /// Return value name (if named).
-    pub name: Option<&'a str>,
-    /// Return type annotation.
-    pub return_type: Option<&'a str>,
-    /// Description of the return value.
-    pub description: &'a str,
+    /// Return value name (if named) with its span.
+    pub name: Option<Spanned<&'a str>>,
+    /// Return type annotation with its span.
+    pub return_type: Option<Spanned<&'a str>>,
+    /// Description of the return value with its span.
+    pub description: Spanned<&'a str>,
     /// Source span.
     pub span: Span,
 }
@@ -37,10 +38,10 @@ pub struct ReturnsView<'a> {
 /// A borrowed view of an exception (style-agnostic).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExceptionView<'a> {
-    /// Exception type name.
-    pub exception_type: &'a str,
-    /// Description of when the exception is raised.
-    pub description: &'a str,
+    /// Exception type name with its span.
+    pub exception_type: Spanned<&'a str>,
+    /// Description of when the exception is raised, with its span.
+    pub description: Spanned<&'a str>,
     /// Source span.
     pub span: Span,
 }
@@ -48,12 +49,12 @@ pub struct ExceptionView<'a> {
 /// A borrowed view of an attribute (style-agnostic).
 #[derive(Debug, Clone, PartialEq)]
 pub struct AttributeView<'a> {
-    /// Attribute name.
-    pub name: &'a str,
-    /// Attribute type annotation.
-    pub attr_type: Option<&'a str>,
-    /// Description.
-    pub description: &'a str,
+    /// Attribute name with its span.
+    pub name: Spanned<&'a str>,
+    /// Attribute type annotation with its span.
+    pub attr_type: Option<Spanned<&'a str>>,
+    /// Description with its span.
+    pub description: Spanned<&'a str>,
     /// Source span.
     pub span: Span,
 }

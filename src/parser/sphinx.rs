@@ -15,6 +15,7 @@
 //! ```
 
 use crate::error::ParseResult;
+use crate::span::Spanned;
 use crate::types::SphinxDocstring;
 
 /// Parse a Sphinx-style docstring.
@@ -23,10 +24,11 @@ use crate::types::SphinxDocstring;
 /// after NumPy and Google styles are complete.
 pub fn parse_sphinx(input: &str) -> ParseResult<SphinxDocstring> {
     let mut docstring = SphinxDocstring::new();
+    docstring.source = input.to_string();
 
     // Extract summary (first line)
     if let Some(first_line) = input.lines().next() {
-        docstring.summary = first_line.trim().to_string();
+        docstring.summary = Spanned::dummy(first_line.trim().to_string());
     }
 
     // TODO: Implement full Sphinx-style parsing
@@ -42,6 +44,6 @@ mod tests {
     fn test_parse_simple_sphinx() {
         let docstring = "Brief description.";
         let result = parse_sphinx(docstring).unwrap();
-        assert_eq!(result.summary, "Brief description.");
+        assert_eq!(result.summary.value, "Brief description.");
     }
 }

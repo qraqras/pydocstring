@@ -7,9 +7,9 @@ fn test_simple_summary() {
     let docstring = "This is a brief summary.";
     let result = parse_numpy(docstring).unwrap();
 
-    assert_eq!(result.summary, "This is a brief summary.");
+    assert_eq!(result.summary.value, "This is a brief summary.");
     assert!(result.extended_summary.is_none());
-    assert!(result.parameters.is_empty());
+    assert!(result.parameters().is_empty());
 }
 
 #[test]
@@ -21,7 +21,7 @@ more details about the function.
 "#;
     let result = parse_numpy(docstring).unwrap();
 
-    assert_eq!(result.summary, "Brief summary.");
+    assert_eq!(result.summary.value, "Brief summary.");
     assert!(result.extended_summary.is_some());
 }
 
@@ -43,18 +43,39 @@ int
 "#;
     let result = parse_numpy(docstring).unwrap();
 
-    assert_eq!(result.summary, "Calculate the sum of two numbers.");
-    assert_eq!(result.parameters.len(), 2);
+    assert_eq!(result.summary.value, "Calculate the sum of two numbers.");
+    assert_eq!(result.parameters().len(), 2);
 
-    assert_eq!(result.parameters[0].names[0], "x");
-    assert_eq!(result.parameters[0].param_type, Some("int".to_string()));
-    assert_eq!(result.parameters[0].description, "The first number.");
+    assert_eq!(result.parameters()[0].names[0].value, "x");
+    assert_eq!(
+        result.parameters()[0]
+            .param_type
+            .as_ref()
+            .map(|t| t.value.as_str()),
+        Some("int")
+    );
+    assert_eq!(
+        result.parameters()[0].description.value,
+        "The first number."
+    );
 
-    assert_eq!(result.parameters[1].names[0], "y");
-    assert_eq!(result.parameters[1].param_type, Some("int".to_string()));
+    assert_eq!(result.parameters()[1].names[0].value, "y");
+    assert_eq!(
+        result.parameters()[1]
+            .param_type
+            .as_ref()
+            .map(|t| t.value.as_str()),
+        Some("int")
+    );
 
-    assert!(!result.returns.is_empty());
-    assert_eq!(result.returns[0].return_type, Some("int".to_string()));
+    assert!(!result.returns().is_empty());
+    assert_eq!(
+        result.returns()[0]
+            .return_type
+            .as_ref()
+            .map(|t| t.value.as_str()),
+        Some("int")
+    );
 }
 
 #[test]
@@ -69,11 +90,10 @@ optional : int, optional
     An optional parameter.
     let result = parse_numpy(docstring).unwrap();
 
-    assert_eq!(result.parameters.len(), 2);
-    assert!(!result.parameters[0].optional);
-    assert!(result.parameters[1].optional);
-    assert_eq!(result.parameters[1].param_type, Some("int".to_string()));
-}
+    assert_eq!(result.parameters().len(), 2);
+    assert!(result.parameters()[0].optional.is_none());
+    assert!(result.parameters()[1].optional.is_some());
+    assert_eq!(result.parameters()[1].param_type.as_ref().map(|t| t.value.as_str()), Some("int"));
 
 #[test]
 fn test_with_raises() {
@@ -88,9 +108,9 @@ TypeError
 "#;
     let result = parse_numpy(docstring).unwrap();
 
-    assert_eq!(result.raises.len(), 2);
-    assert_eq!(result.raises[0].exception_type, "ValueError");
-    assert_eq!(result.raises[1].exception_type, "TypeError");
+    assert_eq!(result.raises().len(), 2);
+    assert_eq!(result.raises()[0].exception_type.value, "ValueError");
+    assert_eq!(result.raises()[1].exception_type.value, "TypeError");
 }
 
 #[test]
@@ -103,6 +123,6 @@ This is an important note about the function.
 "#;
     let result = parse_numpy(docstring).unwrap();
 
-    assert!(result.notes.is_some());
-    assert!(result.notes.unwrap().contains("important note"));
+    assert!(result.notes().is_some());
+    assert!(result.notes().unwrap().value.contains("important note"));
 }

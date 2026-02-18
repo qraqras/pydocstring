@@ -17,7 +17,7 @@
 //! "#;
 //!
 //! let result = parse_numpy(docstring).unwrap();
-//! assert_eq!(result.summary, "Brief description.");
+//! assert_eq!(result.summary.value, "Brief description.");
 //! ```
 
 pub mod error;
@@ -29,7 +29,7 @@ pub mod views;
 
 pub use error::ParseError;
 pub use parser::{detect_style, parse};
-pub use span::{Position, Span};
+pub use span::{Position, Span, Spanned};
 pub use traits::DocstringLike;
 pub use types::{
     Docstring,
@@ -48,6 +48,9 @@ pub use types::{
     NumPyParameter,
     NumPyReference,
     NumPyReturns,
+    NumPySection,
+    NumPySectionBody,
+    NumPySectionHeader,
     NumPyWarning,
     SeeAlsoItem,
     SphinxDocstring,

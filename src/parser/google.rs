@@ -15,6 +15,7 @@
 //! ```
 
 use crate::error::ParseResult;
+use crate::span::Spanned;
 use crate::types::GoogleDocstring;
 
 /// Parse a Google-style docstring.
@@ -23,10 +24,11 @@ use crate::types::GoogleDocstring;
 /// after NumPy style is complete.
 pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
     let mut docstring = GoogleDocstring::new();
+    docstring.source = input.to_string();
 
     // Extract summary (first line)
     if let Some(first_line) = input.lines().next() {
-        docstring.summary = first_line.trim().to_string();
+        docstring.summary = Spanned::dummy(first_line.trim().to_string());
     }
 
     // TODO: Implement full Google-style parsing
@@ -42,6 +44,6 @@ mod tests {
     fn test_parse_simple_google() {
         let docstring = "Brief description.";
         let result = parse_google(docstring).unwrap();
-        assert_eq!(result.summary, "Brief description.");
+        assert_eq!(result.summary.value, "Brief description.");
     }
 }

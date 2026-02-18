@@ -19,7 +19,7 @@ Returns:
 
     match parse_google(docstring) {
         Ok(doc) => {
-            println!("Summary: {}", doc.summary);
+            println!("Summary: {}", doc.summary.value);
             println!("\n(Google-style parser is not yet fully implemented)");
             println!("Args: {}", doc.args.len());
             println!("Has Returns: {}", doc.returns.is_some());

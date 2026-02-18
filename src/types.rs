@@ -12,7 +12,8 @@ pub use google::{
 };
 pub use numpy::{
     NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod,
-    NumPyParameter, NumPyReference, NumPyReturns, NumPyWarning, SeeAlsoItem,
+    NumPyParameter, NumPyReference, NumPyReturns, NumPySection, NumPySectionBody,
+    NumPySectionHeader, NumPyWarning, SeeAlsoItem,
 };
 pub use sphinx::{
     SphinxDocstring, SphinxException, SphinxField, SphinxParameter, SphinxReturns,
@@ -115,7 +116,7 @@ impl DocstringLike for Docstring {
 
     fn parameters(&self) -> Vec<ParameterView<'_>> {
         match self {
-            Docstring::NumPy(d) => d.parameters(),
+            Docstring::NumPy(d) => DocstringLike::parameters(d),
             Docstring::Google(d) => d.parameters(),
             Docstring::Sphinx(d) => d.parameters(),
         }
@@ -123,7 +124,7 @@ impl DocstringLike for Docstring {
 
     fn returns(&self) -> Vec<ReturnsView<'_>> {
         match self {
-            Docstring::NumPy(d) => d.returns(),
+            Docstring::NumPy(d) => DocstringLike::returns(d),
             Docstring::Google(d) => d.returns(),
             Docstring::Sphinx(d) => d.returns(),
         }
@@ -131,7 +132,7 @@ impl DocstringLike for Docstring {
 
     fn raises(&self) -> Vec<ExceptionView<'_>> {
         match self {
-            Docstring::NumPy(d) => d.raises(),
+            Docstring::NumPy(d) => DocstringLike::raises(d),
             Docstring::Google(d) => d.raises(),
             Docstring::Sphinx(d) => d.raises(),
         }
@@ -139,7 +140,7 @@ impl DocstringLike for Docstring {
 
     fn attributes(&self) -> Vec<AttributeView<'_>> {
         match self {
-            Docstring::NumPy(d) => d.attributes(),
+            Docstring::NumPy(d) => DocstringLike::attributes(d),
             Docstring::Google(d) => d.attributes(),
             Docstring::Sphinx(d) => d.attributes(),
         }

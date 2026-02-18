@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::span::Span;
+use crate::span::{Span, Spanned};
 use crate::traits::DocstringLike;
 use crate::views::{AttributeView, ExceptionView, ParameterView, ReturnsView};
 
@@ -19,12 +19,14 @@ use crate::views::{AttributeView, ExceptionView, ParameterView, ReturnsView};
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct SphinxDocstring {
+    /// Original source text of the docstring.
+    pub source: String,
     /// Source span of the entire docstring.
     pub span: Span,
     /// Brief summary (first paragraph).
-    pub summary: String,
+    pub summary: Spanned<String>,
     /// Extended description.
-    pub description: Option<String>,
+    pub description: Option<Spanned<String>>,
     /// Parameters with separate type information.
     pub parameters: Vec<SphinxParameter>,
     /// Return value information.
@@ -46,12 +48,12 @@ pub struct SphinxDocstring {
 pub struct SphinxParameter {
     /// Source span.
     pub span: Span,
-    /// Parameter name.
-    pub name: String,
-    /// Parameter type (from :type: field).
-    pub param_type: Option<String>,
-    /// Parameter description (from :param: field).
-    pub description: String,
+    /// Parameter name with its span.
+    pub name: Spanned<String>,
+    /// Parameter type (from :type: field) with its span.
+    pub param_type: Option<Spanned<String>>,
+    /// Parameter description (from :param: field) with its span.
+    pub description: Spanned<String>,
 }
 
 /// Sphinx-style return value.
@@ -59,10 +61,10 @@ pub struct SphinxParameter {
 pub struct SphinxReturns {
     /// Source span.
     pub span: Span,
-    /// Return type (from :rtype: field).
-    pub return_type: Option<String>,
-    /// Description (from :returns: or :return: field).
-    pub description: String,
+    /// Return type (from :rtype: field) with its span.
+    pub return_type: Option<Spanned<String>>,
+    /// Description (from :returns: or :return: field) with its span.
+    pub description: Spanned<String>,
 }
 
 /// Sphinx-style exception.
@@ -70,10 +72,10 @@ pub struct SphinxReturns {
 pub struct SphinxException {
     /// Source span.
     pub span: Span,
-    /// Exception type.
-    pub exception_type: String,
-    /// Description.
-    pub description: String,
+    /// Exception type with its span.
+    pub exception_type: Spanned<String>,
+    /// Description with its span.
+    pub description: Spanned<String>,
 }
 
 /// Sphinx-style variable (var, ivar, cvar).
@@ -81,12 +83,12 @@ pub struct SphinxException {
 pub struct SphinxVariable {
     /// Source span.
     pub span: Span,
-    /// Variable name.
-    pub name: String,
-    /// Variable type.
-    pub var_type: Option<String>,
-    /// Description.
-    pub description: String,
+    /// Variable name with its span.
+    pub name: Spanned<String>,
+    /// Variable type with its span.
+    pub var_type: Option<Spanned<String>>,
+    /// Description with its span.
+    pub description: Spanned<String>,
 }
 
 /// Custom Sphinx field.
@@ -94,20 +96,21 @@ pub struct SphinxVariable {
 pub struct SphinxField {
     /// Source span.
     pub span: Span,
-    /// Field name (e.g., "deprecated", "since", "author").
-    pub field_name: String,
-    /// Field argument (e.g., variable name for :type:).
-    pub argument: Option<String>,
-    /// Field content.
-    pub content: String,
+    /// Field name (e.g., "deprecated", "since", "author") with its span.
+    pub field_name: Spanned<String>,
+    /// Field argument (e.g., variable name for :type:) with its span.
+    pub argument: Option<Spanned<String>>,
+    /// Field content with its span.
+    pub content: Spanned<String>,
 }
 
 impl SphinxDocstring {
     /// Creates a new empty Sphinx-style docstring.
     pub fn new() -> Self {
         Self {
+            source: String::new(),
             span: Span::empty(),
-            summary: String::new(),
+            summary: Spanned::empty_string(),
             description: None,
             parameters: Vec::new(),
             returns: None,
@@ -128,27 +131,27 @@ impl Default for SphinxDocstring {
 
 impl fmt::Display for SphinxDocstring {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SphinxDocstring(summary: {})", self.summary)
+        write!(f, "SphinxDocstring(summary: {})", self.summary.value)
     }
 }
 
 impl DocstringLike for SphinxDocstring {
     fn summary(&self) -> &str {
-        &self.summary
+        &self.summary.value
     }
 
     fn description(&self) -> Option<&str> {
-        self.description.as_deref()
+        self.description.as_ref().map(|s| s.value.as_str())
     }
 
     fn parameters(&self) -> Vec<ParameterView<'_>> {
         self.parameters
             .iter()
             .map(|p| ParameterView {
-                name: &p.name,
-                param_type: p.param_type.as_deref(),
-                description: &p.description,
-                optional: false,
+                name: p.name.as_spanned_str(),
+                param_type: p.param_type.as_ref().map(|t| t.as_spanned_str()),
+                description: p.description.as_spanned_str(),
+                optional: None,
                 span: p.span,
             })
             .collect()
@@ -158,8 +161,8 @@ impl DocstringLike for SphinxDocstring {
         match &self.returns {
             Some(r) => vec![ReturnsView {
                 name: None,
-                return_type: r.return_type.as_deref(),
-                description: &r.description,
+                return_type: r.return_type.as_ref().map(|t| t.as_spanned_str()),
+                description: r.description.as_spanned_str(),
                 span: r.span,
             }],
             None => Vec::new(),
@@ -170,8 +173,8 @@ impl DocstringLike for SphinxDocstring {
         self.raises
             .iter()
             .map(|e| ExceptionView {
-                exception_type: &e.exception_type,
-                description: &e.description,
+                exception_type: e.exception_type.as_spanned_str(),
+                description: e.description.as_spanned_str(),
                 span: e.span,
             })
             .collect()
@@ -183,9 +186,9 @@ impl DocstringLike for SphinxDocstring {
             .chain(self.instance_variables.iter())
             .chain(self.class_variables.iter())
             .map(|v| AttributeView {
-                name: &v.name,
-                attr_type: v.var_type.as_deref(),
-                description: &v.description,
+                name: v.name.as_spanned_str(),
+                attr_type: v.var_type.as_ref().map(|t| t.as_spanned_str()),
+                description: v.description.as_spanned_str(),
                 span: v.span,
             })
             .collect()

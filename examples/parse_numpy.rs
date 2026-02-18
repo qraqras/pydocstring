@@ -35,40 +35,57 @@ Examples
     match parse_numpy(docstring) {
         Ok(doc) => {
             if let Some(sig) = &doc.signature {
-                println!("Signature: {}", sig);
+                println!("Signature: {}", sig.value);
             }
-            println!("Summary: {}", doc.summary);
-            println!("\nExtended Summary: {}", doc.extended_summary.unwrap_or_default());
+            println!("Summary: {}", doc.summary.value);
+            println!(
+                "\nExtended Summary: {}",
+                doc.extended_summary
+                    .as_ref()
+                    .map(|s| s.value.as_str())
+                    .unwrap_or_default()
+            );
 
             println!("\nParameters:");
-            for param in &doc.parameters {
-                println!("  - {:?}: {:?}", param.names, param.param_type);
-                println!("    {}", param.description);
+            for param in doc.parameters() {
+                let names: Vec<&str> = param.names.iter().map(|n| n.value.as_str()).collect();
+                println!(
+                    "  - {:?}: {:?}",
+                    names,
+                    param.param_type.as_ref().map(|t| t.value.as_str())
+                );
+                println!("    {}", param.description.value);
             }
 
-            if !doc.returns.is_empty() {
+            if !doc.returns().is_empty() {
                 println!("\nReturns:");
-                for ret in &doc.returns {
-                    println!("  Type: {:?}", ret.return_type);
-                    println!("  {}", ret.description);
+                for ret in doc.returns() {
+                    println!(
+                        "  Type: {:?}",
+                        ret.return_type.as_ref().map(|t| t.value.as_str())
+                    );
+                    println!("  {}", ret.description.value);
                 }
             }
 
-            if !doc.raises.is_empty() {
+            if !doc.raises().is_empty() {
                 println!("\nRaises:");
-                for exc in &doc.raises {
-                    println!("  - {}: {}", exc.exception_type, exc.description);
+                for exc in doc.raises() {
+                    println!(
+                        "  - {}: {}",
+                        exc.exception_type.value, exc.description.value
+                    );
                 }
             }
 
-            if let Some(notes) = &doc.notes {
+            if let Some(notes) = doc.notes() {
                 println!("\nNotes:");
-                println!("  {}", notes);
+                println!("  {}", notes.value);
             }
 
-            if let Some(examples) = &doc.examples {
+            if let Some(examples) = doc.examples() {
                 println!("\nExamples:");
-                println!("{}", examples);
+                println!("{}", examples.value);
             }
         }
         Err(e) => {

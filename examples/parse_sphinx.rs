@@ -19,7 +19,7 @@ and returns its area.
 
     match parse_sphinx(docstring) {
         Ok(doc) => {
-            println!("Summary: {}", doc.summary);
+            println!("Summary: {}", doc.summary.value);
             println!("\n(Sphinx-style parser is not yet fully implemented)");
             println!("Parameters: {}", doc.parameters.len());
             println!("Has Returns: {}", doc.returns.is_some());

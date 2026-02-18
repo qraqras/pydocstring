@@ -19,8 +19,8 @@ use crate::views::{AttributeView, ExceptionView, ParameterView, ReturnsView};
 /// fn check_params_documented(doc: &impl DocstringLike) -> Vec<String> {
 ///     doc.parameters()
 ///         .iter()
-///         .filter(|p| p.description.is_empty())
-///         .map(|p| p.name.to_string())
+///         .filter(|p| p.description.value.is_empty())
+///         .map(|p| p.name.value.to_string())
 ///         .collect()
 /// }
 /// ```
