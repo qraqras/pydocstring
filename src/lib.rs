@@ -40,6 +40,9 @@ pub use styles::numpy::{
     NumPyParameter, NumPyReference, NumPyReturns, NumPySection, NumPySectionBody,
     NumPySectionHeader, NumPyWarning, SeeAlsoItem,
 };
+// Sphinx style: AST types are exported for forward compatibility, but the
+// parser is not supported in v1. Calling `parse_sphinx` will return an error
+// diagnostic.
 pub use styles::sphinx::{
     self, SphinxDocstring, SphinxException, SphinxField, SphinxParameter, SphinxReturns,
     SphinxVariable,

@@ -1,13 +1,13 @@
-//! Example: Parsing Sphinx-style docstrings (placeholder)
+//! Example: Sphinx-style docstrings (not supported in v1)
+//!
+//! This example demonstrates that Sphinx-style docstrings are detected but
+//! not fully parsed. The parser returns an error diagnostic.
 
 use pydocstring::sphinx::parse_sphinx;
 
 fn main() {
     let docstring = r#"
 Calculate the area of a rectangle.
-
-This function takes the width and height of a rectangle
-and returns its area.
 
 :param width: The width of the rectangle.
 :type width: float
@@ -20,7 +20,10 @@ and returns its area.
     let result = parse_sphinx(docstring);
     let doc = &result.value;
     println!("Summary: {}", doc.summary.value);
-    println!("\n(Sphinx-style parser is not yet fully implemented)");
-    println!("Parameters: {}", doc.parameters.len());
-    println!("Has Returns: {}", doc.returns.is_some());
+    println!();
+
+    // Sphinx style is not supported in v1 — diagnostics will indicate this.
+    for diag in &result.diagnostics {
+        println!("[{:?}] {}", diag.severity, diag.message);
+    }
 }

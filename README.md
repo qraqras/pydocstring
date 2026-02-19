@@ -1,16 +1,18 @@
 # pydocstring
 
-A fast Rust parser for Python docstrings (NumPy, Google, and Sphinx styles)
+A fast Rust parser for Python docstrings with full AST and source location tracking.
 
 ## Features
 
 - 🚀 Fast parsing with zero external dependencies
-- 📝 Support for multiple docstring styles:
-  - NumPy style (fully implemented)
-  - Google style (in progress)
-  - Sphinx style (planned)
-- 🦀 Pure Rust implementation
-- ✅ Comprehensive test coverage
+- 📝 Docstring styles:
+  - Google style — fully supported
+  - NumPy style — fully supported
+  - Sphinx style — not supported in v1 (planned for v2)
+- 🎯 Accurate source spans (byte offsets) on every AST element
+- 🩺 Diagnostic-based error reporting (partial results + diagnostics)
+- 🦀 Pure Rust, no external crates
+- ✅ Comprehensive test coverage (140+ tests)
 
 ## Installation
 
@@ -86,12 +88,14 @@ cargo run --example parse_numpy
 
 ## Implementation Progress
 
-- [x] Project structure
-- [x] Common types and error handling
-- [x] NumPy-style parser (basic implementation)
-- [ ] NumPy-style parser (advanced features)
-- [ ] Google-style parser
-- [ ] Sphinx-style parser
+- [x] Project structure and common AST types
+- [x] Source span tracking on all elements
+- [x] Diagnostic-based error reporting
+- [x] Google-style parser (fully implemented)
+- [x] NumPy-style parser (fully implemented)
+- [x] Style auto-detection
+- [x] Unified `DocstringLike` trait
+- [ ] Sphinx-style parser (planned for v2)
 - [ ] Performance benchmarks
 
 ## License

@@ -1,6 +1,8 @@
 //! Sphinx-style docstring support.
 //!
-//! This module contains the AST types and parser for Sphinx-style docstrings.
+//! **Note:** Sphinx style is not supported in v1. The AST types are defined
+//! for forward compatibility, but the parser only extracts the summary line
+//! and emits an error diagnostic. Full support is planned for a future release.
 
 pub mod ast;
 pub mod parser;

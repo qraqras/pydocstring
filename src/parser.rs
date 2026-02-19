@@ -52,6 +52,10 @@ pub fn detect_style(input: &str) -> Style {
 /// Detects the style using [`detect_style`], then delegates to the
 /// appropriate style-specific parser.
 ///
+/// **Note:** Sphinx style is detected but not fully supported in v1.
+/// If a Sphinx-style docstring is detected, the result will contain an
+/// error diagnostic and only the summary line will be extracted.
+///
 /// # Example
 ///
 /// ```rust

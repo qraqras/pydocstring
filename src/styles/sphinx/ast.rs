@@ -1,7 +1,7 @@
 use core::fmt;
 
-use crate::ast::{Span, Spanned};
 use crate::ast::{AttributeView, DocstringLike, ExceptionView, ParameterView, ReturnsView};
+use crate::ast::{Span, Spanned};
 
 // =============================================================================
 // Sphinx Style Types
@@ -9,7 +9,10 @@ use crate::ast::{AttributeView, DocstringLike, ExceptionView, ParameterView, Ret
 
 /// Sphinx-style docstring.
 ///
-/// Supports field lists like:
+/// **Note:** Sphinx style is not supported in v1. This type is defined for
+/// forward compatibility. The parser currently only extracts the summary line.
+///
+/// Sphinx format uses field lists like:
 /// ```text
 /// :param name: Description
 /// :type name: type
