@@ -17,15 +17,10 @@ and returns its area.
 :rtype: float
 "#;
 
-    match parse_sphinx(docstring) {
-        Ok(doc) => {
-            println!("Summary: {}", doc.summary.value);
-            println!("\n(Sphinx-style parser is not yet fully implemented)");
-            println!("Parameters: {}", doc.parameters.len());
-            println!("Has Returns: {}", doc.returns.is_some());
-        }
-        Err(e) => {
-            eprintln!("Failed to parse docstring: {}", e);
-        }
-    }
+    let result = parse_sphinx(docstring);
+    let doc = &result.value;
+    println!("Summary: {}", doc.summary.value);
+    println!("\n(Sphinx-style parser is not yet fully implemented)");
+    println!("Parameters: {}", doc.parameters.len());
+    println!("Has Returns: {}", doc.returns.is_some());
 }

@@ -32,8 +32,9 @@ Examples
 15.0
 "#;
 
-    match parse_numpy(docstring) {
-        Ok(doc) => {
+    let result = parse_numpy(docstring);
+    let doc = &result.value;
+    {
             if let Some(sig) = &doc.signature {
                 println!("Signature: {}", sig.value);
             }
@@ -87,9 +88,12 @@ Examples
                 println!("\nExamples:");
                 println!("{}", examples.value);
             }
-        }
-        Err(e) => {
-            eprintln!("Failed to parse docstring: {}", e);
-        }
+
+            if !result.diagnostics.is_empty() {
+                println!("\nDiagnostics:");
+                for d in &result.diagnostics {
+                    println!("  {}", d);
+                }
+            }
     }
 }

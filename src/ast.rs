@@ -340,7 +340,7 @@ pub enum Style {
 /// ```rust
 /// use pydocstring::{parse, Docstring, DocstringLike};
 ///
-/// let doc = parse("Brief summary.").unwrap();
+/// let doc = &parse("Brief summary.").value;
 /// assert_eq!(doc.summary(), "Brief summary.");
 /// assert_eq!(doc.style(), pydocstring::Style::Google);
 /// ```

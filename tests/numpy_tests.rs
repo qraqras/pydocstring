@@ -9,7 +9,7 @@ use pydocstring::numpy::parse_numpy;
 #[test]
 fn test_simple_summary() {
     let docstring = "This is a brief summary.";
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
 
     assert_eq!(result.summary.value, "This is a brief summary.");
     assert!(result.extended_summary.is_none());
@@ -19,7 +19,7 @@ fn test_simple_summary() {
 #[test]
 fn test_parse_simple_span() {
     let docstring = "Brief description.";
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     assert_eq!(result.summary.value, "Brief description.");
     assert_eq!(result.summary.span.start.line, 0);
     assert_eq!(result.summary.span.start.column, 0);
@@ -37,7 +37,7 @@ fn test_summary_with_description() {
 This is a longer description that provides
 more details about the function.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
 
     assert_eq!(result.summary.value, "Brief summary.");
     assert!(result.extended_summary.is_some());
@@ -45,20 +45,20 @@ more details about the function.
 
 #[test]
 fn test_empty_docstring() {
-    let result = parse_numpy("").unwrap();
+    let result = parse_numpy("").value;
     assert_eq!(result.summary.value, "");
 }
 
 #[test]
 fn test_whitespace_only_docstring() {
-    let result = parse_numpy("   \n\n   ").unwrap();
+    let result = parse_numpy("   \n\n   ").value;
     assert_eq!(result.summary.value, "");
 }
 
 #[test]
 fn test_docstring_span_covers_entire_input() {
     let docstring = "First line.\n\nSecond line.";
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     assert_eq!(result.span.start.offset, 0);
     assert_eq!(result.span.end.offset as usize, docstring.len());
 }
@@ -80,7 +80,7 @@ a : int
 b : int
     Second number.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     assert_eq!(
         result.signature.as_ref().map(|s| s.value.as_str()),
         Some("add(a, b)")
@@ -106,7 +106,7 @@ Parameters
 x : int
     Desc.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     let ext = result.extended_summary.as_ref().unwrap();
     assert!(ext.value.contains("First paragraph"));
     assert!(ext.value.contains("Second paragraph"));
@@ -133,7 +133,7 @@ Returns
 int
     The sum of x and y.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
 
     assert_eq!(result.summary.value, "Calculate the sum of two numbers.");
     assert_eq!(result.parameters().len(), 2);
@@ -181,7 +181,7 @@ required : str
 optional : int, optional
     An optional parameter.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
 
     assert_eq!(result.parameters().len(), 2);
     assert!(result.parameters()[0].optional.is_none());
@@ -206,7 +206,7 @@ x : int
 y : str, optional
     The second parameter.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     assert_eq!(result.parameters().len(), 2);
 
     // Verify name spans point to correct source text
@@ -243,7 +243,7 @@ Parameters
 x1, x2 : array_like
     Input arrays.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     let p = &result.parameters()[0];
     assert_eq!(p.names.len(), 2);
     assert_eq!(p.names[0].value, "x1");
@@ -261,7 +261,7 @@ Parameters
 x : int
     A value like key: value should not split.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     assert_eq!(result.parameters().len(), 1);
     assert_eq!(result.parameters()[0].names[0].value, "x");
     assert!(result.parameters()[0]
@@ -281,7 +281,7 @@ x : int
 
     Second paragraph of x.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     let desc = &result.parameters()[0].description.value;
     assert!(desc.contains("First paragraph of x."));
     assert!(desc.contains("Second paragraph of x."));
@@ -303,7 +303,7 @@ x : int
 y : float
     The second value.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     assert_eq!(result.returns().len(), 2);
     assert_eq!(
         result.returns()[0].name.as_ref().map(|n| n.value.as_str()),
@@ -338,7 +338,7 @@ ValueError
 TypeError
     If the type is wrong.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
 
     assert_eq!(result.raises().len(), 2);
     assert_eq!(result.raises()[0].exception_type.value, "ValueError");
@@ -356,7 +356,7 @@ ValueError
 TypeError
     If type is wrong.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     assert_eq!(result.raises().len(), 2);
     assert_eq!(
         result.raises()[0]
@@ -386,7 +386,7 @@ Notes
 -----
 This is an important note about the function.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
 
     assert!(result.notes().is_some());
     assert!(result.notes().unwrap().value.contains("important note"));
@@ -401,7 +401,7 @@ See Also
 func_a : Does something.
 func_b, func_c
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     let items = result.see_also();
     assert_eq!(items.len(), 2);
     assert_eq!(items[0].names[0].value, "func_a");
@@ -423,7 +423,7 @@ References
 .. [1] Author A, "Title A", 2020.
 .. [2] Author B, "Title B", 2021.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     let refs = result.references();
     assert_eq!(refs.len(), 2);
     assert_eq!(refs[0].number, 1);
@@ -454,7 +454,7 @@ NOTES
 -----
 Some notes here.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     assert_eq!(result.parameters().len(), 1);
     assert_eq!(result.parameters()[0].names[0].value, "x");
     assert_eq!(result.returns().len(), 1);
@@ -477,7 +477,7 @@ Parameters
 x : int
     Desc.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     let hdr = &result.sections[0].header;
     assert_eq!(hdr.name.span.source_text(&result.source), "Parameters");
     assert_eq!(hdr.underline.source_text(&result.source), "----------");
@@ -496,7 +496,7 @@ Parameters
 x : int
     Description of x.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     let src = &result.source;
 
     assert_eq!(result.summary.span.source_text(src), "Summary line.");
@@ -529,7 +529,7 @@ Parameters
 x : int
     Desc.
 "#;
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
     let dep = result
         .deprecation
         .as_ref()
@@ -546,7 +546,7 @@ x : int
 #[test]
 fn test_indented_docstring() {
     let docstring = "    Summary line.\n\n    Parameters\n    ----------\n    x : int\n        Description of x.\n    y : str, optional\n        Description of y.\n\n    Returns\n    -------\n    bool\n        The result.\n";
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
 
     assert_eq!(result.summary.value, "Summary line.");
     assert_eq!(result.parameters().len(), 2);
@@ -594,7 +594,7 @@ fn test_indented_docstring() {
 #[test]
 fn test_deeply_indented_docstring() {
     let docstring = "        Brief.\n\n        Parameters\n        ----------\n        a : float\n            The value.\n\n        Raises\n        ------\n        ValueError\n            If bad.\n";
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
 
     assert_eq!(result.summary.value, "Brief.");
     assert_eq!(result.parameters().len(), 1);
@@ -613,7 +613,7 @@ fn test_deeply_indented_docstring() {
 #[test]
 fn test_indented_with_deprecation() {
     let docstring = "    Summary.\n\n    .. deprecated:: 2.0.0\n        Use new_func instead.\n\n    Parameters\n    ----------\n    x : int\n        Desc.\n";
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
 
     assert_eq!(result.summary.value, "Summary.");
     let dep = result
@@ -630,7 +630,7 @@ fn test_indented_with_deprecation() {
 fn test_mixed_indent_first_line() {
     let docstring =
         "Summary.\n\n    Parameters\n    ----------\n    x : int\n        Description.\n";
-    let result = parse_numpy(docstring).unwrap();
+    let result = parse_numpy(docstring).value;
 
     assert_eq!(result.summary.value, "Summary.");
     assert_eq!(result.parameters().len(), 1);

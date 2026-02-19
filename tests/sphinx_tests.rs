@@ -5,7 +5,7 @@ use pydocstring::sphinx::parse_sphinx;
 #[test]
 fn test_simple_summary() {
     let docstring = "This is a brief summary.";
-    let result = parse_sphinx(docstring).unwrap();
+    let result = parse_sphinx(docstring).value;
 
     assert_eq!(result.summary.value, "This is a brief summary.");
 }

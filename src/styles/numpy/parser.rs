@@ -136,7 +136,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
     docstring.source = input.to_string();
 
     if lines.is_empty() {
-        return Ok(docstring);
+        return ParseResult::ok(docstring);
     }
 
     let mut i = 0;
@@ -147,7 +147,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
     }
 
     if i >= lines.len() {
-        return Ok(docstring);
+        return ParseResult::ok(docstring);
     }
 
     // --- Signature / Summary ---
@@ -331,31 +331,31 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
             let normalized = header_trimmed.to_ascii_lowercase();
             let (body, next_i) = match normalized.as_str() {
                 "parameters" | "params" => {
-                    let (params, ni) = parse_parameters(&lines, i, &offsets)?;
+                    let (params, ni) = parse_parameters(&lines, i, &offsets).value;
                     (NumPySectionBody::Parameters(params), ni)
                 }
                 "returns" | "return" => {
-                    let (rets, ni) = parse_returns(&lines, i, &offsets)?;
+                    let (rets, ni) = parse_returns(&lines, i, &offsets).value;
                     (NumPySectionBody::Returns(rets), ni)
                 }
                 "raises" | "raise" => {
-                    let (raises, ni) = parse_raises(&lines, i, &offsets)?;
+                    let (raises, ni) = parse_raises(&lines, i, &offsets).value;
                     (NumPySectionBody::Raises(raises), ni)
                 }
                 "yields" | "yield" => {
-                    let (yields, ni) = parse_returns(&lines, i, &offsets)?;
+                    let (yields, ni) = parse_returns(&lines, i, &offsets).value;
                     (NumPySectionBody::Yields(yields), ni)
                 }
                 "receives" | "receive" => {
-                    let (receives, ni) = parse_parameters(&lines, i, &offsets)?;
+                    let (receives, ni) = parse_parameters(&lines, i, &offsets).value;
                     (NumPySectionBody::Receives(receives), ni)
                 }
                 "other parameters" | "other params" => {
-                    let (params, ni) = parse_parameters(&lines, i, &offsets)?;
+                    let (params, ni) = parse_parameters(&lines, i, &offsets).value;
                     (NumPySectionBody::OtherParameters(params), ni)
                 }
                 "warns" | "warn" => {
-                    let (raises, ni) = parse_raises(&lines, i, &offsets)?;
+                    let (raises, ni) = parse_raises(&lines, i, &offsets).value;
                     let warns = raises
                         .into_iter()
                         .map(|e| crate::styles::numpy::ast::NumPyWarning {
@@ -367,27 +367,27 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                     (NumPySectionBody::Warns(warns), ni)
                 }
                 "notes" | "note" => {
-                    let (content, ni) = parse_section_content(&lines, i, &offsets)?;
+                    let (content, ni) = parse_section_content(&lines, i, &offsets).value;
                     (NumPySectionBody::Notes(content), ni)
                 }
                 "examples" | "example" => {
-                    let (content, ni) = parse_section_content(&lines, i, &offsets)?;
+                    let (content, ni) = parse_section_content(&lines, i, &offsets).value;
                     (NumPySectionBody::Examples(content), ni)
                 }
                 "warnings" | "warning" => {
-                    let (content, ni) = parse_section_content(&lines, i, &offsets)?;
+                    let (content, ni) = parse_section_content(&lines, i, &offsets).value;
                     (NumPySectionBody::Warnings(content), ni)
                 }
                 "see also" => {
-                    let (items, ni) = parse_see_also(&lines, i, &offsets)?;
+                    let (items, ni) = parse_see_also(&lines, i, &offsets).value;
                     (NumPySectionBody::SeeAlso(items), ni)
                 }
                 "references" => {
-                    let (refs, ni) = parse_references(&lines, i, &offsets)?;
+                    let (refs, ni) = parse_references(&lines, i, &offsets).value;
                     (NumPySectionBody::References(refs), ni)
                 }
                 "attributes" => {
-                    let (params, ni) = parse_parameters(&lines, i, &offsets)?;
+                    let (params, ni) = parse_parameters(&lines, i, &offsets).value;
                     let attrs = params
                         .into_iter()
                         .map(|p| crate::styles::numpy::ast::NumPyAttribute {
@@ -404,7 +404,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                     (NumPySectionBody::Attributes(attrs), ni)
                 }
                 "methods" => {
-                    let (params, ni) = parse_parameters(&lines, i, &offsets)?;
+                    let (params, ni) = parse_parameters(&lines, i, &offsets).value;
                     let methods = params
                         .into_iter()
                         .map(|p| crate::styles::numpy::ast::NumPyMethod {
@@ -420,7 +420,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                     (NumPySectionBody::Methods(methods), ni)
                 }
                 _ => {
-                    let (content, ni) = parse_section_content(&lines, i, &offsets)?;
+                    let (content, ni) = parse_section_content(&lines, i, &offsets).value;
                     (NumPySectionBody::Unknown(content), ni)
                 }
             };
@@ -461,7 +461,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
     let last_col = lines.last().map(|l| l.len()).unwrap_or(0);
     docstring.span = make_span(0, 0, last_line, last_col, &offsets);
 
-    Ok(docstring)
+    ParseResult::ok(docstring)
 }
 
 // =============================================================================
@@ -522,7 +522,7 @@ fn parse_parameters(
         i += 1;
     }
 
-    Ok((parameters, i))
+    ParseResult::ok((parameters, i))
 }
 
 /// Check whether `trimmed` looks like a parameter header line.
@@ -781,7 +781,7 @@ fn parse_returns(
         i += 1;
     }
 
-    Ok((returns, i))
+    ParseResult::ok((returns, i))
 }
 
 // =============================================================================
@@ -839,7 +839,7 @@ fn parse_raises(
         i += 1;
     }
 
-    Ok((raises, i))
+    ParseResult::ok((raises, i))
 }
 
 // =============================================================================
@@ -893,7 +893,7 @@ fn parse_section_content(
         Spanned::empty_string()
     };
 
-    Ok((spanned, i))
+    ParseResult::ok((spanned, i))
 }
 
 // =============================================================================
@@ -961,7 +961,7 @@ fn parse_see_also(
         i += 1;
     }
 
-    Ok((items, i))
+    ParseResult::ok((items, i))
 }
 
 // =============================================================================
@@ -1070,7 +1070,7 @@ fn parse_references(
         });
     }
 
-    Ok((refs, i))
+    ParseResult::ok((refs, i))
 }
 
 // =============================================================================

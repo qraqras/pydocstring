@@ -33,7 +33,7 @@ pub fn parse_sphinx(input: &str) -> ParseResult<SphinxDocstring> {
 
     // TODO: Implement full Sphinx-style parsing
 
-    Ok(docstring)
+    ParseResult::ok(docstring)
 }
 
 #[cfg(test)]
@@ -43,7 +43,7 @@ mod tests {
     #[test]
     fn test_parse_simple_sphinx() {
         let docstring = "Brief description.";
-        let result = parse_sphinx(docstring).unwrap();
-        assert_eq!(result.summary.value, "Brief description.");
+        let result = parse_sphinx(docstring);
+        assert_eq!(result.value.summary.value, "Brief description.");
     }
 }

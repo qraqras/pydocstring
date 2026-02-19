@@ -16,8 +16,8 @@
 //!     The first parameter.
 //! "#;
 //!
-//! let result = parse_numpy(docstring).unwrap();
-//! assert_eq!(result.summary.value, "Brief description.");
+//! let result = parse_numpy(docstring);
+//! assert_eq!(result.value.summary.value, "Brief description.");
 //! ```
 
 pub mod ast;
@@ -29,7 +29,7 @@ pub use ast::{
     AttributeView, Docstring, DocstringLike, ExceptionView, ParameterView, Position, ReturnsView,
     Span, Spanned, Style,
 };
-pub use error::ParseError;
+pub use error::{Diagnostic, ParseResult, Severity};
 pub use parser::{detect_style, parse};
 pub use styles::google::{
     self, GoogleArgument, GoogleAttribute, GoogleDocstring, GoogleException, GoogleReturns,

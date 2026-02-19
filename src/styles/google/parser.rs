@@ -388,7 +388,7 @@ fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usi
 /// use pydocstring::google::parse_google;
 ///
 /// let input = "Summary.\n\nArgs:\n    x (int): The value.\n\nReturns:\n    int: The result.";
-/// let doc = parse_google(input).unwrap();
+/// let doc = &parse_google(input).value;
 ///
 /// assert_eq!(doc.summary.value, "Summary.");
 /// assert_eq!(doc.args().len(), 1);
@@ -402,7 +402,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
     docstring.source = input.to_string();
 
     if lines.is_empty() {
-        return Ok(docstring);
+        return ParseResult::ok(docstring);
     }
 
     let mut i = 0;
@@ -412,7 +412,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
         i += 1;
     }
     if i >= lines.len() {
-        return Ok(docstring);
+        return ParseResult::ok(docstring);
     }
 
     // Detect base indentation from the first non-empty line
@@ -513,47 +513,55 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
             let normalized = header_trimmed.to_ascii_lowercase();
             let (body, next_i) = match normalized.as_str() {
                 "args:" | "arguments:" => {
-                    let (args, ni) = parse_args(&lines, i, &offsets, base_indent)?;
+                    let (args, ni) = parse_args(&lines, i, &offsets, base_indent).value;
                     (GoogleSectionBody::Args(args), ni)
                 }
                 "returns:" | "return:" => {
-                    let (returns, ni) = parse_returns_section(&lines, i, &offsets, base_indent)?;
+                    let (returns, ni) =
+                        parse_returns_section(&lines, i, &offsets, base_indent).value;
                     (GoogleSectionBody::Returns(returns), ni)
                 }
                 "yields:" | "yield:" => {
-                    let (yields, ni) = parse_returns_section(&lines, i, &offsets, base_indent)?;
+                    let (yields, ni) =
+                        parse_returns_section(&lines, i, &offsets, base_indent).value;
                     (GoogleSectionBody::Yields(yields), ni)
                 }
                 "raises:" => {
-                    let (raises, ni) = parse_raises_section(&lines, i, &offsets, base_indent)?;
+                    let (raises, ni) = parse_raises_section(&lines, i, &offsets, base_indent).value;
                     (GoogleSectionBody::Raises(raises), ni)
                 }
                 "attributes:" => {
-                    let (attrs, ni) = parse_attributes_section(&lines, i, &offsets, base_indent)?;
+                    let (attrs, ni) =
+                        parse_attributes_section(&lines, i, &offsets, base_indent).value;
                     (GoogleSectionBody::Attributes(attrs), ni)
                 }
                 "note:" | "notes:" => {
-                    let (content, ni) = parse_freetext_section(&lines, i, &offsets, base_indent)?;
+                    let (content, ni) =
+                        parse_freetext_section(&lines, i, &offsets, base_indent).value;
                     (GoogleSectionBody::Note(content), ni)
                 }
                 "example:" | "examples:" => {
-                    let (content, ni) = parse_freetext_section(&lines, i, &offsets, base_indent)?;
+                    let (content, ni) =
+                        parse_freetext_section(&lines, i, &offsets, base_indent).value;
                     (GoogleSectionBody::Example(content), ni)
                 }
                 "todo:" => {
-                    let (items, ni) = parse_todo_section(&lines, i, &offsets, base_indent)?;
+                    let (items, ni) = parse_todo_section(&lines, i, &offsets, base_indent).value;
                     (GoogleSectionBody::Todo(items), ni)
                 }
                 "references:" => {
-                    let (content, ni) = parse_freetext_section(&lines, i, &offsets, base_indent)?;
+                    let (content, ni) =
+                        parse_freetext_section(&lines, i, &offsets, base_indent).value;
                     (GoogleSectionBody::References(content), ni)
                 }
                 "warnings:" => {
-                    let (content, ni) = parse_freetext_section(&lines, i, &offsets, base_indent)?;
+                    let (content, ni) =
+                        parse_freetext_section(&lines, i, &offsets, base_indent).value;
                     (GoogleSectionBody::Warnings(content), ni)
                 }
                 _ => {
-                    let (content, ni) = parse_freetext_section(&lines, i, &offsets, base_indent)?;
+                    let (content, ni) =
+                        parse_freetext_section(&lines, i, &offsets, base_indent).value;
                     (GoogleSectionBody::Unknown(content), ni)
                 }
             };
@@ -594,7 +602,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
     let last_col = lines.last().map(|l| l.len()).unwrap_or(0);
     docstring.span = make_span(0, 0, last_line, last_col, &offsets);
 
-    Ok(docstring)
+    ParseResult::ok(docstring)
 }
 
 // =============================================================================
@@ -710,7 +718,7 @@ fn parse_args(
         }
     }
 
-    Ok((args, i))
+    ParseResult::ok((args, i))
 }
 
 // =============================================================================
@@ -815,7 +823,7 @@ fn parse_returns_section(
         }
     }
 
-    Ok((returns, i))
+    ParseResult::ok((returns, i))
 }
 
 // =============================================================================
@@ -903,7 +911,7 @@ fn parse_raises_section(
         }
     }
 
-    Ok((raises, i))
+    ParseResult::ok((raises, i))
 }
 
 // =============================================================================
@@ -1007,7 +1015,7 @@ fn parse_attributes_section(
         }
     }
 
-    Ok((attrs, i))
+    ParseResult::ok((attrs, i))
 }
 
 // =============================================================================
@@ -1069,7 +1077,7 @@ fn parse_freetext_section(
         Spanned::empty_string()
     };
 
-    Ok((spanned, i))
+    ParseResult::ok((spanned, i))
 }
 
 // =============================================================================
@@ -1151,7 +1159,7 @@ fn parse_todo_section(
         items.push(make_spanned(text, sl, sc, el, ec, offsets));
     }
 
-    Ok((items, i))
+    ParseResult::ok((items, i))
 }
 
 // =============================================================================
@@ -1273,26 +1281,26 @@ mod tests {
 
     #[test]
     fn test_parse_simple_summary() {
-        let result = parse_google("Brief description.").unwrap();
+        let result = parse_google("Brief description.").value;
         assert_eq!(result.summary.value, "Brief description.");
     }
 
     #[test]
     fn test_parse_empty() {
-        let result = parse_google("").unwrap();
+        let result = parse_google("").value;
         assert_eq!(result.summary.value, "");
     }
 
     #[test]
     fn test_parse_whitespace_only() {
-        let result = parse_google("   \n   \n").unwrap();
+        let result = parse_google("   \n   \n").value;
         assert_eq!(result.summary.value, "");
     }
 
     #[test]
     fn test_parse_summary_with_description() {
         let input = "Brief summary.\n\nExtended description.\nMore text.";
-        let result = parse_google(input).unwrap();
+        let result = parse_google(input).value;
         assert_eq!(result.summary.value, "Brief summary.");
         assert_eq!(
             result.description.as_ref().unwrap().value,
@@ -1303,7 +1311,7 @@ mod tests {
     #[test]
     fn test_parse_args() {
         let input = "Summary.\n\nArgs:\n    x (int): The value.\n    y (str): The name.";
-        let result = parse_google(input).unwrap();
+        let result = parse_google(input).value;
         assert_eq!(result.args().len(), 2);
         assert_eq!(result.args()[0].name.value, "x");
         assert_eq!(result.args()[0].arg_type.as_ref().unwrap().value, "int");
@@ -1314,7 +1322,7 @@ mod tests {
     #[test]
     fn test_parse_args_multiline_desc() {
         let input = "Summary.\n\nArgs:\n    x (int): First line.\n        Second line.";
-        let result = parse_google(input).unwrap();
+        let result = parse_google(input).value;
         assert_eq!(
             result.args()[0].description.value,
             "First line.\nSecond line."
@@ -1324,7 +1332,7 @@ mod tests {
     #[test]
     fn test_parse_returns() {
         let input = "Summary.\n\nReturns:\n    int: The result.";
-        let result = parse_google(input).unwrap();
+        let result = parse_google(input).value;
         assert_eq!(result.returns().len(), 1);
         assert_eq!(
             result.returns()[0].return_type.as_ref().unwrap().value,
@@ -1336,14 +1344,14 @@ mod tests {
     #[test]
     fn test_parse_returns_multiple() {
         let input = "Summary.\n\nReturns:\n    int: The count.\n    str: The message.";
-        let result = parse_google(input).unwrap();
+        let result = parse_google(input).value;
         assert_eq!(result.returns().len(), 2);
     }
 
     #[test]
     fn test_parse_raises() {
         let input = "Summary.\n\nRaises:\n    ValueError: If invalid.";
-        let result = parse_google(input).unwrap();
+        let result = parse_google(input).value;
         assert_eq!(result.raises().len(), 1);
         assert_eq!(result.raises()[0].exception_type.value, "ValueError");
         assert_eq!(result.raises()[0].description.value, "If invalid.");
@@ -1352,7 +1360,7 @@ mod tests {
     #[test]
     fn test_parse_span_accuracy() {
         let input = "Summary line.";
-        let result = parse_google(input).unwrap();
+        let result = parse_google(input).value;
         assert_eq!(result.summary.span.start.line, 0);
         assert_eq!(result.summary.span.start.column, 0);
         assert_eq!(result.summary.span.end.column, 13);

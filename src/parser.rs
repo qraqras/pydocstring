@@ -58,7 +58,8 @@ pub fn detect_style(input: &str) -> Style {
 /// use pydocstring::{parse, DocstringLike, Style};
 ///
 /// let input = "Summary.\n\nParameters\n----------\nx : int\n    The value.";
-/// let doc = parse(input).unwrap();
+/// let result = parse(input);
+/// let doc = &result.value;
 ///
 /// assert_eq!(doc.style(), Style::NumPy);
 /// assert_eq!(doc.summary(), "Summary.");
@@ -174,7 +175,7 @@ mod tests {
     #[test]
     fn test_parse_auto_numpy() {
         let input = "Summary.\n\nParameters\n----------\nx : int\n    Desc.";
-        let doc = parse(input).unwrap();
+        let doc = &parse(input).value;
         assert_eq!(doc.style(), Style::NumPy);
         assert_eq!(doc.summary(), "Summary.");
     }
@@ -182,7 +183,7 @@ mod tests {
     #[test]
     fn test_parse_auto_google() {
         let input = "Summary.";
-        let doc = parse(input).unwrap();
+        let doc = &parse(input).value;
         assert_eq!(doc.style(), Style::Google);
         assert_eq!(doc.summary(), "Summary.");
     }
@@ -190,7 +191,7 @@ mod tests {
     #[test]
     fn test_parse_auto_sphinx() {
         let input = "Summary.\n\n:param x: Desc.";
-        let doc = parse(input).unwrap();
+        let doc = &parse(input).value;
         assert_eq!(doc.style(), Style::Sphinx);
         assert_eq!(doc.summary(), "Summary.");
     }
