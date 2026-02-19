@@ -56,7 +56,7 @@ Raises:
     for section in &doc.sections {
         println!(
             "  {} (header: {:?})",
-            section.header.name.value, section.header.span
+            section.header.name.value, section.header.range
         );
     }
 

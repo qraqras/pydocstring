@@ -6,7 +6,7 @@
 
 use core::fmt;
 
-use crate::ast::Span;
+use crate::ast::TextRange;
 
 // =============================================================================
 // Diagnostic
@@ -25,11 +25,11 @@ pub enum Severity {
 
 /// A diagnostic produced during parsing.
 ///
-/// Each diagnostic points to a source span and carries a human-readable message.
+/// Each diagnostic points to a source range and carries a human-readable message.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Diagnostic {
     /// Where the problem was detected.
-    pub span: Span,
+    pub range: TextRange,
     /// How severe the problem is.
     pub severity: Severity,
     /// Human-readable message.
@@ -38,27 +38,27 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     /// Creates a new diagnostic.
-    pub fn new(span: Span, severity: Severity, message: impl Into<String>) -> Self {
+    pub fn new(range: TextRange, severity: Severity, message: impl Into<String>) -> Self {
         Self {
-            span,
+            range,
             severity,
             message: message.into(),
         }
     }
 
     /// Shorthand for creating an error diagnostic.
-    pub fn error(span: Span, message: impl Into<String>) -> Self {
-        Self::new(span, Severity::Error, message)
+    pub fn error(range: TextRange, message: impl Into<String>) -> Self {
+        Self::new(range, Severity::Error, message)
     }
 
     /// Shorthand for creating a warning diagnostic.
-    pub fn warning(span: Span, message: impl Into<String>) -> Self {
-        Self::new(span, Severity::Warning, message)
+    pub fn warning(range: TextRange, message: impl Into<String>) -> Self {
+        Self::new(range, Severity::Warning, message)
     }
 
     /// Shorthand for creating a hint diagnostic.
-    pub fn hint(span: Span, message: impl Into<String>) -> Self {
-        Self::new(span, Severity::Hint, message)
+    pub fn hint(range: TextRange, message: impl Into<String>) -> Self {
+        Self::new(range, Severity::Hint, message)
     }
 }
 
@@ -71,8 +71,11 @@ impl fmt::Display for Diagnostic {
         };
         write!(
             f,
-            "{} at {}:{}: {}",
-            sev, self.span.start.line, self.span.start.column, self.message
+            "{} at {}..{}: {}",
+            sev,
+            self.range.start(),
+            self.range.end(),
+            self.message
         )
     }
 }

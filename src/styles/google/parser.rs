@@ -17,7 +17,7 @@
 //!     ValueError: If the input is invalid.
 //! ```
 
-use crate::ast::{build_line_offsets, indent_len, make_span, make_spanned, Spanned};
+use crate::ast::{build_line_offsets, indent_len, make_range, make_range_raw, make_spanned, offset_to_line_col, Spanned};
 use crate::error::{Diagnostic, ParseResult};
 use crate::styles::google::ast::{
     GoogleArgument, GoogleAttribute, GoogleDocstring, GoogleException, GoogleReturns,
@@ -253,12 +253,13 @@ fn build_full_description(
         );
     }
     let combined = format!("{}\n{}", first_line, cont.value);
+    let (end_line, end_col) = offset_to_line_col(cont.range.end().raw() as usize, offsets);
     make_spanned(
         combined,
         first_line_idx,
         first_col,
-        cont.span.end.line as usize,
-        cont.span.end.column as usize,
+        end_line,
+        end_col,
         offsets,
     )
 }
@@ -493,7 +494,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
             // Build section header (name without trailing colon)
             let header_name = &header_trimmed[..header_trimmed.len() - 1];
             let header = GoogleSectionHeader {
-                span: make_span(
+                range: make_range(
                     i,
                     header_col,
                     i,
@@ -590,7 +591,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
             };
             if is_empty {
                 diagnostics.push(Diagnostic::warning(
-                    make_span(
+                    make_range(
                         section_start,
                         header_col,
                         section_start,
@@ -615,7 +616,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
                 .unwrap_or(0);
 
             docstring.sections.push(GoogleSection {
-                span: make_span(
+                range: make_range(
                     section_start,
                     header_col,
                     section_end_line,
@@ -635,7 +636,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
     // --- Docstring span ---
     let last_line = lines.len().saturating_sub(1);
     let last_col = lines.last().map(|l| l.len()).unwrap_or(0);
-    docstring.span = make_span(0, 0, last_line, last_col, &offsets);
+    docstring.range = make_range(0, 0, last_line, last_col, &offsets);
 
     ParseResult::with_diagnostics(docstring, diagnostics)
 }
@@ -685,7 +686,7 @@ fn parse_args(
                 if find_matching_close(trimmed, paren_start).is_none() {
                     let paren_col = col + paren_start;
                     diagnostics.push(Diagnostic::warning(
-                        make_span(i, paren_col, i, col + trimmed.len(), offsets),
+                        make_range(i, paren_col, i, col + trimmed.len(), offsets),
                         "unclosed parenthesis in type annotation",
                     ));
                 }
@@ -694,7 +695,7 @@ fn parse_args(
             // Detect missing colon separator
             if !trimmed.contains(':') {
                 diagnostics.push(Diagnostic::warning(
-                    make_span(i, col, i, col + trimmed.len(), offsets),
+                    make_range(i, col, i, col + trimmed.len(), offsets),
                     format!(
                         "missing ':' after parameter name '{}'",
                         trimmed.split_whitespace().next().unwrap_or(trimmed)
@@ -733,7 +734,7 @@ fn parse_args(
                     };
                     let opt = opt_off.map(|o| {
                         let oc = col + o;
-                        make_span(i, oc, i, oc + "optional".len(), offsets)
+                        make_range(i, oc, i, oc + "optional".len(), offsets)
                     });
                     (arg_t, opt)
                 }
@@ -758,7 +759,7 @@ fn parse_args(
             // Detect missing description
             if full_desc.value.is_empty() {
                 diagnostics.push(Diagnostic::hint(
-                    make_span(entry_start, col, entry_start, col + trimmed.len(), offsets),
+                    make_range(entry_start, col, entry_start, col + trimmed.len(), offsets),
                     format!("missing description for parameter '{}'", header.name),
                 ));
             }
@@ -766,14 +767,11 @@ fn parse_args(
             let (end_line, end_col) = if full_desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
-                (
-                    full_desc.span.end.line as usize,
-                    full_desc.span.end.column as usize,
-                )
+                { let (el, ec) = offset_to_line_col(full_desc.range.end().raw() as usize, offsets); (el, ec) }
             };
 
             args.push(GoogleArgument {
-                span: make_span(entry_start, col, end_line, end_col, offsets),
+                range: make_range(entry_start, col, end_line, end_col, offsets),
                 name: name_spanned,
                 arg_type,
                 description: full_desc,
@@ -879,7 +877,7 @@ fn parse_returns_section(
                         format!("return type '{}'", rt.value)
                     });
                 diagnostics.push(Diagnostic::hint(
-                    make_span(entry_start, col, entry_start, col + trimmed.len(), offsets),
+                    make_range(entry_start, col, entry_start, col + trimmed.len(), offsets),
                     format!("missing description for {}", label),
                 ));
             }
@@ -887,14 +885,11 @@ fn parse_returns_section(
             let (end_line, end_col) = if full_desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
-                (
-                    full_desc.span.end.line as usize,
-                    full_desc.span.end.column as usize,
-                )
+                { let (el, ec) = offset_to_line_col(full_desc.range.end().raw() as usize, offsets); (el, ec) }
             };
 
             returns.push(GoogleReturns {
-                span: make_span(entry_start, col, end_line, end_col, offsets),
+                range: make_range(entry_start, col, end_line, end_col, offsets),
                 return_type,
                 description: full_desc,
             });
@@ -951,7 +946,7 @@ fn parse_raises_section(
             // Detect missing colon separator
             if !trimmed.contains(':') {
                 diagnostics.push(Diagnostic::warning(
-                    make_span(i, col, i, col + trimmed.len(), offsets),
+                    make_range(i, col, i, col + trimmed.len(), offsets),
                     format!(
                         "missing ':' after exception type '{}'",
                         trimmed.split_whitespace().next().unwrap_or(trimmed)
@@ -987,7 +982,7 @@ fn parse_raises_section(
             // Detect missing description
             if full_desc.value.is_empty() {
                 diagnostics.push(Diagnostic::hint(
-                    make_span(entry_start, col, entry_start, col + trimmed.len(), offsets),
+                    make_range(entry_start, col, entry_start, col + trimmed.len(), offsets),
                     format!("missing description for exception '{}'", exc_type_str),
                 ));
             }
@@ -995,14 +990,11 @@ fn parse_raises_section(
             let (end_line, end_col) = if full_desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
-                (
-                    full_desc.span.end.line as usize,
-                    full_desc.span.end.column as usize,
-                )
+                { let (el, ec) = offset_to_line_col(full_desc.range.end().raw() as usize, offsets); (el, ec) }
             };
 
             raises.push(GoogleException {
-                span: make_span(entry_start, col, end_line, end_col, offsets),
+                range: make_range(entry_start, col, end_line, end_col, offsets),
                 exception_type: exc_type,
                 description: full_desc,
             });
@@ -1062,7 +1054,7 @@ fn parse_attributes_section(
                 if find_matching_close(trimmed, paren_start).is_none() {
                     let paren_col = col + paren_start;
                     diagnostics.push(Diagnostic::warning(
-                        make_span(i, paren_col, i, col + trimmed.len(), offsets),
+                        make_range(i, paren_col, i, col + trimmed.len(), offsets),
                         "unclosed parenthesis in type annotation",
                     ));
                 }
@@ -1071,7 +1063,7 @@ fn parse_attributes_section(
             // Detect missing colon separator
             if !trimmed.contains(':') {
                 diagnostics.push(Diagnostic::warning(
-                    make_span(i, col, i, col + trimmed.len(), offsets),
+                    make_range(i, col, i, col + trimmed.len(), offsets),
                     format!(
                         "missing ':' after attribute name '{}'",
                         trimmed.split_whitespace().next().unwrap_or(trimmed)
@@ -1123,7 +1115,7 @@ fn parse_attributes_section(
             // Detect missing description
             if full_desc.value.is_empty() {
                 diagnostics.push(Diagnostic::hint(
-                    make_span(entry_start, col, entry_start, col + trimmed.len(), offsets),
+                    make_range(entry_start, col, entry_start, col + trimmed.len(), offsets),
                     format!("missing description for attribute '{}'", header.name),
                 ));
             }
@@ -1131,14 +1123,11 @@ fn parse_attributes_section(
             let (end_line, end_col) = if full_desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
-                (
-                    full_desc.span.end.line as usize,
-                    full_desc.span.end.column as usize,
-                )
+                { let (el, ec) = offset_to_line_col(full_desc.range.end().raw() as usize, offsets); (el, ec) }
             };
 
             attrs.push(GoogleAttribute {
-                span: make_span(entry_start, col, end_line, end_col, offsets),
+                range: make_range(entry_start, col, end_line, end_col, offsets),
                 name: name_spanned,
                 attr_type,
                 description: full_desc,
@@ -1496,11 +1485,10 @@ mod tests {
     fn test_parse_span_accuracy() {
         let input = "Summary line.";
         let result = parse_google(input).value;
-        assert_eq!(result.summary.span.start.line, 0);
-        assert_eq!(result.summary.span.start.column, 0);
-        assert_eq!(result.summary.span.end.column, 13);
+        assert_eq!(result.summary.range.start().raw(), 0);
+        assert_eq!(result.summary.range.end().raw(), 13);
         assert_eq!(
-            result.summary.span.source_text(&result.source),
+            result.summary.range.source_text(&result.source),
             "Summary line."
         );
     }

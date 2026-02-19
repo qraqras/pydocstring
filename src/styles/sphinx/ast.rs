@@ -1,7 +1,7 @@
 use core::fmt;
 
 use crate::ast::{AttributeView, DocstringLike, ExceptionView, ParameterView, ReturnsView};
-use crate::ast::{Span, Spanned};
+use crate::ast::{TextRange, Spanned};
 
 // =============================================================================
 // Sphinx Style Types
@@ -24,7 +24,7 @@ pub struct SphinxDocstring {
     /// Original source text of the docstring.
     pub source: String,
     /// Source span of the entire docstring.
-    pub span: Span,
+    pub range: TextRange,
     /// Brief summary (first paragraph).
     pub summary: Spanned<String>,
     /// Extended description.
@@ -49,7 +49,7 @@ pub struct SphinxDocstring {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SphinxParameter {
     /// Source span.
-    pub span: Span,
+    pub range: TextRange,
     /// Parameter name with its span.
     pub name: Spanned<String>,
     /// Parameter type (from :type: field) with its span.
@@ -62,7 +62,7 @@ pub struct SphinxParameter {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SphinxReturns {
     /// Source span.
-    pub span: Span,
+    pub range: TextRange,
     /// Return type (from :rtype: field) with its span.
     pub return_type: Option<Spanned<String>>,
     /// Description (from :returns: or :return: field) with its span.
@@ -73,7 +73,7 @@ pub struct SphinxReturns {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SphinxException {
     /// Source span.
-    pub span: Span,
+    pub range: TextRange,
     /// Exception type with its span.
     pub exception_type: Spanned<String>,
     /// Description with its span.
@@ -84,7 +84,7 @@ pub struct SphinxException {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SphinxVariable {
     /// Source span.
-    pub span: Span,
+    pub range: TextRange,
     /// Variable name with its span.
     pub name: Spanned<String>,
     /// Variable type with its span.
@@ -97,7 +97,7 @@ pub struct SphinxVariable {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SphinxField {
     /// Source span.
-    pub span: Span,
+    pub range: TextRange,
     /// Field name (e.g., "deprecated", "since", "author") with its span.
     pub field_name: Spanned<String>,
     /// Field argument (e.g., variable name for :type:) with its span.
@@ -111,7 +111,7 @@ impl SphinxDocstring {
     pub fn new() -> Self {
         Self {
             source: String::new(),
-            span: Span::empty(),
+            range: TextRange::empty(),
             summary: Spanned::empty_string(),
             description: None,
             parameters: Vec::new(),
@@ -154,7 +154,7 @@ impl DocstringLike for SphinxDocstring {
                 param_type: p.param_type.as_ref().map(|t| t.as_spanned_str()),
                 description: p.description.as_spanned_str(),
                 optional: None,
-                span: p.span,
+                range: p.range,
             })
             .collect()
     }
@@ -165,7 +165,7 @@ impl DocstringLike for SphinxDocstring {
                 name: None,
                 return_type: r.return_type.as_ref().map(|t| t.as_spanned_str()),
                 description: r.description.as_spanned_str(),
-                span: r.span,
+                range: r.range,
             }],
             None => Vec::new(),
         }
@@ -177,7 +177,7 @@ impl DocstringLike for SphinxDocstring {
             .map(|e| ExceptionView {
                 exception_type: e.exception_type.as_spanned_str(),
                 description: e.description.as_spanned_str(),
-                span: e.span,
+                range: e.range,
             })
             .collect()
     }
@@ -191,7 +191,7 @@ impl DocstringLike for SphinxDocstring {
                 name: v.name.as_spanned_str(),
                 attr_type: v.var_type.as_ref().map(|t| t.as_spanned_str()),
                 description: v.description.as_spanned_str(),
-                span: v.span,
+                range: v.range,
             })
             .collect()
     }

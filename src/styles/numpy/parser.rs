@@ -19,7 +19,7 @@
 //!     Description of return value.
 //! ```
 
-use crate::ast::{build_line_offsets, indent_len, make_span, make_spanned, Span, Spanned};
+use crate::ast::{build_line_offsets, indent_len, make_range, make_spanned, offset_to_line_col, Spanned, TextRange};
 use crate::error::ParseResult;
 use crate::styles::numpy::ast::{
     NumPyDeprecation, NumPyDocstring, NumPyException, NumPyParameter, NumPyReturns, NumPySection,
@@ -230,19 +230,14 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
             i = next_i;
 
             // Compute deprecation span
-            let dep_end_line = if desc_spanned.value.is_empty() {
-                dep_start_line
+            let (dep_end_line, dep_end_col) = if desc_spanned.value.is_empty() {
+                (dep_start_line, col + trimmed.len())
             } else {
-                desc_spanned.span.end.line as usize
-            };
-            let dep_end_col = if desc_spanned.value.is_empty() {
-                col + trimmed.len()
-            } else {
-                desc_spanned.span.end.column as usize
+                offset_to_line_col(desc_spanned.range.end().raw() as usize, &offsets)
             };
 
             docstring.deprecation = Some(NumPyDeprecation {
-                span: make_span(dep_start_line, col, dep_end_line, dep_end_col, &offsets),
+                range: make_range(dep_start_line, col, dep_end_line, dep_end_col, &offsets),
                 version: version_spanned,
                 description: desc_spanned,
             });
@@ -302,7 +297,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
             let underline_col = indent_len(underline_line);
 
             let header = NumPySectionHeader {
-                span: make_span(
+                range: make_range(
                     i,
                     header_col,
                     i + 1,
@@ -317,7 +312,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                     header_col + header_trimmed.len(),
                     &offsets,
                 ),
-                underline: make_span(
+                underline: make_range(
                     i + 1,
                     underline_col,
                     i + 1,
@@ -359,7 +354,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                     let warns = raises
                         .into_iter()
                         .map(|e| crate::styles::numpy::ast::NumPyWarning {
-                            span: e.span,
+                            range: e.range,
                             warning_type: e.exception_type,
                             description: e.description,
                         })
@@ -391,7 +386,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                     let attrs = params
                         .into_iter()
                         .map(|p| crate::styles::numpy::ast::NumPyAttribute {
-                            span: p.span,
+                            range: p.range,
                             name: p
                                 .names
                                 .into_iter()
@@ -408,7 +403,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                     let methods = params
                         .into_iter()
                         .map(|p| crate::styles::numpy::ast::NumPyMethod {
-                            span: p.span,
+                            range: p.range,
                             name: p
                                 .names
                                 .into_iter()
@@ -439,7 +434,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                 .unwrap_or(0);
 
             docstring.sections.push(NumPySection {
-                span: make_span(
+                range: make_range(
                     section_start,
                     header_col,
                     section_end_line,
@@ -459,7 +454,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
     // Docstring span
     let last_line = lines.len().saturating_sub(1);
     let last_col = lines.last().map(|l| l.len()).unwrap_or(0);
-    docstring.span = make_span(0, 0, last_line, last_col, &offsets);
+    docstring.range = make_range(0, 0, last_line, last_col, &offsets);
 
     ParseResult::ok(docstring)
 }
@@ -496,19 +491,14 @@ fn parse_parameters(
             i += 1;
             let (desc, next_i) = collect_description(lines, i, offsets, entry_indent);
 
-            let entry_end_line = if desc.value.is_empty() {
-                entry_start
+            let (entry_end_line, entry_end_col) = if desc.value.is_empty() {
+                (entry_start, col + trimmed.len())
             } else {
-                desc.span.end.line as usize
-            };
-            let entry_end_col = if desc.value.is_empty() {
-                col + trimmed.len()
-            } else {
-                desc.span.end.column as usize
+                offset_to_line_col(desc.range.end().raw() as usize, &offsets)
             };
 
             parameters.push(NumPyParameter {
-                span: make_span(entry_start, col, entry_end_line, entry_end_col, offsets),
+                range: make_range(entry_start, col, entry_end_line, entry_end_col, offsets),
                 names,
                 param_type,
                 description: desc,
@@ -536,7 +526,7 @@ fn is_param_header(trimmed: &str) -> bool {
 type ParamHeaderParts = (
     Vec<Spanned<String>>,
     Option<Spanned<String>>,
-    Option<Span>,
+    Option<TextRange>,
     Option<Spanned<String>>,
 );
 
@@ -577,7 +567,7 @@ fn parse_name_and_type(
     // Check for "optional" marker
     let optional = if let Some(opt_pos) = type_str.find("optional") {
         let opt_col = type_col + opt_pos;
-        Some(make_span(
+        Some(make_range(
             line_idx,
             opt_col,
             line_idx,
@@ -757,19 +747,14 @@ fn parse_returns(
             i += 1;
             let (desc, next_i) = collect_description(lines, i, offsets, entry_indent);
 
-            let entry_end_line = if desc.value.is_empty() {
-                entry_start
+            let (entry_end_line, entry_end_col) = if desc.value.is_empty() {
+                (entry_start, col + trimmed.len())
             } else {
-                desc.span.end.line as usize
-            };
-            let entry_end_col = if desc.value.is_empty() {
-                col + trimmed.len()
-            } else {
-                desc.span.end.column as usize
+                offset_to_line_col(desc.range.end().raw() as usize, &offsets)
             };
 
             returns.push(NumPyReturns {
-                span: make_span(entry_start, col, entry_end_line, entry_end_col, offsets),
+                range: make_range(entry_start, col, entry_end_line, entry_end_col, offsets),
                 name,
                 return_type,
                 description: desc,
@@ -816,19 +801,14 @@ fn parse_raises(
             i += 1;
             let (desc, next_i) = collect_description(lines, i, offsets, entry_indent);
 
-            let entry_end_line = if desc.value.is_empty() {
-                entry_start
+            let (entry_end_line, entry_end_col) = if desc.value.is_empty() {
+                (entry_start, col + trimmed.len())
             } else {
-                desc.span.end.line as usize
-            };
-            let entry_end_col = if desc.value.is_empty() {
-                col + trimmed.len()
-            } else {
-                desc.span.end.column as usize
+                offset_to_line_col(desc.range.end().raw() as usize, &offsets)
             };
 
             raises.push(NumPyException {
-                span: make_span(entry_start, col, entry_end_line, entry_end_col, offsets),
+                range: make_range(entry_start, col, entry_end_line, entry_end_col, offsets),
                 exception_type: exc_type,
                 description: desc,
             });
@@ -953,7 +933,7 @@ fn parse_see_also(
         let entry_end_col = col + trimmed.len();
 
         items.push(crate::styles::numpy::ast::SeeAlsoItem {
-            span: make_span(entry_start, col, entry_start, entry_end_col, offsets),
+            range: make_range(entry_start, col, entry_start, entry_end_col, offsets),
             names,
             description,
         });
@@ -1003,7 +983,7 @@ fn parse_references(
                 };
                 let end_col = current_col + content.lines().last().unwrap_or("").len();
                 refs.push(crate::styles::numpy::ast::NumPyReference {
-                    span: make_span(start_l, current_col, end_l, end_col, offsets),
+                    range: make_range(start_l, current_col, end_l, end_col, offsets),
                     number: current_number,
                     content: make_spanned(content, start_l, current_col, end_l, end_col, offsets),
                 });
@@ -1031,7 +1011,7 @@ fn parse_references(
                 };
                 let end_col = current_col + content.lines().last().unwrap_or("").len();
                 refs.push(crate::styles::numpy::ast::NumPyReference {
-                    span: make_span(start_l, current_col, end_l, end_col, offsets),
+                    range: make_range(start_l, current_col, end_l, end_col, offsets),
                     number: current_number,
                     content: make_spanned(content, start_l, current_col, end_l, end_col, offsets),
                 });
@@ -1064,7 +1044,7 @@ fn parse_references(
         };
         let end_col = current_col + content.lines().last().unwrap_or("").len();
         refs.push(crate::styles::numpy::ast::NumPyReference {
-            span: make_span(start_l, current_col, end_l, end_col, offsets),
+            range: make_range(start_l, current_col, end_l, end_col, offsets),
             number: current_number,
             content: make_spanned(content, start_l, current_col, end_l, end_col, offsets),
         });

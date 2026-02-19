@@ -1,7 +1,7 @@
 use core::fmt;
 
 use crate::ast::{AttributeView, DocstringLike, ExceptionView, ParameterView, ReturnsView};
-use crate::ast::{Span, Spanned};
+use crate::ast::{TextRange, Spanned};
 
 // =============================================================================
 // Google Style Types
@@ -15,8 +15,8 @@ use crate::ast::{Span, Spanned};
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct GoogleSection {
-    /// Source span of the entire section (header + body).
-    pub span: Span,
+    /// Source range of the entire section (header + body).
+    pub range: TextRange,
     /// Section header (the `Args:` line).
     pub header: GoogleSectionHeader,
     /// Section body content.
@@ -28,8 +28,8 @@ pub struct GoogleSection {
 /// Represents a parsed section header like `Args:` or `Returns:`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GoogleSectionHeader {
-    /// Source span of the header line.
-    pub span: Span,
+    /// Source range of the header line.
+    pub range: TextRange,
     /// Section name (e.g., "Args", "Returns") with its span.
     /// Stored without the trailing colon.
     pub name: Spanned<String>,
@@ -75,8 +75,8 @@ pub enum GoogleSectionBody {
 pub struct GoogleDocstring {
     /// Original source text of the docstring.
     pub source: String,
-    /// Source span of the entire docstring.
-    pub span: Span,
+    /// Source range of the entire docstring.
+    pub range: TextRange,
     /// Brief summary (first line).
     pub summary: Spanned<String>,
     /// Extended description.
@@ -88,24 +88,24 @@ pub struct GoogleDocstring {
 /// Google-style argument.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GoogleArgument {
-    /// Source span.
-    pub span: Span,
+    /// Source range.
+    pub range: TextRange,
     /// Argument name with its span.
     pub name: Spanned<String>,
     /// Argument type (inside parentheses) with its span.
     pub arg_type: Option<Spanned<String>>,
     /// Argument description with its span.
     pub description: Spanned<String>,
-    /// Source span of the `optional` marker, if present.
-    /// `None` means not marked as optional, `Some(span)` gives the location of `optional` text.
-    pub optional: Option<Span>,
+    /// Source range of the `optional` marker, if present.
+    /// `None` means not marked as optional, `Some(range)` gives the location of `optional` text.
+    pub optional: Option<TextRange>,
 }
 
 /// Google-style return or yield value.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GoogleReturns {
-    /// Source span.
-    pub span: Span,
+    /// Source range.
+    pub range: TextRange,
     /// Return type with its span.
     pub return_type: Option<Spanned<String>>,
     /// Description with its span.
@@ -115,8 +115,8 @@ pub struct GoogleReturns {
 /// Google-style exception.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GoogleException {
-    /// Source span.
-    pub span: Span,
+    /// Source range.
+    pub range: TextRange,
     /// Exception type with its span.
     pub exception_type: Spanned<String>,
     /// Description with its span.
@@ -126,8 +126,8 @@ pub struct GoogleException {
 /// Google-style attribute.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GoogleAttribute {
-    /// Source span.
-    pub span: Span,
+    /// Source range.
+    pub range: TextRange,
     /// Attribute name with its span.
     pub name: Spanned<String>,
     /// Attribute type (inside parentheses) with its span.
@@ -141,7 +141,7 @@ impl GoogleDocstring {
     pub fn new() -> Self {
         Self {
             source: String::new(),
-            span: Span::empty(),
+            range: TextRange::empty(),
             summary: Spanned::empty_string(),
             description: None,
             sections: Vec::new(),
@@ -284,7 +284,7 @@ impl DocstringLike for GoogleDocstring {
                 param_type: a.arg_type.as_ref().map(|t| t.as_spanned_str()),
                 description: a.description.as_spanned_str(),
                 optional: a.optional,
-                span: a.span,
+                range: a.range,
             })
             .collect()
     }
@@ -296,7 +296,7 @@ impl DocstringLike for GoogleDocstring {
                 name: None,
                 return_type: r.return_type.as_ref().map(|t| t.as_spanned_str()),
                 description: r.description.as_spanned_str(),
-                span: r.span,
+                range: r.range,
             })
             .collect()
     }
@@ -307,7 +307,7 @@ impl DocstringLike for GoogleDocstring {
             .map(|e| ExceptionView {
                 exception_type: e.exception_type.as_spanned_str(),
                 description: e.description.as_spanned_str(),
-                span: e.span,
+                range: e.range,
             })
             .collect()
     }
@@ -319,7 +319,7 @@ impl DocstringLike for GoogleDocstring {
                 name: a.name.as_spanned_str(),
                 attr_type: a.attr_type.as_ref().map(|t| t.as_spanned_str()),
                 description: a.description.as_spanned_str(),
-                span: a.span,
+                range: a.range,
             })
             .collect()
     }

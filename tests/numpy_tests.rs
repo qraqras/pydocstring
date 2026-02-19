@@ -1,6 +1,7 @@
 //! Integration tests for NumPy-style docstring parser.
 
 use pydocstring::numpy::parse_numpy;
+use pydocstring::{TextSize, LineIndex};
 
 // =============================================================================
 // Basic parsing
@@ -21,11 +22,10 @@ fn test_parse_simple_span() {
     let docstring = "Brief description.";
     let result = parse_numpy(docstring).value;
     assert_eq!(result.summary.value, "Brief description.");
-    assert_eq!(result.summary.span.start.line, 0);
-    assert_eq!(result.summary.span.start.column, 0);
-    assert_eq!(result.summary.span.end.column, 18);
+    assert_eq!(result.summary.range.start(), TextSize::new(0));
+    assert_eq!(result.summary.range.end(), TextSize::new(18));
     assert_eq!(
-        result.summary.span.source_text(&result.source),
+        result.summary.range.source_text(&result.source),
         "Brief description."
     );
 }
@@ -59,8 +59,8 @@ fn test_whitespace_only_docstring() {
 fn test_docstring_span_covers_entire_input() {
     let docstring = "First line.\n\nSecond line.";
     let result = parse_numpy(docstring).value;
-    assert_eq!(result.span.start.offset, 0);
-    assert_eq!(result.span.end.offset as usize, docstring.len());
+    assert_eq!(result.range.start(), TextSize::new(0));
+    assert_eq!(result.range.end().raw() as usize, docstring.len());
 }
 
 // =============================================================================
@@ -212,13 +212,13 @@ y : str, optional
     // Verify name spans point to correct source text
     assert_eq!(
         result.parameters()[0].names[0]
-            .span
+            .range
             .source_text(&result.source),
         "x"
     );
     assert_eq!(
         result.parameters()[1].names[0]
-            .span
+            .range
             .source_text(&result.source),
         "y"
     );
@@ -228,7 +228,7 @@ y : str, optional
             .param_type
             .as_ref()
             .unwrap()
-            .span
+            .range
             .source_text(&result.source),
         "int"
     );
@@ -248,8 +248,8 @@ x1, x2 : array_like
     assert_eq!(p.names.len(), 2);
     assert_eq!(p.names[0].value, "x1");
     assert_eq!(p.names[1].value, "x2");
-    assert_eq!(p.names[0].span.source_text(&result.source), "x1");
-    assert_eq!(p.names[1].span.source_text(&result.source), "x2");
+    assert_eq!(p.names[0].range.source_text(&result.source), "x1");
+    assert_eq!(p.names[1].range.source_text(&result.source), "x2");
 }
 
 #[test]
@@ -361,14 +361,14 @@ TypeError
     assert_eq!(
         result.raises()[0]
             .exception_type
-            .span
+            .range
             .source_text(&result.source),
         "ValueError"
     );
     assert_eq!(
         result.raises()[1]
             .exception_type
-            .span
+            .range
             .source_text(&result.source),
         "TypeError"
     );
@@ -479,7 +479,7 @@ x : int
 "#;
     let result = parse_numpy(docstring).value;
     let hdr = &result.sections[0].header;
-    assert_eq!(hdr.name.span.source_text(&result.source), "Parameters");
+    assert_eq!(hdr.name.range.source_text(&result.source), "Parameters");
     assert_eq!(hdr.underline.source_text(&result.source), "----------");
 }
 
@@ -499,18 +499,18 @@ x : int
     let result = parse_numpy(docstring).value;
     let src = &result.source;
 
-    assert_eq!(result.summary.span.source_text(src), "Summary line.");
+    assert_eq!(result.summary.range.source_text(src), "Summary line.");
     assert_eq!(
-        result.sections[0].header.name.span.source_text(src),
+        result.sections[0].header.name.range.source_text(src),
         "Parameters"
     );
     let underline = result.sections[0].header.underline.source_text(src);
     assert!(underline.chars().all(|c| c == '-'));
 
     let p = &result.parameters()[0];
-    assert_eq!(p.names[0].span.source_text(src), "x");
-    assert_eq!(p.param_type.as_ref().unwrap().span.source_text(src), "int");
-    assert_eq!(p.description.span.source_text(src), "Description of x.");
+    assert_eq!(p.names[0].range.source_text(src), "x");
+    assert_eq!(p.param_type.as_ref().unwrap().range.source_text(src), "int");
+    assert_eq!(p.description.range.source_text(src), "Description of x.");
 }
 
 // =============================================================================
@@ -536,7 +536,7 @@ x : int
         .expect("deprecation should be parsed");
     assert_eq!(dep.version.value, "1.6.0");
     assert_eq!(dep.description.value, "Use `new_func` instead.");
-    assert_eq!(dep.version.span.source_text(&result.source), "1.6.0");
+    assert_eq!(dep.version.range.source_text(&result.source), "1.6.0");
 }
 
 // =============================================================================
@@ -571,12 +571,12 @@ fn test_indented_docstring() {
 
     // Spans point to correct positions in indented source
     assert_eq!(
-        result.summary.span.source_text(&result.source),
+        result.summary.range.source_text(&result.source),
         "Summary line."
     );
     assert_eq!(
         result.parameters()[0].names[0]
-            .span
+            .range
             .source_text(&result.source),
         "x"
     );
@@ -585,7 +585,7 @@ fn test_indented_docstring() {
             .param_type
             .as_ref()
             .unwrap()
-            .span
+            .range
             .source_text(&result.source),
         "int"
     );
@@ -604,7 +604,7 @@ fn test_deeply_indented_docstring() {
     assert_eq!(
         result.raises()[0]
             .exception_type
-            .span
+            .range
             .source_text(&result.source),
         "ValueError"
     );

@@ -3,6 +3,7 @@
 use pydocstring::ast::DocstringLike;
 use pydocstring::google::parse_google;
 use pydocstring::{GoogleSectionBody, Severity};
+use pydocstring::{TextSize, LineIndex};
 
 // =============================================================================
 // Basic parsing
@@ -19,11 +20,10 @@ fn test_simple_summary() {
 fn test_summary_span() {
     let docstring = "Brief description.";
     let result = parse_google(docstring).value;
-    assert_eq!(result.summary.span.start.line, 0);
-    assert_eq!(result.summary.span.start.column, 0);
-    assert_eq!(result.summary.span.end.column, 18);
+    assert_eq!(result.summary.range.start(), TextSize::new(0));
+    assert_eq!(result.summary.range.end(), TextSize::new(18));
     assert_eq!(
-        result.summary.span.source_text(&result.source),
+        result.summary.range.source_text(&result.source),
         "Brief description."
     );
 }
@@ -187,10 +187,12 @@ fn test_args_name_span() {
     let docstring = "Summary.\n\nArgs:\n    x (int): Value.";
     let result = parse_google(docstring).value;
     let arg = &result.args()[0];
-    assert_eq!(arg.name.span.start.line, 3);
-    assert_eq!(arg.name.span.start.column, 4);
-    assert_eq!(arg.name.span.end.column, 5);
-    assert_eq!(arg.name.span.source_text(&result.source), "x");
+    let index = LineIndex::from_source(&result.source);
+    let (line, col) = index.line_col(arg.name.range.start());
+    assert_eq!(line, 3);
+    assert_eq!(col, 4);
+    assert_eq!(arg.name.range.end(), TextSize::new(arg.name.range.start().raw() + 1));
+    assert_eq!(arg.name.range.source_text(&result.source), "x");
 }
 
 #[test]
@@ -199,8 +201,10 @@ fn test_args_type_span() {
     let result = parse_google(docstring).value;
     let arg = &result.args()[0];
     let type_span = arg.arg_type.as_ref().unwrap();
-    assert_eq!(type_span.span.start.line, 3);
-    assert_eq!(type_span.span.source_text(&result.source), "int");
+    let index = LineIndex::from_source(&result.source);
+    let (line, _col) = index.line_col(type_span.range.start());
+    assert_eq!(line, 3);
+    assert_eq!(type_span.range.source_text(&result.source), "int");
 }
 
 #[test]
@@ -337,7 +341,7 @@ fn test_raises_exception_type_span() {
     assert_eq!(
         result.raises()[0]
             .exception_type
-            .span
+            .range
             .source_text(&result.source),
         "ValueError"
     );
@@ -513,8 +517,8 @@ fn test_section_header_span() {
     let result = parse_google(docstring).value;
     let header = &result.sections[0].header;
     assert_eq!(header.name.value, "Args");
-    assert_eq!(header.name.span.source_text(&result.source), "Args");
-    assert_eq!(header.span.source_text(&result.source), "Args:");
+    assert_eq!(header.name.range.source_text(&result.source), "Args");
+    assert_eq!(header.range.source_text(&result.source), "Args:");
 }
 
 #[test]
@@ -523,7 +527,7 @@ fn test_section_span() {
     let result = parse_google(docstring).value;
     let section = &result.sections[0];
     assert_eq!(
-        section.span.source_text(&result.source),
+        section.range.source_text(&result.source),
         "Args:\n    x: Value."
     );
 }
@@ -587,9 +591,9 @@ fn test_indented_docstring() {
 fn test_indented_summary_span() {
     let docstring = "    Summary.";
     let result = parse_google(docstring).value;
-    assert_eq!(result.summary.span.start.column, 4);
-    assert_eq!(result.summary.span.end.column, 12);
-    assert_eq!(result.summary.span.source_text(&result.source), "Summary.");
+    assert_eq!(result.summary.range.start(), TextSize::new(4));
+    assert_eq!(result.summary.range.end(), TextSize::new(12));
+    assert_eq!(result.summary.range.source_text(&result.source), "Summary.");
 }
 
 // =============================================================================
@@ -642,10 +646,10 @@ fn test_span_source_text_round_trip() {
     let result = parse_google(docstring).value;
 
     // Summary
-    assert_eq!(result.summary.span.source_text(&result.source), "Summary.");
+    assert_eq!(result.summary.range.source_text(&result.source), "Summary.");
 
     // Arg name
-    assert_eq!(result.args()[0].name.span.source_text(&result.source), "x");
+    assert_eq!(result.args()[0].name.range.source_text(&result.source), "x");
 
     // Arg type
     assert_eq!(
@@ -653,7 +657,7 @@ fn test_span_source_text_round_trip() {
             .arg_type
             .as_ref()
             .unwrap()
-            .span
+            .range
             .source_text(&result.source),
         "int"
     );
@@ -664,7 +668,7 @@ fn test_span_source_text_round_trip() {
             .return_type
             .as_ref()
             .unwrap()
-            .span
+            .range
             .source_text(&result.source),
         "bool"
     );
@@ -890,8 +894,10 @@ fn test_diag_span_accuracy() {
         .find(|d| d.message.contains("missing ':'"))
         .unwrap();
     // "x just text" starts at line 3, column 4
-    assert_eq!(warn.span.start.line, 3);
-    assert_eq!(warn.span.start.column, 4);
+    let index = LineIndex::from_source(input);
+    let (line, col) = index.line_col(warn.range.start());
+    assert_eq!(line, 3);
+    assert_eq!(col, 4);
 }
 
 #[test]

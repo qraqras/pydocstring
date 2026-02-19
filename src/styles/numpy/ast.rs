@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::ast::{Span, Spanned};
+use crate::ast::{TextRange, Spanned};
 use crate::ast::{AttributeView, DocstringLike, ExceptionView, ParameterView, ReturnsView};
 
 // =============================================================================
@@ -18,7 +18,7 @@ use crate::ast::{AttributeView, DocstringLike, ExceptionView, ParameterView, Ret
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumPySection {
     /// Source span of the entire section (header + body).
-    pub span: Span,
+    pub range: TextRange,
     /// Section header (name + underline).
     pub header: NumPySectionHeader,
     /// Section body content.
@@ -35,11 +35,11 @@ pub struct NumPySection {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumPySectionHeader {
     /// Source span of the entire header (name line + underline line).
-    pub span: Span,
+    pub range: TextRange,
     /// Section name (e.g., "Parameters", "Returns") with its span.
     pub name: Spanned<String>,
     /// Source span of the underline (dashes) line.
-    pub underline: Span,
+    pub underline: TextRange,
 }
 
 /// Body content of a NumPy-style section.
@@ -93,7 +93,7 @@ pub struct NumPyDocstring {
     /// Original source text of the docstring.
     pub source: String,
     /// Source span of the entire docstring.
-    pub span: Span,
+    pub range: TextRange,
     /// Function/method signature (optional, for C functions or when not available via introspection).
     /// Example: "add(a, b)"
     pub signature: Option<Spanned<String>>,
@@ -115,7 +115,7 @@ pub struct NumPyDocstring {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumPyParameter {
     /// Source span of this parameter definition.
-    pub span: Span,
+    pub range: TextRange,
     /// Parameter names (supports multiple names like `x1, x2`), each with its own span.
     pub names: Vec<Spanned<String>>,
     /// Parameter type (e.g., "int", "str", "array_like") with its span.
@@ -125,7 +125,7 @@ pub struct NumPyParameter {
     pub description: Spanned<String>,
     /// Source span of the `optional` marker, if present.
     /// `None` means not marked as optional, `Some(span)` gives the location of `optional` text.
-    pub optional: Option<Span>,
+    pub optional: Option<TextRange>,
     /// Default value (e.g., "True", "-1", "None") with its span.
     pub default: Option<Spanned<String>>,
 }
@@ -134,7 +134,7 @@ pub struct NumPyParameter {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumPyReturns {
     /// Source span.
-    pub span: Span,
+    pub range: TextRange,
     /// Return value name (optional in NumPy style) with its span.
     pub name: Option<Spanned<String>>,
     /// Return type with its span.
@@ -147,7 +147,7 @@ pub struct NumPyReturns {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumPyWarning {
     /// Source span.
-    pub span: Span,
+    pub range: TextRange,
     /// Warning type (e.g., "DeprecationWarning") with its span.
     pub warning_type: Spanned<String>,
     /// When the warning is issued, with its span.
@@ -158,7 +158,7 @@ pub struct NumPyWarning {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumPyDeprecation {
     /// Source span.
-    pub span: Span,
+    pub range: TextRange,
     /// Version when deprecated (e.g., "1.6.0") with its span.
     pub version: Spanned<String>,
     /// Reason for deprecation and recommendation (free text body), with its span.
@@ -169,7 +169,7 @@ pub struct NumPyDeprecation {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumPyReference {
     /// Source span.
-    pub span: Span,
+    pub range: TextRange,
     /// Reference number (1, 2, 3, ...).
     pub number: u32,
     /// Reference content (author, title, etc) with its span.
@@ -180,7 +180,7 @@ pub struct NumPyReference {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumPyAttribute {
     /// Source span.
-    pub span: Span,
+    pub range: TextRange,
     /// Attribute name with its span.
     pub name: Spanned<String>,
     /// Attribute type with its span.
@@ -193,7 +193,7 @@ pub struct NumPyAttribute {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumPyMethod {
     /// Source span.
-    pub span: Span,
+    pub range: TextRange,
     /// Method name with its span.
     pub name: Spanned<String>,
     /// Brief description with its span.
@@ -208,7 +208,7 @@ pub struct NumPyMethod {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SeeAlsoItem {
     /// Source span.
-    pub span: Span,
+    pub range: TextRange,
     /// Reference names (can be multiple like `func_b, func_c`), each with its own span.
     pub names: Vec<Spanned<String>>,
     /// Optional description with its span.
@@ -219,7 +219,7 @@ pub struct SeeAlsoItem {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumPyException {
     /// Source span.
-    pub span: Span,
+    pub range: TextRange,
     /// Exception type with its span.
     pub exception_type: Spanned<String>,
     /// Description of when raised, with its span.
@@ -231,7 +231,7 @@ impl NumPyDocstring {
     pub fn new() -> Self {
         Self {
             source: String::new(),
-            span: Span::empty(),
+            range: TextRange::empty(),
             signature: None,
             summary: Spanned::empty_string(),
             deprecation: None,
@@ -429,7 +429,7 @@ impl DocstringLike for NumPyDocstring {
                     param_type: p.param_type.as_ref().map(|t| t.as_spanned_str()),
                     description: p.description.as_spanned_str(),
                     optional: p.optional,
-                    span: p.span,
+                    range: p.range,
                 })
             })
             .collect()
@@ -442,7 +442,7 @@ impl DocstringLike for NumPyDocstring {
                 name: r.name.as_ref().map(|n| n.as_spanned_str()),
                 return_type: r.return_type.as_ref().map(|t| t.as_spanned_str()),
                 description: r.description.as_spanned_str(),
-                span: r.span,
+                range: r.range,
             })
             .collect()
     }
@@ -453,7 +453,7 @@ impl DocstringLike for NumPyDocstring {
             .map(|e| ExceptionView {
                 exception_type: e.exception_type.as_spanned_str(),
                 description: e.description.as_spanned_str(),
-                span: e.span,
+                range: e.range,
             })
             .collect()
     }
@@ -465,7 +465,7 @@ impl DocstringLike for NumPyDocstring {
                 name: a.name.as_spanned_str(),
                 attr_type: a.attr_type.as_ref().map(|t| t.as_spanned_str()),
                 description: a.description.as_spanned_str(),
-                span: a.span,
+                range: a.range,
             })
             .collect()
     }

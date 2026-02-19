@@ -35,7 +35,7 @@ pub fn parse_sphinx(input: &str) -> ParseResult<SphinxDocstring> {
 
     let mut result = ParseResult::ok(docstring);
     result.diagnostics.push(Diagnostic::new(
-        crate::ast::Span::empty(),
+        crate::ast::TextRange::empty(),
         Severity::Error,
         "Sphinx style is not supported in this version. Use Google or NumPy style instead.",
     ));

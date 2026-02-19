@@ -26,8 +26,8 @@ pub mod parser;
 pub mod styles;
 
 pub use ast::{
-    AttributeView, Docstring, DocstringLike, ExceptionView, ParameterView, Position, ReturnsView,
-    Span, Spanned, Style,
+    AttributeView, Docstring, DocstringLike, ExceptionView, LineIndex, ParameterView, ReturnsView,
+    Spanned, Style, TextRange, TextSize,
 };
 pub use error::{Diagnostic, ParseResult, Severity};
 pub use parser::{detect_style, parse};
