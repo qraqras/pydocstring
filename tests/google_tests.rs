@@ -1,6 +1,5 @@
 //! Integration tests for Google-style docstring parser.
 
-use pydocstring::ast::DocstringLike;
 use pydocstring::google::parse_google;
 use pydocstring::{GoogleSectionBody, Severity};
 use pydocstring::{TextSize, LineIndex};
@@ -597,24 +596,24 @@ fn test_indented_summary_span() {
 }
 
 // =============================================================================
-// DocstringLike trait
+// Convenience accessors
 // =============================================================================
 
 #[test]
 fn test_docstring_like_summary() {
     let docstring = "Summary.";
     let result = parse_google(docstring).value;
-    assert_eq!(result.summary(), "Summary.");
+    assert_eq!(result.summary.value, "Summary.");
 }
 
 #[test]
 fn test_docstring_like_parameters() {
     let docstring = "Summary.\n\nArgs:\n    x (int): Value.\n    y (str): Name.";
     let result = parse_google(docstring).value;
-    let params = result.parameters();
+    let params = result.args();
     assert_eq!(params.len(), 2);
     assert_eq!(params[0].name.value, "x");
-    assert_eq!(params[0].param_type.as_ref().unwrap().value, "int");
+    assert_eq!(params[0].arg_type.as_ref().unwrap().value, "int");
     assert_eq!(params[1].name.value, "y");
 }
 
@@ -622,7 +621,7 @@ fn test_docstring_like_parameters() {
 fn test_docstring_like_returns() {
     let docstring = "Summary.\n\nReturns:\n    int: The result.";
     let result = parse_google(docstring).value;
-    let returns = DocstringLike::returns(&result);
+    let returns = result.returns();
     assert_eq!(returns.len(), 1);
     assert_eq!(returns[0].return_type.as_ref().unwrap().value, "int");
 }
@@ -631,7 +630,7 @@ fn test_docstring_like_returns() {
 fn test_docstring_like_raises() {
     let docstring = "Summary.\n\nRaises:\n    ValueError: If bad.";
     let result = parse_google(docstring).value;
-    let raises = DocstringLike::raises(&result);
+    let raises = result.raises();
     assert_eq!(raises.len(), 1);
     assert_eq!(raises[0].exception_type.value, "ValueError");
 }

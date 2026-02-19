@@ -4,4 +4,3 @@
 
 pub mod google;
 pub mod numpy;
-pub mod sphinx;

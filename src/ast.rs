@@ -1,19 +1,13 @@
-//! Core AST types, source location primitives, traits, and shared utilities.
+//! Core AST types, source location primitives, and shared utilities.
 //!
 //! This module provides:
 //! - [`TextSize`], [`TextRange`], [`Spanned`] — source location tracking (ruff-style, offset-only)
 //! - [`LineIndex`] — line/column computation from byte offsets
-//! - [`ParameterView`], [`ReturnsView`], [`ExceptionView`], [`AttributeView`] — style-agnostic view types
-//! - [`DocstringLike`] — unified trait for accessing docstring elements
-//! - [`Docstring`], [`Style`] — unified docstring types
+//! - [`Style`] — docstring style identifier
 //! - Common utilities used by parsers
 
 use core::fmt;
 use core::ops;
-
-use crate::styles::google::GoogleDocstring;
-use crate::styles::numpy::NumPyDocstring;
-use crate::styles::sphinx::SphinxDocstring;
 
 // =============================================================================
 // Source location types (ruff-style, offset-only)
@@ -288,105 +282,6 @@ impl<T: fmt::Display> fmt::Display for Spanned<T> {
 }
 
 // =============================================================================
-// View types (style-agnostic borrowed access)
-// =============================================================================
-
-/// A borrowed view of a parameter (style-agnostic).
-#[derive(Debug, Clone, PartialEq)]
-pub struct ParameterView<'a> {
-    /// Parameter name with its range.
-    pub name: Spanned<&'a str>,
-    /// Parameter type annotation with its range.
-    pub param_type: Option<Spanned<&'a str>>,
-    /// Parameter description with its range.
-    pub description: Spanned<&'a str>,
-    /// Source range of the `optional` marker, if present.
-    /// `None` means not marked as optional, `Some(range)` gives the location of `optional` text.
-    pub optional: Option<TextRange>,
-    /// Source range of the entire parameter definition.
-    pub range: TextRange,
-}
-
-/// A borrowed view of a return value (style-agnostic).
-#[derive(Debug, Clone, PartialEq)]
-pub struct ReturnsView<'a> {
-    /// Return value name (if named) with its range.
-    pub name: Option<Spanned<&'a str>>,
-    /// Return type annotation with its range.
-    pub return_type: Option<Spanned<&'a str>>,
-    /// Description of the return value with its range.
-    pub description: Spanned<&'a str>,
-    /// Source range.
-    pub range: TextRange,
-}
-
-/// A borrowed view of an exception (style-agnostic).
-#[derive(Debug, Clone, PartialEq)]
-pub struct ExceptionView<'a> {
-    /// Exception type name with its range.
-    pub exception_type: Spanned<&'a str>,
-    /// Description of when the exception is raised, with its range.
-    pub description: Spanned<&'a str>,
-    /// Source range.
-    pub range: TextRange,
-}
-
-/// A borrowed view of an attribute (style-agnostic).
-#[derive(Debug, Clone, PartialEq)]
-pub struct AttributeView<'a> {
-    /// Attribute name with its range.
-    pub name: Spanned<&'a str>,
-    /// Attribute type annotation with its range.
-    pub attr_type: Option<Spanned<&'a str>>,
-    /// Description with its range.
-    pub description: Spanned<&'a str>,
-    /// Source range.
-    pub range: TextRange,
-}
-
-// =============================================================================
-// Trait
-// =============================================================================
-
-/// A parsed docstring of any style.
-///
-/// This trait abstracts over `NumPyDocstring`, `GoogleDocstring`, and `SphinxDocstring`,
-/// providing zero-cost access to common docstring elements.
-///
-/// # Example
-///
-/// ```rust
-/// use pydocstring::ast::DocstringLike;
-///
-/// fn check_params_documented(doc: &impl DocstringLike) -> Vec<String> {
-///     doc.parameters()
-///         .iter()
-///         .filter(|p| p.description.value.is_empty())
-///         .map(|p| p.name.value.to_string())
-///         .collect()
-/// }
-/// ```
-pub trait DocstringLike {
-    /// Returns the brief summary line.
-    fn summary(&self) -> &str;
-
-    /// Returns the extended description, if any.
-    fn description(&self) -> Option<&str>;
-
-    /// Returns parameters as style-agnostic views.
-    fn parameters(&self) -> Vec<ParameterView<'_>>;
-
-    /// Returns return values as style-agnostic views.
-    fn returns(&self) -> Vec<ReturnsView<'_>>;
-
-    /// Returns exceptions as style-agnostic views.
-    fn raises(&self) -> Vec<ExceptionView<'_>>;
-
-    /// Returns attributes as style-agnostic views.
-    fn attributes(&self) -> Vec<AttributeView<'_>>;
-}
-
-// =============================================================================
 // Shared utilities (used by style-specific parsers)
 // =============================================================================
 
@@ -451,7 +346,7 @@ pub(crate) fn indent_len(line: &str) -> usize {
 }
 
 // =============================================================================
-// Unified types
+// Style
 // =============================================================================
 
 /// Docstring style identifier.
@@ -461,117 +356,6 @@ pub enum Style {
     NumPy,
     /// Google style (section headers with colons).
     Google,
-    /// Sphinx style (field lists with `:param:`, `:type:`, etc.).
-    Sphinx,
-}
-
-/// A parsed docstring of any style.
-///
-/// Wraps the style-specific types and implements [`DocstringLike`] for
-/// unified access. Use pattern matching to access style-specific fields.
-///
-/// # Example
-///
-/// ```rust
-/// use pydocstring::{parse, Docstring, DocstringLike};
-///
-/// let doc = &parse("Brief summary.").value;
-/// assert_eq!(doc.summary(), "Brief summary.");
-/// assert_eq!(doc.style(), pydocstring::Style::Google);
-/// ```
-#[derive(Debug, Clone, PartialEq)]
-pub enum Docstring {
-    /// NumPy-style docstring.
-    NumPy(NumPyDocstring),
-    /// Google-style docstring.
-    Google(GoogleDocstring),
-    /// Sphinx-style docstring.
-    Sphinx(SphinxDocstring),
-}
-
-impl Docstring {
-    /// Returns the detected style.
-    pub fn style(&self) -> Style {
-        match self {
-            Docstring::NumPy(_) => Style::NumPy,
-            Docstring::Google(_) => Style::Google,
-            Docstring::Sphinx(_) => Style::Sphinx,
-        }
-    }
-
-    /// Returns a reference to the inner `NumPyDocstring`, if this is NumPy style.
-    pub fn as_numpy(&self) -> Option<&NumPyDocstring> {
-        match self {
-            Docstring::NumPy(d) => Some(d),
-            _ => None,
-        }
-    }
-
-    /// Returns a reference to the inner `GoogleDocstring`, if this is Google style.
-    pub fn as_google(&self) -> Option<&GoogleDocstring> {
-        match self {
-            Docstring::Google(d) => Some(d),
-            _ => None,
-        }
-    }
-
-    /// Returns a reference to the inner `SphinxDocstring`, if this is Sphinx style.
-    pub fn as_sphinx(&self) -> Option<&SphinxDocstring> {
-        match self {
-            Docstring::Sphinx(d) => Some(d),
-            _ => None,
-        }
-    }
-}
-
-impl DocstringLike for Docstring {
-    fn summary(&self) -> &str {
-        match self {
-            Docstring::NumPy(d) => d.summary(),
-            Docstring::Google(d) => d.summary(),
-            Docstring::Sphinx(d) => d.summary(),
-        }
-    }
-
-    fn description(&self) -> Option<&str> {
-        match self {
-            Docstring::NumPy(d) => d.description(),
-            Docstring::Google(d) => d.description(),
-            Docstring::Sphinx(d) => d.description(),
-        }
-    }
-
-    fn parameters(&self) -> Vec<ParameterView<'_>> {
-        match self {
-            Docstring::NumPy(d) => DocstringLike::parameters(d),
-            Docstring::Google(d) => DocstringLike::parameters(d),
-            Docstring::Sphinx(d) => DocstringLike::parameters(d),
-        }
-    }
-
-    fn returns(&self) -> Vec<ReturnsView<'_>> {
-        match self {
-            Docstring::NumPy(d) => DocstringLike::returns(d),
-            Docstring::Google(d) => DocstringLike::returns(d),
-            Docstring::Sphinx(d) => DocstringLike::returns(d),
-        }
-    }
-
-    fn raises(&self) -> Vec<ExceptionView<'_>> {
-        match self {
-            Docstring::NumPy(d) => DocstringLike::raises(d),
-            Docstring::Google(d) => DocstringLike::raises(d),
-            Docstring::Sphinx(d) => DocstringLike::raises(d),
-        }
-    }
-
-    fn attributes(&self) -> Vec<AttributeView<'_>> {
-        match self {
-            Docstring::NumPy(d) => DocstringLike::attributes(d),
-            Docstring::Google(d) => DocstringLike::attributes(d),
-            Docstring::Sphinx(d) => DocstringLike::attributes(d),
-        }
-    }
 }
 
 impl fmt::Display for Style {
@@ -579,7 +363,6 @@ impl fmt::Display for Style {
         match self {
             Style::NumPy => write!(f, "numpy"),
             Style::Google => write!(f, "google"),
-            Style::Sphinx => write!(f, "sphinx"),
         }
     }
 }

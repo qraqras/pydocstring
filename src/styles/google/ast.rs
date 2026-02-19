@@ -1,6 +1,5 @@
 use core::fmt;
 
-use crate::ast::{AttributeView, DocstringLike, ExceptionView, ParameterView, ReturnsView};
 use crate::ast::{TextRange, Spanned};
 
 // =============================================================================
@@ -264,63 +263,5 @@ impl Default for GoogleDocstring {
 impl fmt::Display for GoogleDocstring {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "GoogleDocstring(summary: {})", self.summary.value)
-    }
-}
-
-impl DocstringLike for GoogleDocstring {
-    fn summary(&self) -> &str {
-        &self.summary.value
-    }
-
-    fn description(&self) -> Option<&str> {
-        self.description.as_ref().map(|s| s.value.as_str())
-    }
-
-    fn parameters(&self) -> Vec<ParameterView<'_>> {
-        self.args()
-            .into_iter()
-            .map(|a| ParameterView {
-                name: a.name.as_spanned_str(),
-                param_type: a.arg_type.as_ref().map(|t| t.as_spanned_str()),
-                description: a.description.as_spanned_str(),
-                optional: a.optional,
-                range: a.range,
-            })
-            .collect()
-    }
-
-    fn returns(&self) -> Vec<ReturnsView<'_>> {
-        self.returns()
-            .into_iter()
-            .map(|r| ReturnsView {
-                name: None,
-                return_type: r.return_type.as_ref().map(|t| t.as_spanned_str()),
-                description: r.description.as_spanned_str(),
-                range: r.range,
-            })
-            .collect()
-    }
-
-    fn raises(&self) -> Vec<ExceptionView<'_>> {
-        self.raises()
-            .into_iter()
-            .map(|e| ExceptionView {
-                exception_type: e.exception_type.as_spanned_str(),
-                description: e.description.as_spanned_str(),
-                range: e.range,
-            })
-            .collect()
-    }
-
-    fn attributes(&self) -> Vec<AttributeView<'_>> {
-        self.attributes()
-            .into_iter()
-            .map(|a| AttributeView {
-                name: a.name.as_spanned_str(),
-                attr_type: a.attr_type.as_ref().map(|t| t.as_spanned_str()),
-                description: a.description.as_spanned_str(),
-                range: a.range,
-            })
-            .collect()
     }
 }

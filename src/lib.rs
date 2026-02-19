@@ -1,6 +1,6 @@
 //! # pydocstring
 //!
-//! A fast Rust parser for Python docstrings supporting NumPy, Google, and Sphinx styles.
+//! A fast Rust parser for Python docstrings supporting NumPy and Google styles.
 //!
 //! ## Example
 //!
@@ -25,12 +25,9 @@ pub mod error;
 pub mod parser;
 pub mod styles;
 
-pub use ast::{
-    AttributeView, Docstring, DocstringLike, ExceptionView, LineIndex, ParameterView, ReturnsView,
-    Spanned, Style, TextRange, TextSize,
-};
+pub use ast::{LineIndex, Spanned, Style, TextRange, TextSize};
 pub use error::{Diagnostic, ParseResult, Severity};
-pub use parser::{detect_style, parse};
+pub use parser::detect_style;
 pub use styles::google::{
     self, GoogleArgument, GoogleAttribute, GoogleDocstring, GoogleException, GoogleReturns,
     GoogleSection, GoogleSectionBody, GoogleSectionHeader,
@@ -39,11 +36,4 @@ pub use styles::numpy::{
     self, NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod,
     NumPyParameter, NumPyReference, NumPyReturns, NumPySection, NumPySectionBody,
     NumPySectionHeader, NumPyWarning, SeeAlsoItem,
-};
-// Sphinx style: AST types are exported for forward compatibility, but the
-// parser is not supported in v1. Calling `parse_sphinx` will return an error
-// diagnostic.
-pub use styles::sphinx::{
-    self, SphinxDocstring, SphinxException, SphinxField, SphinxParameter, SphinxReturns,
-    SphinxVariable,
 };
