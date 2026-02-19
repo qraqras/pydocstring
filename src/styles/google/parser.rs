@@ -18,7 +18,7 @@
 //! ```
 
 use crate::ast::{build_line_offsets, indent_len, make_span, make_spanned, Spanned};
-use crate::error::ParseResult;
+use crate::error::{Diagnostic, ParseResult};
 use crate::styles::google::ast::{
     GoogleArgument, GoogleAttribute, GoogleDocstring, GoogleException, GoogleReturns,
     GoogleSection, GoogleSectionBody, GoogleSectionHeader,
@@ -475,6 +475,8 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
         }
     }
 
+    let mut diagnostics: Vec<Diagnostic> = Vec::new();
+
     // --- Sections ---
     while i < lines.len() {
         if lines[i].trim().is_empty() {
@@ -513,26 +515,33 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
             let normalized = header_trimmed.to_ascii_lowercase();
             let (body, next_i) = match normalized.as_str() {
                 "args:" | "arguments:" => {
-                    let (args, ni) = parse_args(&lines, i, &offsets, base_indent).value;
+                    let result = parse_args(&lines, i, &offsets, base_indent);
+                    diagnostics.extend(result.diagnostics);
+                    let (args, ni) = result.value;
                     (GoogleSectionBody::Args(args), ni)
                 }
                 "returns:" | "return:" => {
-                    let (returns, ni) =
-                        parse_returns_section(&lines, i, &offsets, base_indent).value;
+                    let result = parse_returns_section(&lines, i, &offsets, base_indent);
+                    diagnostics.extend(result.diagnostics);
+                    let (returns, ni) = result.value;
                     (GoogleSectionBody::Returns(returns), ni)
                 }
                 "yields:" | "yield:" => {
-                    let (yields, ni) =
-                        parse_returns_section(&lines, i, &offsets, base_indent).value;
+                    let result = parse_returns_section(&lines, i, &offsets, base_indent);
+                    diagnostics.extend(result.diagnostics);
+                    let (yields, ni) = result.value;
                     (GoogleSectionBody::Yields(yields), ni)
                 }
                 "raises:" => {
-                    let (raises, ni) = parse_raises_section(&lines, i, &offsets, base_indent).value;
+                    let result = parse_raises_section(&lines, i, &offsets, base_indent);
+                    diagnostics.extend(result.diagnostics);
+                    let (raises, ni) = result.value;
                     (GoogleSectionBody::Raises(raises), ni)
                 }
                 "attributes:" => {
-                    let (attrs, ni) =
-                        parse_attributes_section(&lines, i, &offsets, base_indent).value;
+                    let result = parse_attributes_section(&lines, i, &offsets, base_indent);
+                    diagnostics.extend(result.diagnostics);
+                    let (attrs, ni) = result.value;
                     (GoogleSectionBody::Attributes(attrs), ni)
                 }
                 "note:" | "notes:" => {
@@ -565,6 +574,32 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
                     (GoogleSectionBody::Unknown(content), ni)
                 }
             };
+
+            // Detect empty section body
+            let is_empty = match &body {
+                GoogleSectionBody::Args(v) => v.is_empty(),
+                GoogleSectionBody::Returns(v) | GoogleSectionBody::Yields(v) => v.is_empty(),
+                GoogleSectionBody::Raises(v) => v.is_empty(),
+                GoogleSectionBody::Attributes(v) => v.is_empty(),
+                GoogleSectionBody::Note(s)
+                | GoogleSectionBody::Example(s)
+                | GoogleSectionBody::References(s)
+                | GoogleSectionBody::Warnings(s)
+                | GoogleSectionBody::Unknown(s) => s.value.is_empty(),
+                GoogleSectionBody::Todo(v) => v.is_empty(),
+            };
+            if is_empty {
+                diagnostics.push(Diagnostic::warning(
+                    make_span(
+                        section_start,
+                        header_col,
+                        section_start,
+                        header_col + header_trimmed.len(),
+                        &offsets,
+                    ),
+                    format!("empty section body for '{}'", header_name),
+                ));
+            }
 
             // Compute section span
             let section_end_line = {
@@ -602,7 +637,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
     let last_col = lines.last().map(|l| l.len()).unwrap_or(0);
     docstring.span = make_span(0, 0, last_line, last_col, &offsets);
 
-    ParseResult::ok(docstring)
+    ParseResult::with_diagnostics(docstring, diagnostics)
 }
 
 // =============================================================================
@@ -617,6 +652,7 @@ fn parse_args(
     base_indent: usize,
 ) -> ParseResult<(Vec<GoogleArgument>, usize)> {
     let mut args = Vec::new();
+    let mut diagnostics = Vec::new();
     let mut i = start;
     let entry_indent = detect_entry_indent(lines, start, base_indent);
 
@@ -642,6 +678,30 @@ fn parse_args(
         if indent <= entry_indent {
             let col = indent;
             let entry_start = i;
+
+            // Detect unclosed type parentheses before parsing
+            if let Some(sp) = trimmed.find(" (") {
+                let paren_start = sp + 1;
+                if find_matching_close(trimmed, paren_start).is_none() {
+                    let paren_col = col + paren_start;
+                    diagnostics.push(Diagnostic::warning(
+                        make_span(i, paren_col, i, col + trimmed.len(), offsets),
+                        "unclosed parenthesis in type annotation",
+                    ));
+                }
+            }
+
+            // Detect missing colon separator
+            if !trimmed.contains(':') {
+                diagnostics.push(Diagnostic::warning(
+                    make_span(i, col, i, col + trimmed.len(), offsets),
+                    format!(
+                        "missing ':' after parameter name '{}'",
+                        trimmed.split_whitespace().next().unwrap_or(trimmed)
+                    ),
+                ));
+            }
+
             let header = parse_entry_header(trimmed);
 
             // Name
@@ -695,6 +755,14 @@ fn parse_args(
                 offsets,
             );
 
+            // Detect missing description
+            if full_desc.value.is_empty() {
+                diagnostics.push(Diagnostic::hint(
+                    make_span(entry_start, col, entry_start, col + trimmed.len(), offsets),
+                    format!("missing description for parameter '{}'", header.name),
+                ));
+            }
+
             let (end_line, end_col) = if full_desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
@@ -718,7 +786,7 @@ fn parse_args(
         }
     }
 
-    ParseResult::ok((args, i))
+    ParseResult::with_diagnostics((args, i), diagnostics)
 }
 
 // =============================================================================
@@ -739,6 +807,7 @@ fn parse_returns_section(
     base_indent: usize,
 ) -> ParseResult<(Vec<GoogleReturns>, usize)> {
     let mut returns = Vec::new();
+    let mut diagnostics = Vec::new();
     let mut i = start;
     let entry_indent = detect_entry_indent(lines, start, base_indent);
 
@@ -802,6 +871,19 @@ fn parse_returns_section(
             let full_desc =
                 build_full_description(first_desc, desc_col, entry_start, &cont_desc, offsets);
 
+            // Detect missing description
+            if full_desc.value.is_empty() {
+                let label = return_type
+                    .as_ref()
+                    .map_or("return entry".to_string(), |rt| {
+                        format!("return type '{}'", rt.value)
+                    });
+                diagnostics.push(Diagnostic::hint(
+                    make_span(entry_start, col, entry_start, col + trimmed.len(), offsets),
+                    format!("missing description for {}", label),
+                ));
+            }
+
             let (end_line, end_col) = if full_desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
@@ -823,7 +905,7 @@ fn parse_returns_section(
         }
     }
 
-    ParseResult::ok((returns, i))
+    ParseResult::with_diagnostics((returns, i), diagnostics)
 }
 
 // =============================================================================
@@ -840,6 +922,7 @@ fn parse_raises_section(
     base_indent: usize,
 ) -> ParseResult<(Vec<GoogleException>, usize)> {
     let mut raises = Vec::new();
+    let mut diagnostics = Vec::new();
     let mut i = start;
     let entry_indent = detect_entry_indent(lines, start, base_indent);
 
@@ -864,6 +947,17 @@ fn parse_raises_section(
         if indent <= entry_indent {
             let col = indent;
             let entry_start = i;
+
+            // Detect missing colon separator
+            if !trimmed.contains(':') {
+                diagnostics.push(Diagnostic::warning(
+                    make_span(i, col, i, col + trimmed.len(), offsets),
+                    format!(
+                        "missing ':' after exception type '{}'",
+                        trimmed.split_whitespace().next().unwrap_or(trimmed)
+                    ),
+                ));
+            }
 
             let (exc_type_str, first_desc, desc_col) = if let Some(colon_pos) = trimmed.find(": ") {
                 let et = &trimmed[..colon_pos];
@@ -890,6 +984,14 @@ fn parse_raises_section(
             let full_desc =
                 build_full_description(first_desc, desc_col, entry_start, &cont_desc, offsets);
 
+            // Detect missing description
+            if full_desc.value.is_empty() {
+                diagnostics.push(Diagnostic::hint(
+                    make_span(entry_start, col, entry_start, col + trimmed.len(), offsets),
+                    format!("missing description for exception '{}'", exc_type_str),
+                ));
+            }
+
             let (end_line, end_col) = if full_desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
@@ -911,7 +1013,7 @@ fn parse_raises_section(
         }
     }
 
-    ParseResult::ok((raises, i))
+    ParseResult::with_diagnostics((raises, i), diagnostics)
 }
 
 // =============================================================================
@@ -928,6 +1030,7 @@ fn parse_attributes_section(
     base_indent: usize,
 ) -> ParseResult<(Vec<GoogleAttribute>, usize)> {
     let mut attrs = Vec::new();
+    let mut diagnostics = Vec::new();
     let mut i = start;
     let entry_indent = detect_entry_indent(lines, start, base_indent);
 
@@ -952,6 +1055,30 @@ fn parse_attributes_section(
         if indent <= entry_indent {
             let col = indent;
             let entry_start = i;
+
+            // Detect unclosed type parentheses
+            if let Some(sp) = trimmed.find(" (") {
+                let paren_start = sp + 1;
+                if find_matching_close(trimmed, paren_start).is_none() {
+                    let paren_col = col + paren_start;
+                    diagnostics.push(Diagnostic::warning(
+                        make_span(i, paren_col, i, col + trimmed.len(), offsets),
+                        "unclosed parenthesis in type annotation",
+                    ));
+                }
+            }
+
+            // Detect missing colon separator
+            if !trimmed.contains(':') {
+                diagnostics.push(Diagnostic::warning(
+                    make_span(i, col, i, col + trimmed.len(), offsets),
+                    format!(
+                        "missing ':' after attribute name '{}'",
+                        trimmed.split_whitespace().next().unwrap_or(trimmed)
+                    ),
+                ));
+            }
+
             let header = parse_entry_header(trimmed);
 
             let name_col = col;
@@ -993,6 +1120,14 @@ fn parse_attributes_section(
                 offsets,
             );
 
+            // Detect missing description
+            if full_desc.value.is_empty() {
+                diagnostics.push(Diagnostic::hint(
+                    make_span(entry_start, col, entry_start, col + trimmed.len(), offsets),
+                    format!("missing description for attribute '{}'", header.name),
+                ));
+            }
+
             let (end_line, end_col) = if full_desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
@@ -1015,7 +1150,7 @@ fn parse_attributes_section(
         }
     }
 
-    ParseResult::ok((attrs, i))
+    ParseResult::with_diagnostics((attrs, i), diagnostics)
 }
 
 // =============================================================================
