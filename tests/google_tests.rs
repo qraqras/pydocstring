@@ -2,7 +2,7 @@
 
 use pydocstring::google::parse_google;
 use pydocstring::{GoogleSectionBody, Severity};
-use pydocstring::{TextSize, LineIndex};
+use pydocstring::{LineIndex, TextSize};
 
 // =============================================================================
 // Basic parsing
@@ -190,7 +190,10 @@ fn test_args_name_span() {
     let (line, col) = index.line_col(arg.name.range.start());
     assert_eq!(line, 3);
     assert_eq!(col, 4);
-    assert_eq!(arg.name.range.end(), TextSize::new(arg.name.range.start().raw() + 1));
+    assert_eq!(
+        arg.name.range.end(),
+        TextSize::new(arg.name.range.start().raw() + 1)
+    );
     assert_eq!(arg.name.range.source_text(&result.source), "x");
 }
 
@@ -379,28 +382,28 @@ fn test_attributes_no_type() {
 fn test_note_section() {
     let docstring = "Summary.\n\nNote:\n    This is a note.";
     let result = parse_google(docstring).value;
-    assert_eq!(result.note().unwrap().value, "This is a note.");
+    assert_eq!(result.notes().unwrap().value, "This is a note.");
 }
 
 #[test]
 fn test_notes_alias() {
     let docstring = "Summary.\n\nNotes:\n    This is also a note.";
     let result = parse_google(docstring).value;
-    assert_eq!(result.note().unwrap().value, "This is also a note.");
+    assert_eq!(result.notes().unwrap().value, "This is also a note.");
 }
 
 #[test]
 fn test_example_section() {
     let docstring = "Summary.\n\nExample:\n    >>> func(1)\n    1";
     let result = parse_google(docstring).value;
-    assert_eq!(result.example().unwrap().value, ">>> func(1)\n1");
+    assert_eq!(result.examples().unwrap().value, ">>> func(1)\n1");
 }
 
 #[test]
 fn test_examples_alias() {
     let docstring = "Summary.\n\nExamples:\n    >>> 1 + 1\n    2";
     let result = parse_google(docstring).value;
-    assert!(result.example().is_some());
+    assert!(result.examples().is_some());
 }
 
 #[test]
@@ -425,31 +428,32 @@ fn test_warnings_section() {
 // =============================================================================
 
 #[test]
-fn test_todo_with_bullets() {
+fn test_todo_freetext() {
     let docstring = "Summary.\n\nTodo:\n    * Item one.\n    * Item two.";
     let result = parse_google(docstring).value;
-    assert_eq!(result.todo().len(), 2);
-    assert_eq!(result.todo()[0].value, "Item one.");
-    assert_eq!(result.todo()[1].value, "Item two.");
+    let todo = result.todo().unwrap();
+    assert!(todo.value.contains("Item one."));
+    assert!(todo.value.contains("Item two."));
 }
 
 #[test]
 fn test_todo_without_bullets() {
     let docstring = "Summary.\n\nTodo:\n    Implement feature X.\n    Fix bug Y.";
     let result = parse_google(docstring).value;
-    assert_eq!(result.todo().len(), 2);
-    assert_eq!(result.todo()[0].value, "Implement feature X.");
-    assert_eq!(result.todo()[1].value, "Fix bug Y.");
+    let todo = result.todo().unwrap();
+    assert!(todo.value.contains("Implement feature X."));
+    assert!(todo.value.contains("Fix bug Y."));
 }
 
 #[test]
-fn test_todo_multiline_item() {
+fn test_todo_multiline() {
     let docstring =
         "Summary.\n\nTodo:\n    * Item one that\n        continues here.\n    * Item two.";
     let result = parse_google(docstring).value;
-    assert_eq!(result.todo().len(), 2);
-    assert_eq!(result.todo()[0].value, "Item one that\ncontinues here.");
-    assert_eq!(result.todo()[1].value, "Item two.");
+    let todo = result.todo().unwrap();
+    assert!(todo.value.contains("Item one that"));
+    assert!(todo.value.contains("continues here."));
+    assert!(todo.value.contains("Item two."));
 }
 
 // =============================================================================
@@ -485,8 +489,8 @@ Note:
     assert_eq!(result.args().len(), 2);
     assert_eq!(result.returns().len(), 1);
     assert_eq!(result.raises().len(), 1);
-    assert!(result.example().is_some());
-    assert!(result.note().is_some());
+    assert!(result.examples().is_some());
+    assert!(result.notes().is_some());
 }
 
 #[test]
@@ -930,6 +934,454 @@ Example:
     assert!(
         result.diagnostics.is_empty(),
         "expected no diagnostics for valid input, got: {:?}",
+        result.diagnostics
+    );
+}
+
+// =============================================================================
+// Napoleon: Parameters / Params aliases
+// =============================================================================
+
+#[test]
+fn test_parameters_alias() {
+    let docstring = "Summary.\n\nParameters:\n    x (int): The value.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.args().len(), 1);
+    assert_eq!(result.args()[0].name.value, "x");
+    assert_eq!(result.sections[0].header.name.value, "Parameters");
+}
+
+#[test]
+fn test_params_alias() {
+    let docstring = "Summary.\n\nParams:\n    x (int): The value.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.args().len(), 1);
+    assert_eq!(result.sections[0].header.name.value, "Params");
+}
+
+// =============================================================================
+// Napoleon: Keyword Args section
+// =============================================================================
+
+#[test]
+fn test_keyword_args_basic() {
+    let docstring = "Summary.\n\nKeyword Args:\n    timeout (int): Timeout in seconds.\n    retries (int): Number of retries.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.keyword_args().len(), 2);
+    assert_eq!(result.keyword_args()[0].name.value, "timeout");
+    assert_eq!(
+        result.keyword_args()[0].arg_type.as_ref().unwrap().value,
+        "int"
+    );
+    assert_eq!(result.keyword_args()[1].name.value, "retries");
+}
+
+#[test]
+fn test_keyword_arguments_alias() {
+    let docstring = "Summary.\n\nKeyword Arguments:\n    key (str): The key.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.keyword_args().len(), 1);
+    assert_eq!(result.sections[0].header.name.value, "Keyword Arguments");
+}
+
+#[test]
+fn test_keyword_args_section_body_variant() {
+    let docstring = "Summary.\n\nKeyword Args:\n    k (str): Key.";
+    let result = parse_google(docstring).value;
+    match &result.sections[0].body {
+        GoogleSectionBody::KeywordArgs(args) => {
+            assert_eq!(args.len(), 1);
+        }
+        _ => panic!("Expected KeywordArgs section body"),
+    }
+}
+
+// =============================================================================
+// Napoleon: Other Parameters section
+// =============================================================================
+
+#[test]
+fn test_other_parameters() {
+    let docstring = "Summary.\n\nOther Parameters:\n    debug (bool): Enable debug mode.\n    verbose (bool, optional): Verbose output.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.other_parameters().len(), 2);
+    assert_eq!(result.other_parameters()[0].name.value, "debug");
+    assert_eq!(result.other_parameters()[1].name.value, "verbose");
+    assert!(result.other_parameters()[1].optional.is_some());
+}
+
+#[test]
+fn test_other_parameters_section_body_variant() {
+    let docstring = "Summary.\n\nOther Parameters:\n    x (int): Extra.";
+    let result = parse_google(docstring).value;
+    match &result.sections[0].body {
+        GoogleSectionBody::OtherParameters(args) => {
+            assert_eq!(args.len(), 1);
+        }
+        _ => panic!("Expected OtherParameters section body"),
+    }
+}
+
+// =============================================================================
+// Napoleon: Receives section
+// =============================================================================
+
+#[test]
+fn test_receives() {
+    let docstring = "Summary.\n\nReceives:\n    data (bytes): The received data.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.receives().len(), 1);
+    assert_eq!(result.receives()[0].name.value, "data");
+    assert_eq!(
+        result.receives()[0].arg_type.as_ref().unwrap().value,
+        "bytes"
+    );
+}
+
+#[test]
+fn test_receive_alias() {
+    let docstring = "Summary.\n\nReceive:\n    msg (str): The message.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.receives().len(), 1);
+    assert_eq!(result.sections[0].header.name.value, "Receive");
+}
+
+// =============================================================================
+// Napoleon: Raise alias
+// =============================================================================
+
+#[test]
+fn test_raise_alias() {
+    let docstring = "Summary.\n\nRaise:\n    ValueError: If invalid.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.raises().len(), 1);
+    assert_eq!(result.raises()[0].exception_type.value, "ValueError");
+    assert_eq!(result.sections[0].header.name.value, "Raise");
+}
+
+// =============================================================================
+// Napoleon: Warns section
+// =============================================================================
+
+#[test]
+fn test_warns_basic() {
+    let docstring = "Summary.\n\nWarns:\n    DeprecationWarning: If using old API.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.warns().len(), 1);
+    assert_eq!(result.warns()[0].warning_type.value, "DeprecationWarning");
+    assert_eq!(result.warns()[0].description.value, "If using old API.");
+}
+
+#[test]
+fn test_warns_multiple() {
+    let docstring =
+        "Summary.\n\nWarns:\n    DeprecationWarning: Old API.\n    UserWarning: Bad config.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.warns().len(), 2);
+    assert_eq!(result.warns()[0].warning_type.value, "DeprecationWarning");
+    assert_eq!(result.warns()[1].warning_type.value, "UserWarning");
+}
+
+#[test]
+fn test_warn_alias() {
+    let docstring = "Summary.\n\nWarn:\n    FutureWarning: Will change.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.warns().len(), 1);
+    assert_eq!(result.sections[0].header.name.value, "Warn");
+}
+
+#[test]
+fn test_warns_multiline_description() {
+    let docstring = "Summary.\n\nWarns:\n    UserWarning: First line.\n        Second line.";
+    let result = parse_google(docstring).value;
+    assert_eq!(
+        result.warns()[0].description.value,
+        "First line.\nSecond line."
+    );
+}
+
+#[test]
+fn test_warns_section_body_variant() {
+    let docstring = "Summary.\n\nWarns:\n    UserWarning: Desc.";
+    let result = parse_google(docstring).value;
+    match &result.sections[0].body {
+        GoogleSectionBody::Warns(warns) => {
+            assert_eq!(warns.len(), 1);
+        }
+        _ => panic!("Expected Warns section body"),
+    }
+}
+
+// =============================================================================
+// Napoleon: Warning alias
+// =============================================================================
+
+#[test]
+fn test_warning_singular_alias() {
+    let docstring = "Summary.\n\nWarning:\n    This is deprecated.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.warnings().unwrap().value, "This is deprecated.");
+    assert_eq!(result.sections[0].header.name.value, "Warning");
+}
+
+// =============================================================================
+// Napoleon: Attribute alias
+// =============================================================================
+
+#[test]
+fn test_attribute_singular_alias() {
+    let docstring = "Summary.\n\nAttribute:\n    name (str): The name.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.attributes().len(), 1);
+    assert_eq!(result.sections[0].header.name.value, "Attribute");
+}
+
+// =============================================================================
+// Napoleon: Methods section
+// =============================================================================
+
+#[test]
+fn test_methods_basic() {
+    let docstring = "Summary.\n\nMethods:\n    reset(): Reset the state.\n    update(data): Update with new data.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.methods().len(), 2);
+    assert_eq!(result.methods()[0].name.value, "reset()");
+    assert_eq!(result.methods()[0].description.value, "Reset the state.");
+    assert_eq!(result.methods()[1].name.value, "update(data)");
+}
+
+#[test]
+fn test_methods_without_parens() {
+    let docstring = "Summary.\n\nMethods:\n    do_stuff: Performs the operation.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.methods().len(), 1);
+    assert_eq!(result.methods()[0].name.value, "do_stuff");
+    assert_eq!(
+        result.methods()[0].description.value,
+        "Performs the operation."
+    );
+}
+
+#[test]
+fn test_methods_section_body_variant() {
+    let docstring = "Summary.\n\nMethods:\n    foo(): Does bar.";
+    let result = parse_google(docstring).value;
+    match &result.sections[0].body {
+        GoogleSectionBody::Methods(methods) => {
+            assert_eq!(methods.len(), 1);
+        }
+        _ => panic!("Expected Methods section body"),
+    }
+}
+
+// =============================================================================
+// Napoleon: See Also section
+// =============================================================================
+
+#[test]
+fn test_see_also_basic() {
+    let docstring = "Summary.\n\nSee Also:\n    other_func: Does something else.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.see_also().len(), 1);
+    assert_eq!(result.see_also()[0].names.len(), 1);
+    assert_eq!(result.see_also()[0].names[0].value, "other_func");
+    assert_eq!(
+        result.see_also()[0].description.as_ref().unwrap().value,
+        "Does something else."
+    );
+}
+
+#[test]
+fn test_see_also_multiple_names() {
+    let docstring = "Summary.\n\nSee Also:\n    func_a, func_b, func_c";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.see_also().len(), 1);
+    assert_eq!(result.see_also()[0].names.len(), 3);
+    assert_eq!(result.see_also()[0].names[0].value, "func_a");
+    assert_eq!(result.see_also()[0].names[1].value, "func_b");
+    assert_eq!(result.see_also()[0].names[2].value, "func_c");
+    assert!(result.see_also()[0].description.is_none());
+}
+
+#[test]
+fn test_see_also_mixed() {
+    let docstring = "Summary.\n\nSee Also:\n    func_a: Description.\n    func_b, func_c";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.see_also().len(), 2);
+    assert_eq!(result.see_also()[0].names[0].value, "func_a");
+    assert!(result.see_also()[0].description.is_some());
+    assert_eq!(result.see_also()[1].names.len(), 2);
+    assert!(result.see_also()[1].description.is_none());
+}
+
+#[test]
+fn test_see_also_section_body_variant() {
+    let docstring = "Summary.\n\nSee Also:\n    func_a: Desc.";
+    let result = parse_google(docstring).value;
+    match &result.sections[0].body {
+        GoogleSectionBody::SeeAlso(items) => {
+            assert_eq!(items.len(), 1);
+        }
+        _ => panic!("Expected SeeAlso section body"),
+    }
+}
+
+// =============================================================================
+// Napoleon: Admonition sections
+// =============================================================================
+
+#[test]
+fn test_attention_section() {
+    let docstring = "Summary.\n\nAttention:\n    This requires careful handling.";
+    let result = parse_google(docstring).value;
+    match &result.sections[0].body {
+        GoogleSectionBody::Attention(text) => {
+            assert_eq!(text.value, "This requires careful handling.");
+        }
+        _ => panic!("Expected Attention section body"),
+    }
+}
+
+#[test]
+fn test_caution_section() {
+    let docstring = "Summary.\n\nCaution:\n    Use with care.";
+    let result = parse_google(docstring).value;
+    match &result.sections[0].body {
+        GoogleSectionBody::Caution(text) => {
+            assert_eq!(text.value, "Use with care.");
+        }
+        _ => panic!("Expected Caution section body"),
+    }
+}
+
+#[test]
+fn test_danger_section() {
+    let docstring = "Summary.\n\nDanger:\n    May cause data loss.";
+    let result = parse_google(docstring).value;
+    match &result.sections[0].body {
+        GoogleSectionBody::Danger(text) => {
+            assert_eq!(text.value, "May cause data loss.");
+        }
+        _ => panic!("Expected Danger section body"),
+    }
+}
+
+#[test]
+fn test_error_section() {
+    let docstring = "Summary.\n\nError:\n    Known issue with large inputs.";
+    let result = parse_google(docstring).value;
+    match &result.sections[0].body {
+        GoogleSectionBody::Error(text) => {
+            assert_eq!(text.value, "Known issue with large inputs.");
+        }
+        _ => panic!("Expected Error section body"),
+    }
+}
+
+#[test]
+fn test_hint_section() {
+    let docstring = "Summary.\n\nHint:\n    Try using a smaller batch size.";
+    let result = parse_google(docstring).value;
+    match &result.sections[0].body {
+        GoogleSectionBody::Hint(text) => {
+            assert_eq!(text.value, "Try using a smaller batch size.");
+        }
+        _ => panic!("Expected Hint section body"),
+    }
+}
+
+#[test]
+fn test_important_section() {
+    let docstring = "Summary.\n\nImportant:\n    Must be called before init().";
+    let result = parse_google(docstring).value;
+    match &result.sections[0].body {
+        GoogleSectionBody::Important(text) => {
+            assert_eq!(text.value, "Must be called before init().");
+        }
+        _ => panic!("Expected Important section body"),
+    }
+}
+
+#[test]
+fn test_tip_section() {
+    let docstring = "Summary.\n\nTip:\n    Use vectorized operations for speed.";
+    let result = parse_google(docstring).value;
+    match &result.sections[0].body {
+        GoogleSectionBody::Tip(text) => {
+            assert_eq!(text.value, "Use vectorized operations for speed.");
+        }
+        _ => panic!("Expected Tip section body"),
+    }
+}
+
+// =============================================================================
+// Napoleon: Case-insensitive section headers
+// =============================================================================
+
+#[test]
+fn test_napoleon_case_insensitive() {
+    let docstring = "Summary.\n\nkeyword args:\n    x (int): Value.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.keyword_args().len(), 1);
+}
+
+#[test]
+fn test_see_also_case_insensitive() {
+    let docstring = "Summary.\n\nsee also:\n    func_a: Description.";
+    let result = parse_google(docstring).value;
+    assert_eq!(result.see_also().len(), 1);
+}
+
+// =============================================================================
+// Napoleon: Full docstring with all sections
+// =============================================================================
+
+#[test]
+fn test_napoleon_full_docstring() {
+    let docstring = r#"Calculate something.
+
+Extended description.
+
+Args:
+    x (int): First argument.
+
+Keyword Args:
+    timeout (float): Timeout value.
+
+Returns:
+    int: The result.
+
+Raises:
+    ValueError: If x is negative.
+
+Warns:
+    DeprecationWarning: If old API is used.
+
+See Also:
+    other_func: Related function.
+
+Note:
+    Implementation detail.
+
+Example:
+    >>> calculate(1)
+    1"#;
+
+    let result = parse_google(docstring);
+    let doc = &result.value;
+    assert_eq!(doc.summary.value, "Calculate something.");
+    assert!(doc.description.is_some());
+    assert_eq!(doc.args().len(), 1);
+    assert_eq!(doc.keyword_args().len(), 1);
+    assert_eq!(doc.returns().len(), 1);
+    assert_eq!(doc.raises().len(), 1);
+    assert_eq!(doc.warns().len(), 1);
+    assert_eq!(doc.see_also().len(), 1);
+    assert!(doc.notes().is_some());
+    assert!(doc.examples().is_some());
+    assert!(
+        result.diagnostics.is_empty(),
+        "expected no diagnostics, got: {:?}",
         result.diagnostics
     );
 }

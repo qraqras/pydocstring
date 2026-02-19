@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::ast::{TextRange, Spanned};
+use crate::ast::{Spanned, TextRange};
 
 // =============================================================================
 // Google Style Types
@@ -37,28 +37,66 @@ pub struct GoogleSectionHeader {
 /// Body content of a Google-style section.
 ///
 /// Each variant corresponds to a specific section kind.
+/// Section names follow the Sphinx Napoleon extension.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GoogleSectionBody {
-    /// Args / Arguments section.
+    // ----- Parameter-like sections -----
+    /// Args / Arguments / Parameters / Params section.
     Args(Vec<GoogleArgument>),
+    /// Keyword Args / Keyword Arguments section.
+    KeywordArgs(Vec<GoogleArgument>),
+    /// Other Parameters section.
+    OtherParameters(Vec<GoogleArgument>),
+    /// Receive / Receives section.
+    Receives(Vec<GoogleArgument>),
+
+    // ----- Return-like sections -----
     /// Returns / Return section.
     Returns(Vec<GoogleReturns>),
     /// Yields / Yield section.
     Yields(Vec<GoogleReturns>),
-    /// Raises section.
+
+    // ----- Exception / warning-like sections -----
+    /// Raises / Raise section.
     Raises(Vec<GoogleException>),
-    /// Attributes section.
+    /// Warns / Warn section.
+    Warns(Vec<GoogleWarning>),
+
+    // ----- Structured sections -----
+    /// Attributes / Attribute section.
     Attributes(Vec<GoogleAttribute>),
+    /// Methods section.
+    Methods(Vec<GoogleMethod>),
+    /// See Also section.
+    SeeAlso(Vec<GoogleSeeAlsoItem>),
+
+    // ----- Free-text / admonition sections -----
     /// Note / Notes section (free text).
-    Note(Spanned<String>),
+    Notes(Spanned<String>),
     /// Example / Examples section (free text).
-    Example(Spanned<String>),
-    /// Todo section (bulleted items).
-    Todo(Vec<Spanned<String>>),
+    Examples(Spanned<String>),
+    /// Todo section (free text, admonition in Napoleon).
+    Todo(Spanned<String>),
     /// References section (free text).
     References(Spanned<String>),
-    /// Warnings section (free text).
+    /// Warning / Warnings section (free text).
     Warnings(Spanned<String>),
+    /// Attention admonition (free text).
+    Attention(Spanned<String>),
+    /// Caution admonition (free text).
+    Caution(Spanned<String>),
+    /// Danger admonition (free text).
+    Danger(Spanned<String>),
+    /// Error admonition (free text).
+    Error(Spanned<String>),
+    /// Hint admonition (free text).
+    Hint(Spanned<String>),
+    /// Important admonition (free text).
+    Important(Spanned<String>),
+    /// Tip admonition (free text).
+    Tip(Spanned<String>),
+
+    // ----- Fallback -----
     /// Unknown / unrecognized section (free text).
     Unknown(Spanned<String>),
 }
@@ -135,6 +173,49 @@ pub struct GoogleAttribute {
     pub description: Spanned<String>,
 }
 
+/// Google-style warning (from Warns section).
+///
+/// Same shape as [`GoogleException`] but represents a warning class.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GoogleWarning {
+    /// Source range.
+    pub range: TextRange,
+    /// Warning type (e.g., "DeprecationWarning") with its span.
+    pub warning_type: Spanned<String>,
+    /// Description of when the warning is issued, with its span.
+    pub description: Spanned<String>,
+}
+
+/// Google-style method entry (from Methods section).
+#[derive(Debug, Clone, PartialEq)]
+pub struct GoogleMethod {
+    /// Source range.
+    pub range: TextRange,
+    /// Method name with its span.
+    pub name: Spanned<String>,
+    /// Brief description with its span.
+    pub description: Spanned<String>,
+}
+
+/// Google-style See Also item.
+///
+/// Supports both `:role:`name`` cross-references and plain names.
+///
+/// ```text
+/// See Also:
+///     func_a: Description of func_a.
+///     func_b, func_c
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct GoogleSeeAlsoItem {
+    /// Source range.
+    pub range: TextRange,
+    /// Reference names (can be multiple like `func_b, func_c`), each with its own span.
+    pub names: Vec<Spanned<String>>,
+    /// Optional description with its span.
+    pub description: Option<Spanned<String>>,
+}
+
 impl GoogleDocstring {
     /// Creates a new empty Google-style docstring.
     pub fn new() -> Self {
@@ -209,32 +290,100 @@ impl GoogleDocstring {
             .collect()
     }
 
-    /// Returns the Note section content, if present.
-    pub fn note(&self) -> Option<&Spanned<String>> {
+    /// Returns the Notes section content, if present.
+    pub fn notes(&self) -> Option<&Spanned<String>> {
         self.sections.iter().find_map(|s| match &s.body {
-            GoogleSectionBody::Note(text) => Some(text),
+            GoogleSectionBody::Notes(text) => Some(text),
             _ => None,
         })
     }
 
-    /// Returns the Example section content, if present.
-    pub fn example(&self) -> Option<&Spanned<String>> {
+    /// Returns the Examples section content, if present.
+    pub fn examples(&self) -> Option<&Spanned<String>> {
         self.sections.iter().find_map(|s| match &s.body {
-            GoogleSectionBody::Example(text) => Some(text),
+            GoogleSectionBody::Examples(text) => Some(text),
             _ => None,
         })
     }
 
-    /// Returns todo items from all Todo sections.
-    pub fn todo(&self) -> Vec<&Spanned<String>> {
+    /// Returns keyword arguments from all Keyword Args sections.
+    pub fn keyword_args(&self) -> Vec<&GoogleArgument> {
         self.sections
             .iter()
             .filter_map(|s| match &s.body {
-                GoogleSectionBody::Todo(v) => Some(v.iter()),
+                GoogleSectionBody::KeywordArgs(v) => Some(v.iter()),
                 _ => None,
             })
             .flatten()
             .collect()
+    }
+
+    /// Returns other parameters from all Other Parameters sections.
+    pub fn other_parameters(&self) -> Vec<&GoogleArgument> {
+        self.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::OtherParameters(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// Returns receive values from all Receives sections.
+    pub fn receives(&self) -> Vec<&GoogleArgument> {
+        self.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::Receives(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// Returns warnings from all Warns sections.
+    pub fn warns(&self) -> Vec<&GoogleWarning> {
+        self.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::Warns(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// Returns methods from all Methods sections.
+    pub fn methods(&self) -> Vec<&GoogleMethod> {
+        self.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::Methods(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// Returns See Also items from all See Also sections.
+    pub fn see_also(&self) -> Vec<&GoogleSeeAlsoItem> {
+        self.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::SeeAlso(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// Returns the Todo section content, if present.
+    pub fn todo(&self) -> Option<&Spanned<String>> {
+        self.sections.iter().find_map(|s| match &s.body {
+            GoogleSectionBody::Todo(text) => Some(text),
+            _ => None,
+        })
     }
 
     /// Returns the References section content, if present.
