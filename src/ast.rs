@@ -409,32 +409,32 @@ impl DocstringLike for Docstring {
     fn parameters(&self) -> Vec<ParameterView<'_>> {
         match self {
             Docstring::NumPy(d) => DocstringLike::parameters(d),
-            Docstring::Google(d) => d.parameters(),
-            Docstring::Sphinx(d) => d.parameters(),
+            Docstring::Google(d) => DocstringLike::parameters(d),
+            Docstring::Sphinx(d) => DocstringLike::parameters(d),
         }
     }
 
     fn returns(&self) -> Vec<ReturnsView<'_>> {
         match self {
             Docstring::NumPy(d) => DocstringLike::returns(d),
-            Docstring::Google(d) => d.returns(),
-            Docstring::Sphinx(d) => d.returns(),
+            Docstring::Google(d) => DocstringLike::returns(d),
+            Docstring::Sphinx(d) => DocstringLike::returns(d),
         }
     }
 
     fn raises(&self) -> Vec<ExceptionView<'_>> {
         match self {
             Docstring::NumPy(d) => DocstringLike::raises(d),
-            Docstring::Google(d) => d.raises(),
-            Docstring::Sphinx(d) => d.raises(),
+            Docstring::Google(d) => DocstringLike::raises(d),
+            Docstring::Sphinx(d) => DocstringLike::raises(d),
         }
     }
 
     fn attributes(&self) -> Vec<AttributeView<'_>> {
         match self {
             Docstring::NumPy(d) => DocstringLike::attributes(d),
-            Docstring::Google(d) => d.attributes(),
-            Docstring::Sphinx(d) => d.attributes(),
+            Docstring::Google(d) => DocstringLike::attributes(d),
+            Docstring::Sphinx(d) => DocstringLike::attributes(d),
         }
     }
 }

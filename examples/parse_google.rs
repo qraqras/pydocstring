@@ -1,4 +1,4 @@
-//! Example: Parsing Google-style docstrings (placeholder)
+//! Example: Parsing Google-style docstrings
 
 use pydocstring::google::parse_google;
 
@@ -15,14 +15,43 @@ Args:
 
 Returns:
     float: The area of the rectangle.
+
+Raises:
+    ValueError: If width or height is negative.
 "#;
 
     match parse_google(docstring) {
         Ok(doc) => {
             println!("Summary: {}", doc.summary.value);
-            println!("\n(Google-style parser is not yet fully implemented)");
-            println!("Args: {}", doc.args.len());
-            println!("Has Returns: {}", doc.returns.is_some());
+            if let Some(desc) = &doc.description {
+                println!("Description: {}", desc.value);
+            }
+            println!("\nArgs ({}):", doc.args().len());
+            for arg in doc.args() {
+                let type_str = arg
+                    .arg_type
+                    .as_ref()
+                    .map(|t| t.value.as_str())
+                    .unwrap_or("?");
+                println!("  {} ({}): {}", arg.name.value, type_str, arg.description.value);
+            }
+            println!("\nReturns ({}):", doc.returns().len());
+            for ret in doc.returns() {
+                let type_str = ret
+                    .return_type
+                    .as_ref()
+                    .map(|t| t.value.as_str())
+                    .unwrap_or("?");
+                println!("  {}: {}", type_str, ret.description.value);
+            }
+            println!("\nRaises ({}):", doc.raises().len());
+            for exc in doc.raises() {
+                println!("  {}: {}", exc.exception_type.value, exc.description.value);
+            }
+            println!("\nSections ({}):", doc.sections.len());
+            for section in &doc.sections {
+                println!("  {} (header: {:?})", section.header.name.value, section.header.span);
+            }
         }
         Err(e) => {
             eprintln!("Failed to parse docstring: {}", e);

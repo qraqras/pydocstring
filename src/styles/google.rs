@@ -7,5 +7,6 @@ pub mod parser;
 
 pub use ast::{
     GoogleArgument, GoogleAttribute, GoogleDocstring, GoogleException, GoogleReturns,
+    GoogleSection, GoogleSectionBody, GoogleSectionHeader,
 };
 pub use parser::parse_google;

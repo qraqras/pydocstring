@@ -33,6 +33,7 @@ pub use error::ParseError;
 pub use parser::{detect_style, parse};
 pub use styles::google::{
     self, GoogleArgument, GoogleAttribute, GoogleDocstring, GoogleException, GoogleReturns,
+    GoogleSection, GoogleSectionBody, GoogleSectionHeader,
 };
 pub use styles::numpy::{
     self, NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod,

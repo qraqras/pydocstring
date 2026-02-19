@@ -1,11 +1,68 @@
 use core::fmt;
 
-use crate::ast::{Span, Spanned};
 use crate::ast::{AttributeView, DocstringLike, ExceptionView, ParameterView, ReturnsView};
+use crate::ast::{Span, Spanned};
 
 // =============================================================================
 // Google Style Types
 // =============================================================================
+
+/// A single Google-style section, combining header and body.
+///
+/// ```text
+/// Args:                <-- header
+///     x (int): Value.  <-- body
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct GoogleSection {
+    /// Source span of the entire section (header + body).
+    pub span: Span,
+    /// Section header (the `Args:` line).
+    pub header: GoogleSectionHeader,
+    /// Section body content.
+    pub body: GoogleSectionBody,
+}
+
+/// Google-style section header.
+///
+/// Represents a parsed section header like `Args:` or `Returns:`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GoogleSectionHeader {
+    /// Source span of the header line.
+    pub span: Span,
+    /// Section name (e.g., "Args", "Returns") with its span.
+    /// Stored without the trailing colon.
+    pub name: Spanned<String>,
+}
+
+/// Body content of a Google-style section.
+///
+/// Each variant corresponds to a specific section kind.
+#[derive(Debug, Clone, PartialEq)]
+pub enum GoogleSectionBody {
+    /// Args / Arguments section.
+    Args(Vec<GoogleArgument>),
+    /// Returns / Return section.
+    Returns(Vec<GoogleReturns>),
+    /// Yields / Yield section.
+    Yields(Vec<GoogleReturns>),
+    /// Raises section.
+    Raises(Vec<GoogleException>),
+    /// Attributes section.
+    Attributes(Vec<GoogleAttribute>),
+    /// Note / Notes section (free text).
+    Note(Spanned<String>),
+    /// Example / Examples section (free text).
+    Example(Spanned<String>),
+    /// Todo section (bulleted items).
+    Todo(Vec<Spanned<String>>),
+    /// References section (free text).
+    References(Spanned<String>),
+    /// Warnings section (free text).
+    Warnings(Spanned<String>),
+    /// Unknown / unrecognized section (free text).
+    Unknown(Spanned<String>),
+}
 
 /// Google-style docstring.
 ///
@@ -24,22 +81,8 @@ pub struct GoogleDocstring {
     pub summary: Spanned<String>,
     /// Extended description.
     pub description: Option<Spanned<String>>,
-    /// Function/method arguments.
-    pub args: Vec<GoogleArgument>,
-    /// Return value(s).
-    pub returns: Option<GoogleReturns>,
-    /// Generator yields.
-    pub yields: Option<GoogleReturns>,
-    /// Exceptions that may be raised.
-    pub raises: Vec<GoogleException>,
-    /// Class attributes.
-    pub attributes: Vec<GoogleAttribute>,
-    /// Note section.
-    pub note: Option<Spanned<String>>,
-    /// Example section.
-    pub example: Option<Spanned<String>>,
-    /// Todo section.
-    pub todo: Vec<Spanned<String>>,
+    /// All sections in order of appearance.
+    pub sections: Vec<GoogleSection>,
 }
 
 /// Google-style argument.
@@ -101,15 +144,114 @@ impl GoogleDocstring {
             span: Span::empty(),
             summary: Spanned::empty_string(),
             description: None,
-            args: Vec::new(),
-            returns: None,
-            yields: None,
-            raises: Vec::new(),
-            attributes: Vec::new(),
-            note: None,
-            example: None,
-            todo: Vec::new(),
+            sections: Vec::new(),
         }
+    }
+
+    // ---- Convenience accessors ------------------------------------------------
+
+    /// Returns arguments from all Args sections.
+    pub fn args(&self) -> Vec<&GoogleArgument> {
+        self.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::Args(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// Returns return values from all Returns sections.
+    pub fn returns(&self) -> Vec<&GoogleReturns> {
+        self.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::Returns(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// Returns yield values from all Yields sections.
+    pub fn yields(&self) -> Vec<&GoogleReturns> {
+        self.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::Yields(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// Returns exceptions from all Raises sections.
+    pub fn raises(&self) -> Vec<&GoogleException> {
+        self.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::Raises(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// Returns attributes from all Attributes sections.
+    pub fn attributes(&self) -> Vec<&GoogleAttribute> {
+        self.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::Attributes(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// Returns the Note section content, if present.
+    pub fn note(&self) -> Option<&Spanned<String>> {
+        self.sections.iter().find_map(|s| match &s.body {
+            GoogleSectionBody::Note(text) => Some(text),
+            _ => None,
+        })
+    }
+
+    /// Returns the Example section content, if present.
+    pub fn example(&self) -> Option<&Spanned<String>> {
+        self.sections.iter().find_map(|s| match &s.body {
+            GoogleSectionBody::Example(text) => Some(text),
+            _ => None,
+        })
+    }
+
+    /// Returns todo items from all Todo sections.
+    pub fn todo(&self) -> Vec<&Spanned<String>> {
+        self.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::Todo(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    /// Returns the References section content, if present.
+    pub fn references(&self) -> Option<&Spanned<String>> {
+        self.sections.iter().find_map(|s| match &s.body {
+            GoogleSectionBody::References(text) => Some(text),
+            _ => None,
+        })
+    }
+
+    /// Returns the Warnings section content, if present.
+    pub fn warnings(&self) -> Option<&Spanned<String>> {
+        self.sections.iter().find_map(|s| match &s.body {
+            GoogleSectionBody::Warnings(text) => Some(text),
+            _ => None,
+        })
     }
 }
 
@@ -135,8 +277,8 @@ impl DocstringLike for GoogleDocstring {
     }
 
     fn parameters(&self) -> Vec<ParameterView<'_>> {
-        self.args
-            .iter()
+        self.args()
+            .into_iter()
             .map(|a| ParameterView {
                 name: a.name.as_spanned_str(),
                 param_type: a.arg_type.as_ref().map(|t| t.as_spanned_str()),
@@ -148,20 +290,20 @@ impl DocstringLike for GoogleDocstring {
     }
 
     fn returns(&self) -> Vec<ReturnsView<'_>> {
-        match &self.returns {
-            Some(r) => vec![ReturnsView {
+        self.returns()
+            .into_iter()
+            .map(|r| ReturnsView {
                 name: None,
                 return_type: r.return_type.as_ref().map(|t| t.as_spanned_str()),
                 description: r.description.as_spanned_str(),
                 span: r.span,
-            }],
-            None => Vec::new(),
-        }
+            })
+            .collect()
     }
 
     fn raises(&self) -> Vec<ExceptionView<'_>> {
-        self.raises
-            .iter()
+        self.raises()
+            .into_iter()
             .map(|e| ExceptionView {
                 exception_type: e.exception_type.as_spanned_str(),
                 description: e.description.as_spanned_str(),
@@ -171,8 +313,8 @@ impl DocstringLike for GoogleDocstring {
     }
 
     fn attributes(&self) -> Vec<AttributeView<'_>> {
-        self.attributes
-            .iter()
+        self.attributes()
+            .into_iter()
             .map(|a| AttributeView {
                 name: a.name.as_spanned_str(),
                 attr_type: a.attr_type.as_ref().map(|t| t.as_spanned_str()),
