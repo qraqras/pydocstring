@@ -1,5 +1,6 @@
 //! Example: Parsing NumPy-style docstrings
 
+use pydocstring::NumPySectionBody;
 use pydocstring::numpy::parse_numpy;
 
 fn main() {
@@ -44,46 +45,47 @@ Examples
                 .unwrap_or_default()
         );
 
-        println!("\nParameters:");
-        for param in doc.parameters() {
-            let names: Vec<&str> = param.names.iter().map(|n| n.value.as_str()).collect();
-            println!(
-                "  - {:?}: {:?}",
-                names,
-                param.param_type.as_ref().map(|t| t.value.as_str())
-            );
-            println!("    {}", param.description.value);
-        }
-
-        if !doc.returns().is_empty() {
-            println!("\nReturns:");
-            for ret in doc.returns() {
-                println!(
-                    "  Type: {:?}",
-                    ret.return_type.as_ref().map(|t| t.value.as_str())
-                );
-                println!("  {}", ret.description.value);
+        for section in &doc.sections {
+            match &section.body {
+                NumPySectionBody::Parameters(params) => {
+                    println!("\nParameters:");
+                    for param in params {
+                        let names: Vec<&str> =
+                            param.names.iter().map(|n| n.value.as_str()).collect();
+                        println!(
+                            "  - {:?}: {:?}",
+                            names,
+                            param.r#type.as_ref().map(|t| t.value.as_str())
+                        );
+                        println!("    {}", param.description.value);
+                    }
+                }
+                NumPySectionBody::Returns(rets) => {
+                    println!("\nReturns:");
+                    for ret in rets {
+                        println!(
+                            "  Type: {:?}",
+                            ret.return_type.as_ref().map(|t| t.value.as_str())
+                        );
+                        println!("  {}", ret.description.value);
+                    }
+                }
+                NumPySectionBody::Raises(excs) => {
+                    println!("\nRaises:");
+                    for exc in excs {
+                        println!("  - {}: {}", exc.r#type.value, exc.description.value);
+                    }
+                }
+                NumPySectionBody::Notes(text) => {
+                    println!("\nNotes:");
+                    println!("  {}", text.value);
+                }
+                NumPySectionBody::Examples(text) => {
+                    println!("\nExamples:");
+                    println!("{}", text.value);
+                }
+                _ => {}
             }
-        }
-
-        if !doc.raises().is_empty() {
-            println!("\nRaises:");
-            for exc in doc.raises() {
-                println!(
-                    "  - {}: {}",
-                    exc.exception_type.value, exc.description.value
-                );
-            }
-        }
-
-        if let Some(notes) = doc.notes() {
-            println!("\nNotes:");
-            println!("  {}", notes.value);
-        }
-
-        if let Some(examples) = doc.examples() {
-            println!("\nExamples:");
-            println!("{}", examples.value);
         }
 
         if !result.diagnostics.is_empty() {

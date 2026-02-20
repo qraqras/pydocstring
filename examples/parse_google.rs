@@ -1,6 +1,7 @@
 //! Example: Parsing Google-style docstrings
 
 use pydocstring::google::parse_google;
+use pydocstring::GoogleSectionBody;
 
 fn main() {
     let docstring = r#"
@@ -24,23 +25,29 @@ Raises:
     let doc = &result.value;
 
     println!("Summary: {}", doc.summary.value);
-    if let Some(desc) = &doc.description {
+    if let Some(desc) = &doc.extended_summary {
         println!("Description: {}", desc.value);
     }
-    println!("\nArgs ({}):", doc.args().len());
-    for arg in doc.args() {
-        let type_str = arg
-            .arg_type
-            .as_ref()
-            .map(|t| t.value.as_str())
-            .unwrap_or("?");
+
+    let args: Vec<_> = doc.sections.iter().filter_map(|s| match &s.body {
+        GoogleSectionBody::Args(v) => Some(v.iter()),
+        _ => None,
+    }).flatten().collect();
+    println!("\nArgs ({}):", args.len());
+    for arg in &args {
+        let type_str = arg.r#type.as_ref().map(|t| t.value.as_str()).unwrap_or("?");
         println!(
             "  {} ({}): {}",
             arg.name.value, type_str, arg.description.value
         );
     }
-    println!("\nReturns ({}):", doc.returns().len());
-    for ret in doc.returns() {
+
+    let returns: Vec<_> = doc.sections.iter().filter_map(|s| match &s.body {
+        GoogleSectionBody::Returns(v) => Some(v.iter()),
+        _ => None,
+    }).flatten().collect();
+    println!("\nReturns ({}):", returns.len());
+    for ret in &returns {
         let type_str = ret
             .return_type
             .as_ref()
@@ -48,10 +55,16 @@ Raises:
             .unwrap_or("?");
         println!("  {}: {}", type_str, ret.description.value);
     }
-    println!("\nRaises ({}):", doc.raises().len());
-    for exc in doc.raises() {
-        println!("  {}: {}", exc.exception_type.value, exc.description.value);
+
+    let raises: Vec<_> = doc.sections.iter().filter_map(|s| match &s.body {
+        GoogleSectionBody::Raises(v) => Some(v.iter()),
+        _ => None,
+    }).flatten().collect();
+    println!("\nRaises ({}):", raises.len());
+    for exc in &raises {
+        println!("  {}: {}", exc.r#type.value, exc.description.value);
     }
+
     println!("\nSections ({}):", doc.sections.len());
     for section in &doc.sections {
         println!(

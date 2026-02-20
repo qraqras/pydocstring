@@ -1,7 +1,7 @@
 [package]
 name = "pydocstring"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["Ryuma Asai"]
 description = "A fast, zero-dependency Rust parser for Python docstrings (NumPy and Google styles) with full AST and source location tracking"
 license = "MIT"
@@ -11,7 +11,7 @@ documentation = "https://docs.rs/pydocstring"
 readme = "README.md"
 keywords = ["python", "docstring", "parser", "numpy", "google"]
 categories = ["parser-implementations", "development-tools"]
-rust-version = "1.70"
+rust-version = "1.85"
 exclude = ["target/", "tests/", ".github/", ".devcontainer/"]
 
 [lib]

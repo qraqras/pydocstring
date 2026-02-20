@@ -50,7 +50,7 @@ pub use ast::{LineIndex, Spanned, Style, TextRange, TextSize};
 pub use error::{Diagnostic, ParseResult, Severity};
 pub use parser::detect_style;
 pub use styles::google::{
-    self, GoogleArgument, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod,
+    self, GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod,
     GoogleReturns, GoogleSection, GoogleSectionBody, GoogleSectionHeader, GoogleSeeAlsoItem,
     GoogleWarning,
 };

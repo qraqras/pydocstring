@@ -18,11 +18,11 @@
 //! ```
 
 use crate::ast::{
-    build_line_offsets, indent_len, make_range, make_spanned, offset_to_line_col, Spanned,
+    Spanned, build_line_offsets, indent_len, make_range, make_spanned, offset_to_line_col,
 };
 use crate::error::{Diagnostic, ParseResult};
 use crate::styles::google::ast::{
-    GoogleArgument, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturns,
+    GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturns,
     GoogleSection, GoogleSectionBody, GoogleSectionHeader, GoogleSeeAlsoItem, GoogleWarning,
 };
 
@@ -58,8 +58,7 @@ fn is_section_header(line: &str, base_indent: usize) -> bool {
 /// itself a section header). Returns its indentation level, or `base_indent + 4`
 /// as a sensible default.
 fn detect_entry_indent(lines: &[&str], start: usize, base_indent: usize) -> usize {
-    for i in start..lines.len() {
-        let line = lines[i];
+    for line in &lines[start..] {
         if is_section_header(line, base_indent) {
             break;
         }
@@ -314,9 +313,9 @@ fn parse_entry_header(text: &str) -> EntryHeader<'_> {
     }
 
     // --- Pattern 3: `name:` with description on the next line ---
-    if text.ends_with(':') {
+    if let Some(name) = text.strip_suffix(':') {
         return EntryHeader {
-            name: &text[..text.len() - 1],
+            name,
             type_info: None,
             desc: ("", text.len()),
         };
@@ -336,8 +335,7 @@ fn parse_entry_header(text: &str) -> EntryHeader<'_> {
 /// byte offset within the full trimmed line.
 fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usize) {
     let stripped = after_paren.trim_start();
-    if stripped.starts_with(':') {
-        let after_colon = &stripped[1..];
+    if let Some(after_colon) = stripped.strip_prefix(':') {
         let desc = after_colon.trim_start();
         let leading_to_stripped = after_paren.len() - stripped.len();
         let leading_after_colon = after_colon.len() - desc.len();
@@ -358,14 +356,25 @@ fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usi
 ///
 /// ```rust
 /// use pydocstring::google::parse_google;
+/// use pydocstring::GoogleSectionBody;
 ///
 /// let input = "Summary.\n\nArgs:\n    x (int): The value.\n\nReturns:\n    int: The result.";
 /// let doc = &parse_google(input).value;
 ///
 /// assert_eq!(doc.summary.value, "Summary.");
-/// assert_eq!(doc.args().len(), 1);
-/// assert_eq!(doc.args()[0].name.value, "x");
-/// assert_eq!(doc.returns().len(), 1);
+///
+/// let args: Vec<_> = doc.sections.iter().filter_map(|s| match &s.body {
+///     GoogleSectionBody::Args(v) => Some(v.iter()),
+///     _ => None,
+/// }).flatten().collect();
+/// assert_eq!(args.len(), 1);
+/// assert_eq!(args[0].name.value, "x");
+///
+/// let returns: Vec<_> = doc.sections.iter().filter_map(|s| match &s.body {
+///     GoogleSectionBody::Returns(v) => Some(v.iter()),
+///     _ => None,
+/// }).flatten().collect();
+/// assert_eq!(returns.len(), 1);
 /// ```
 pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
     let offsets = build_line_offsets(input);
@@ -436,7 +445,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
             let first_col = indent_len(lines[start_line]);
             let last_trimmed = lines[last_non_empty].trim();
             let last_col = indent_len(lines[last_non_empty]) + last_trimmed.len();
-            docstring.description = Some(make_spanned(
+            docstring.extended_summary = Some(make_spanned(
                 joined,
                 start_line,
                 first_col,
@@ -464,6 +473,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
 
             // Build section header (name without trailing colon)
             let header_name = &header_trimmed[..header_trimmed.len() - 1];
+            let colon_col = header_col + header_name.len();
             let header = GoogleSectionHeader {
                 range: make_range(
                     i,
@@ -480,6 +490,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
                     header_col + header_name.len(),
                     &offsets,
                 ),
+                colon: make_spanned(":".to_string(), i, colon_col, i, colon_col + 1, &offsets),
             };
 
             i += 1; // skip header line
@@ -539,7 +550,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
                         .into_iter()
                         .map(|e| GoogleWarning {
                             range: e.range,
-                            warning_type: e.exception_type,
+                            warning_type: e.r#type,
                             description: e.description,
                         })
                         .collect();
@@ -555,7 +566,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
                         .map(|a| GoogleAttribute {
                             range: a.range,
                             name: a.name,
-                            attr_type: a.arg_type,
+                            r#type: a.r#type,
                             description: a.description,
                         })
                         .collect();
@@ -737,7 +748,7 @@ fn parse_args(
     start: usize,
     offsets: &[usize],
     base_indent: usize,
-) -> ParseResult<(Vec<GoogleArgument>, usize)> {
+) -> ParseResult<(Vec<GoogleArg>, usize)> {
     let mut args = Vec::new();
     let mut diagnostics = Vec::new();
     let mut i = start;
@@ -867,10 +878,10 @@ fn parse_args(
                 }
             };
 
-            args.push(GoogleArgument {
+            args.push(GoogleArg {
                 range: make_range(entry_start, col, end_line, end_col, offsets),
                 name: name_spanned,
-                arg_type,
+                r#type: arg_type,
                 description: full_desc,
                 optional,
             });
@@ -942,9 +953,8 @@ fn parse_returns_section(
                     offsets,
                 ));
                 (rt, desc_str, col + colon_pos + 2)
-            } else if trimmed.ends_with(':') {
+            } else if let Some(type_str) = trimmed.strip_suffix(':') {
                 // Type only, description on next line
-                let type_str = &trimmed[..trimmed.len() - 1];
                 let type_col = col;
                 let rt = Some(make_spanned(
                     type_str.to_string(),
@@ -1059,8 +1069,8 @@ fn parse_raises_section(
                 let et = &trimmed[..colon_pos];
                 let desc = &trimmed[colon_pos + 2..];
                 (et, desc, col + colon_pos + 2)
-            } else if trimmed.ends_with(':') {
-                (&trimmed[..trimmed.len() - 1], "", col + trimmed.len())
+            } else if let Some(prefix) = trimmed.strip_suffix(':') {
+                (prefix, "", col + trimmed.len())
             } else {
                 (trimmed, "", col + trimmed.len())
             };
@@ -1100,7 +1110,7 @@ fn parse_raises_section(
 
             raises.push(GoogleException {
                 range: make_range(entry_start, col, end_line, end_col, offsets),
-                exception_type: exc_type,
+                r#type: exc_type,
                 description: full_desc,
             });
 
@@ -1226,8 +1236,8 @@ fn parse_see_also_section(
                 let n = &trimmed[..colon_pos];
                 let desc = &trimmed[colon_pos + 2..];
                 (n, desc, col + colon_pos + 2)
-            } else if trimmed.ends_with(':') {
-                (&trimmed[..trimmed.len() - 1], "", col + trimmed.len())
+            } else if let Some(prefix) = trimmed.strip_suffix(':') {
+                (prefix, "", col + trimmed.len())
             } else {
                 (trimmed, "", col + trimmed.len())
             };
@@ -1295,6 +1305,41 @@ fn parse_see_also_section(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -- test-local helpers --
+
+    fn args(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
+        doc.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::Args(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    fn returns(doc: &GoogleDocstring) -> Vec<&GoogleReturns> {
+        doc.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::Returns(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    fn raises(doc: &GoogleDocstring) -> Vec<&GoogleException> {
+        doc.sections
+            .iter()
+            .filter_map(|s| match &s.body {
+                GoogleSectionBody::Raises(v) => Some(v.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
 
     // -- helpers --
 
@@ -1429,7 +1474,7 @@ mod tests {
         let result = parse_google(input).value;
         assert_eq!(result.summary.value, "Brief summary.");
         assert_eq!(
-            result.description.as_ref().unwrap().value,
+            result.extended_summary.as_ref().unwrap().value,
             "Extended description.\nMore text."
         );
     }
@@ -1438,11 +1483,12 @@ mod tests {
     fn test_parse_args() {
         let input = "Summary.\n\nArgs:\n    x (int): The value.\n    y (str): The name.";
         let result = parse_google(input).value;
-        assert_eq!(result.args().len(), 2);
-        assert_eq!(result.args()[0].name.value, "x");
-        assert_eq!(result.args()[0].arg_type.as_ref().unwrap().value, "int");
-        assert_eq!(result.args()[0].description.value, "The value.");
-        assert_eq!(result.args()[1].name.value, "y");
+        let a = args(&result);
+        assert_eq!(a.len(), 2);
+        assert_eq!(a[0].name.value, "x");
+        assert_eq!(a[0].r#type.as_ref().unwrap().value, "int");
+        assert_eq!(a[0].description.value, "The value.");
+        assert_eq!(a[1].name.value, "y");
     }
 
     #[test]
@@ -1450,7 +1496,7 @@ mod tests {
         let input = "Summary.\n\nArgs:\n    x (int): First line.\n        Second line.";
         let result = parse_google(input).value;
         assert_eq!(
-            result.args()[0].description.value,
+            args(&result)[0].description.value,
             "First line.\nSecond line."
         );
     }
@@ -1459,28 +1505,27 @@ mod tests {
     fn test_parse_returns() {
         let input = "Summary.\n\nReturns:\n    int: The result.";
         let result = parse_google(input).value;
-        assert_eq!(result.returns().len(), 1);
-        assert_eq!(
-            result.returns()[0].return_type.as_ref().unwrap().value,
-            "int"
-        );
-        assert_eq!(result.returns()[0].description.value, "The result.");
+        let r = returns(&result);
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].return_type.as_ref().unwrap().value, "int");
+        assert_eq!(r[0].description.value, "The result.");
     }
 
     #[test]
     fn test_parse_returns_multiple() {
         let input = "Summary.\n\nReturns:\n    int: The count.\n    str: The message.";
         let result = parse_google(input).value;
-        assert_eq!(result.returns().len(), 2);
+        assert_eq!(returns(&result).len(), 2);
     }
 
     #[test]
     fn test_parse_raises() {
         let input = "Summary.\n\nRaises:\n    ValueError: If invalid.";
         let result = parse_google(input).value;
-        assert_eq!(result.raises().len(), 1);
-        assert_eq!(result.raises()[0].exception_type.value, "ValueError");
-        assert_eq!(result.raises()[0].description.value, "If invalid.");
+        let r = raises(&result);
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].r#type.value, "ValueError");
+        assert_eq!(r[0].description.value, "If invalid.");
     }
 
     #[test]

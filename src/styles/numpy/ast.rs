@@ -10,7 +10,7 @@ use crate::ast::{Spanned, TextRange};
 ///
 /// ```text
 /// Parameters       <-- header
-/// ----------       <-- header (underline)
+/// ----------       <-- header
 /// x : int          <-- body
 ///     Description  <-- body
 /// ```
@@ -28,8 +28,8 @@ pub struct NumPySection {
 ///
 /// Represents a parsed section header like:
 /// ```text
-/// Parameters     <-- name line
-/// ----------     <-- underline line
+/// Parameters     <-- name
+/// ----------     <-- underline
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumPySectionHeader {
@@ -104,6 +104,17 @@ pub struct NumPyDocstring {
     pub sections: Vec<NumPySection>,
 }
 
+/// NumPy-style deprecation notice.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NumPyDeprecation {
+    /// Source span.
+    pub range: TextRange,
+    /// Version when deprecated (e.g., "1.6.0") with its span.
+    pub version: Spanned<String>,
+    /// Reason for deprecation and recommendation (free text body), with its span.
+    pub description: Spanned<String>,
+}
+
 /// NumPy-style parameter.
 ///
 /// Can represent a single parameter or multiple parameters with the same type:
@@ -116,7 +127,7 @@ pub struct NumPyParameter {
     pub names: Vec<Spanned<String>>,
     /// Parameter type (e.g., "int", "str", "array_like") with its span.
     /// Type is optional for parameters but required for returns.
-    pub param_type: Option<Spanned<String>>,
+    pub r#type: Option<Spanned<String>>,
     /// Parameter description with its span.
     pub description: Spanned<String>,
     /// The `optional` marker, if present.
@@ -139,26 +150,41 @@ pub struct NumPyReturns {
     pub description: Spanned<String>,
 }
 
+/// NumPy-style exception.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NumPyException {
+    /// Source span.
+    pub range: TextRange,
+    /// Exception type with its span.
+    pub r#type: Spanned<String>,
+    /// Description of when raised, with its span.
+    pub description: Spanned<String>,
+}
+
 /// NumPy-style warning (from Warns section).
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumPyWarning {
     /// Source span.
     pub range: TextRange,
     /// Warning type (e.g., "DeprecationWarning") with its span.
-    pub warning_type: Spanned<String>,
+    pub r#type: Spanned<String>,
     /// When the warning is issued, with its span.
     pub description: Spanned<String>,
 }
 
-/// NumPy-style deprecation notice.
+/// See Also item.
+///
+/// Supports multiple items and optional descriptions:
+/// - `func_a : Description`
+/// - `func_b, func_c` (multiple names, no description)
 #[derive(Debug, Clone, PartialEq)]
-pub struct NumPyDeprecation {
+pub struct SeeAlsoItem {
     /// Source span.
     pub range: TextRange,
-    /// Version when deprecated (e.g., "1.6.0") with its span.
-    pub version: Spanned<String>,
-    /// Reason for deprecation and recommendation (free text body), with its span.
-    pub description: Spanned<String>,
+    /// Reference names (can be multiple like `func_b, func_c`), each with its own span.
+    pub names: Vec<Spanned<String>>,
+    /// Optional description with its span.
+    pub description: Option<Spanned<String>>,
 }
 
 /// Numbered reference (from References section).
@@ -180,7 +206,7 @@ pub struct NumPyAttribute {
     /// Attribute name with its span.
     pub name: Spanned<String>,
     /// Attribute type with its span.
-    pub attr_type: Option<Spanned<String>>,
+    pub r#type: Option<Spanned<String>>,
     /// Description with its span.
     pub description: Spanned<String>,
 }
@@ -196,32 +222,6 @@ pub struct NumPyMethod {
     pub description: Spanned<String>,
 }
 
-/// See Also item.
-///
-/// Supports multiple items and optional descriptions:
-/// - `func_a : Description`
-/// - `func_b, func_c` (multiple names, no description)
-#[derive(Debug, Clone, PartialEq)]
-pub struct SeeAlsoItem {
-    /// Source span.
-    pub range: TextRange,
-    /// Reference names (can be multiple like `func_b, func_c`), each with its own span.
-    pub names: Vec<Spanned<String>>,
-    /// Optional description with its span.
-    pub description: Option<Spanned<String>>,
-}
-
-/// NumPy-style exception.
-#[derive(Debug, Clone, PartialEq)]
-pub struct NumPyException {
-    /// Source span.
-    pub range: TextRange,
-    /// Exception type with its span.
-    pub exception_type: Spanned<String>,
-    /// Description of when raised, with its span.
-    pub description: Spanned<String>,
-}
-
 impl NumPyDocstring {
     /// Creates a new empty NumPy-style docstring.
     pub fn new() -> Self {
@@ -233,164 +233,6 @@ impl NumPyDocstring {
             extended_summary: None,
             sections: Vec::new(),
         }
-    }
-
-    // ---- Convenience accessors ------------------------------------------------
-
-    /// Returns an iterator over parameters from all Parameters sections.
-    pub fn parameters(&self) -> Vec<&NumPyParameter> {
-        self.sections
-            .iter()
-            .filter_map(|s| match &s.body {
-                NumPySectionBody::Parameters(v) => Some(v.iter()),
-                _ => None,
-            })
-            .flatten()
-            .collect()
-    }
-
-    /// Returns an iterator over return values from all Returns sections.
-    pub fn returns(&self) -> Vec<&NumPyReturns> {
-        self.sections
-            .iter()
-            .filter_map(|s| match &s.body {
-                NumPySectionBody::Returns(v) => Some(v.iter()),
-                _ => None,
-            })
-            .flatten()
-            .collect()
-    }
-
-    /// Returns an iterator over yield values from all Yields sections.
-    pub fn yields(&self) -> Vec<&NumPyReturns> {
-        self.sections
-            .iter()
-            .filter_map(|s| match &s.body {
-                NumPySectionBody::Yields(v) => Some(v.iter()),
-                _ => None,
-            })
-            .flatten()
-            .collect()
-    }
-
-    /// Returns an iterator over receive values from all Receives sections.
-    pub fn receives(&self) -> Vec<&NumPyParameter> {
-        self.sections
-            .iter()
-            .filter_map(|s| match &s.body {
-                NumPySectionBody::Receives(v) => Some(v.iter()),
-                _ => None,
-            })
-            .flatten()
-            .collect()
-    }
-
-    /// Returns an iterator over other parameters from all Other Parameters sections.
-    pub fn other_parameters(&self) -> Vec<&NumPyParameter> {
-        self.sections
-            .iter()
-            .filter_map(|s| match &s.body {
-                NumPySectionBody::OtherParameters(v) => Some(v.iter()),
-                _ => None,
-            })
-            .flatten()
-            .collect()
-    }
-
-    /// Returns an iterator over exceptions from all Raises sections.
-    pub fn raises(&self) -> Vec<&NumPyException> {
-        self.sections
-            .iter()
-            .filter_map(|s| match &s.body {
-                NumPySectionBody::Raises(v) => Some(v.iter()),
-                _ => None,
-            })
-            .flatten()
-            .collect()
-    }
-
-    /// Returns an iterator over warnings from all Warns sections.
-    pub fn warns(&self) -> Vec<&NumPyWarning> {
-        self.sections
-            .iter()
-            .filter_map(|s| match &s.body {
-                NumPySectionBody::Warns(v) => Some(v.iter()),
-                _ => None,
-            })
-            .flatten()
-            .collect()
-    }
-
-    /// Returns the Warnings section content, if present.
-    pub fn warnings(&self) -> Option<&Spanned<String>> {
-        self.sections.iter().find_map(|s| match &s.body {
-            NumPySectionBody::Warnings(text) => Some(text),
-            _ => None,
-        })
-    }
-
-    /// Returns an iterator over see-also items from all See Also sections.
-    pub fn see_also(&self) -> Vec<&SeeAlsoItem> {
-        self.sections
-            .iter()
-            .filter_map(|s| match &s.body {
-                NumPySectionBody::SeeAlso(v) => Some(v.iter()),
-                _ => None,
-            })
-            .flatten()
-            .collect()
-    }
-
-    /// Returns the Notes section content, if present.
-    pub fn notes(&self) -> Option<&Spanned<String>> {
-        self.sections.iter().find_map(|s| match &s.body {
-            NumPySectionBody::Notes(text) => Some(text),
-            _ => None,
-        })
-    }
-
-    /// Returns an iterator over references from all References sections.
-    pub fn references(&self) -> Vec<&NumPyReference> {
-        self.sections
-            .iter()
-            .filter_map(|s| match &s.body {
-                NumPySectionBody::References(v) => Some(v.iter()),
-                _ => None,
-            })
-            .flatten()
-            .collect()
-    }
-
-    /// Returns the Examples section content, if present.
-    pub fn examples(&self) -> Option<&Spanned<String>> {
-        self.sections.iter().find_map(|s| match &s.body {
-            NumPySectionBody::Examples(text) => Some(text),
-            _ => None,
-        })
-    }
-
-    /// Returns an iterator over attributes from all Attributes sections.
-    pub fn attributes(&self) -> Vec<&NumPyAttribute> {
-        self.sections
-            .iter()
-            .filter_map(|s| match &s.body {
-                NumPySectionBody::Attributes(v) => Some(v.iter()),
-                _ => None,
-            })
-            .flatten()
-            .collect()
-    }
-
-    /// Returns an iterator over methods from all Methods sections.
-    pub fn methods(&self) -> Vec<&NumPyMethod> {
-        self.sections
-            .iter()
-            .filter_map(|s| match &s.body {
-                NumPySectionBody::Methods(v) => Some(v.iter()),
-                _ => None,
-            })
-            .flatten()
-            .collect()
     }
 }
 

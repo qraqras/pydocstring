@@ -20,7 +20,7 @@
 //! ```
 
 use crate::ast::{
-    build_line_offsets, indent_len, make_range, make_spanned, offset_to_line_col, Spanned,
+    Spanned, build_line_offsets, indent_len, make_range, make_spanned, offset_to_line_col,
 };
 use crate::error::{Diagnostic, ParseResult};
 use crate::styles::numpy::ast::{
@@ -364,7 +364,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                         .into_iter()
                         .map(|e| crate::styles::numpy::ast::NumPyWarning {
                             range: e.range,
-                            warning_type: e.exception_type,
+                            r#type: e.r#type,
                             description: e.description,
                         })
                         .collect();
@@ -403,7 +403,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                                 .into_iter()
                                 .next()
                                 .unwrap_or_else(Spanned::empty_string),
-                            attr_type: p.param_type,
+                            r#type: p.r#type,
                             description: p.description,
                         })
                         .collect();
@@ -538,7 +538,7 @@ fn parse_parameters(
             let (entry_end_line, entry_end_col) = if desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
-                offset_to_line_col(desc.range.end().raw() as usize, &offsets)
+                offset_to_line_col(desc.range.end().raw() as usize, offsets)
             };
 
             // Detect missing description
@@ -556,7 +556,7 @@ fn parse_parameters(
             parameters.push(NumPyParameter {
                 range: make_range(entry_start, col, entry_end_line, entry_end_col, offsets),
                 names,
-                param_type,
+                r#type: param_type,
                 description: desc,
                 optional,
                 default: default_val,
@@ -808,7 +808,7 @@ fn parse_returns(
             let (entry_end_line, entry_end_col) = if desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
-                offset_to_line_col(desc.range.end().raw() as usize, &offsets)
+                offset_to_line_col(desc.range.end().raw() as usize, offsets)
             };
 
             // Detect missing description
@@ -876,7 +876,7 @@ fn parse_raises(
             let (entry_end_line, entry_end_col) = if desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
-                offset_to_line_col(desc.range.end().raw() as usize, &offsets)
+                offset_to_line_col(desc.range.end().raw() as usize, offsets)
             };
 
             // Detect missing description
@@ -889,7 +889,7 @@ fn parse_raises(
 
             raises.push(NumPyException {
                 range: make_range(entry_start, col, entry_end_line, entry_end_col, offsets),
-                exception_type: exc_type,
+                r#type: exc_type,
                 description: desc,
             });
             i = next_i;
