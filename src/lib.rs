@@ -41,6 +41,7 @@
 //! - Google style: fully supported
 
 pub mod ast;
+pub(crate) mod cursor;
 pub mod parser;
 pub mod styles;
 

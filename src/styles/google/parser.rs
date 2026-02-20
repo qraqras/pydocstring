@@ -17,10 +17,8 @@
 //!     ValueError: If the input is invalid.
 //! ```
 
-use crate::ast::{
-    Spanned, TextRange, TextSize, build_line_offsets, indent_len, line_text, make_range,
-    make_spanned, num_lines, offset_to_line_col, substr_offset,
-};
+use crate::ast::{Spanned, TextRange, TextSize};
+use crate::cursor::{Cursor, indent_len};
 use crate::styles::google::ast::{
     GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturns,
     GoogleSection, GoogleSectionBody, GoogleSectionHeader, GoogleSectionKind, GoogleSeeAlsoItem,
@@ -77,28 +75,8 @@ fn is_section_header(line: &str, base_indent: usize) -> bool {
 }
 
 // =============================================================================
-// Bracket / optional helpers
+// Optional helpers
 // =============================================================================
-
-/// Find the matching closing bracket for an opening bracket at `open_pos`.
-///
-/// Handles nested `()`, `[]`, `{}`.
-fn find_matching_close(text: &str, open_pos: usize) -> Option<usize> {
-    let mut depth = 0;
-    for (i, c) in text[open_pos..].char_indices() {
-        match c {
-            '(' | '[' | '{' => depth += 1,
-            ')' | ']' | '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(open_pos + i);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
-}
 
 /// Strip a trailing `optional` marker from a type annotation.
 ///
@@ -130,27 +108,25 @@ fn strip_optional(type_content: &str) -> (&str, Option<usize>) {
 // Description collector
 // =============================================================================
 
-/// Collect indented description continuation lines starting at `start`.
+/// Collect indented description continuation lines starting at `cursor.line`.
 ///
 /// Stops at:
 /// - Section headers at `base_indent`
 /// - Non-empty lines at or below `entry_indent` (i.e. a new entry)
 /// - End of input
+///
+/// On return, `cursor.line` points to the first unconsumed line.
 fn collect_description(
-    source: &str,
-    start: usize,
-    offsets: &[usize],
-    total_lines: usize,
+    cursor: &mut Cursor,
     entry_indent: usize,
     base_indent: usize,
-) -> (Spanned<String>, usize) {
-    let mut i = start;
+) -> Spanned<String> {
     let mut desc_parts: Vec<&str> = Vec::new();
     let mut first_content_line: Option<usize> = None;
-    let mut last_content_line = start;
+    let mut last_content_line = cursor.line;
 
-    while i < total_lines {
-        let line = line_text(source, i, offsets);
+    while !cursor.is_eof() {
+        let line = cursor.current_line_text();
         if is_section_header(line, base_indent) {
             break;
         }
@@ -165,11 +141,11 @@ fn collect_description(
         desc_parts.push(trimmed);
         if !trimmed.is_empty() {
             if first_content_line.is_none() {
-                first_content_line = Some(i);
+                first_content_line = Some(cursor.line);
             }
-            last_content_line = i;
+            last_content_line = cursor.line;
         }
-        i += 1;
+        cursor.advance();
     }
 
     // Trim leading / trailing empty entries
@@ -183,17 +159,14 @@ fn collect_description(
     let text = desc_parts.join("\n");
 
     if let Some(first) = first_content_line {
-        let first_line = line_text(source, first, offsets);
+        let first_line = cursor.line_text(first);
         let first_col = indent_len(first_line);
-        let last_line = line_text(source, last_content_line, offsets);
+        let last_line = cursor.line_text(last_content_line);
         let last_trimmed = last_line.trim();
         let last_col = indent_len(last_line) + last_trimmed.len();
-        (
-            make_spanned(text, first, first_col, last_content_line, last_col, offsets),
-            i,
-        )
+        cursor.make_spanned(text, first, first_col, last_content_line, last_col)
     } else {
-        (Spanned::empty_string(), i)
+        Spanned::empty_string()
     }
 }
 
@@ -203,7 +176,7 @@ fn build_full_description(
     first_col: usize,
     first_line_idx: usize,
     cont: &Spanned<String>,
-    offsets: &[usize],
+    cursor: &Cursor,
 ) -> Spanned<String> {
     if first_line.is_empty() {
         if cont.value.is_empty() {
@@ -212,25 +185,17 @@ fn build_full_description(
         return cont.clone();
     }
     if cont.value.is_empty() {
-        return make_spanned(
+        return cursor.make_spanned(
             first_line.to_string(),
             first_line_idx,
             first_col,
             first_line_idx,
             first_col + first_line.len(),
-            offsets,
         );
     }
     let combined = format!("{}\n{}", first_line, cont.value);
-    let (end_line, end_col) = offset_to_line_col(cont.range.end().raw() as usize, offsets);
-    make_spanned(
-        combined,
-        first_line_idx,
-        first_col,
-        end_line,
-        end_col,
-        offsets,
-    )
+    let (end_line, end_col) = cursor.offset_to_line_col(cont.range.end().raw() as usize);
+    cursor.make_spanned(combined, first_line_idx, first_col, end_line, end_col)
 }
 
 // =============================================================================
@@ -266,7 +231,7 @@ struct EntryHeader<'a> {
     end_line: usize,
 }
 
-/// Parse a Google-style entry header starting at `line_idx`.
+/// Parse a Google-style entry header at `cursor.line`.
 ///
 /// Recognised patterns:
 /// - `name (type, optional): description`
@@ -277,15 +242,13 @@ struct EntryHeader<'a> {
 ///
 /// Bracket matching works on the full source, so type annotations that span
 /// multiple lines (e.g. `Dict[str,\n  int]`) are handled correctly.
-fn parse_entry_header<'a>(
-    source: &'a str,
-    line_idx: usize,
-    offsets: &[usize],
-    #[allow(unused_variables)] total_lines: usize,
-) -> EntryHeader<'a> {
-    let line = line_text(source, line_idx, offsets);
+///
+/// Does **not** advance the cursor — the caller must set `cursor.line`
+/// to `header.end_line + 1` after processing.
+fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
+    let line = cursor.current_line_text();
     let trimmed = line.trim();
-    let entry_start = substr_offset(source, trimmed);
+    let entry_start = cursor.substr_offset(trimmed);
 
     // --- Pattern 1: `name (type): desc` ---
     // Find the first `(` preceded by whitespace.
@@ -295,15 +258,15 @@ fn parse_entry_header<'a>(
     {
         let abs_paren = entry_start + rel_paren;
         // find_matching_close on full source — crosses line boundaries
-        if let Some(abs_close) = find_matching_close(source, abs_paren) {
+        if let Some(abs_close) = cursor.find_matching_close(abs_paren) {
             let name = trimmed[..rel_paren].trim_end();
             let name_start = entry_start;
 
             // Type content between the parentheses (may span multiple lines)
-            let type_raw = &source[abs_paren + 1..abs_close];
+            let type_raw = &cursor.source()[abs_paren + 1..abs_close];
             let type_trimmed = type_raw.trim();
             let type_start = if !type_trimmed.is_empty() {
-                substr_offset(source, type_trimmed)
+                cursor.substr_offset(type_trimmed)
             } else {
                 abs_paren + 1
             };
@@ -322,7 +285,7 @@ fn parse_entry_header<'a>(
             } else if !clean_type.is_empty() {
                 Some(TypeInfo {
                     clean_type,
-                    type_start: substr_offset(source, clean_type),
+                    type_start: cursor.substr_offset(clean_type),
                     optional_start: opt_start,
                 })
             } else {
@@ -330,15 +293,13 @@ fn parse_entry_header<'a>(
             };
 
             // Find which line the close paren is on
-            let close_line = offset_to_line_col(abs_close, offsets).0;
+            let close_line = cursor.offset_to_line_col(abs_close).0;
 
             // Description after `)` on the same line as the close paren
-            let close_line_str = line_text(source, close_line, offsets);
-            let close_line_end =
-                substr_offset(source, close_line_str) + close_line_str.len();
-            let after_close = &source[abs_close + 1..close_line_end];
-            let (desc_text, desc_start) =
-                extract_desc_after_colon(after_close, abs_close + 1);
+            let close_line_str = cursor.line_text(close_line);
+            let close_line_end = cursor.substr_offset(close_line_str) + close_line_str.len();
+            let after_close = &cursor.source()[abs_close + 1..close_line_end];
+            let (desc_text, desc_start) = extract_desc_after_colon(after_close, abs_close + 1);
 
             return EntryHeader {
                 name,
@@ -360,7 +321,7 @@ fn parse_entry_header<'a>(
             type_info: None,
             desc_text: &trimmed[colon_rel + 2..],
             desc_start: entry_start + colon_rel + 2,
-            end_line: line_idx,
+            end_line: cursor.line,
         };
     }
 
@@ -372,7 +333,7 @@ fn parse_entry_header<'a>(
             type_info: None,
             desc_text: "",
             desc_start: entry_start + trimmed.len(),
-            end_line: line_idx,
+            end_line: cursor.line,
         };
     }
 
@@ -383,7 +344,7 @@ fn parse_entry_header<'a>(
         type_info: None,
         desc_text: "",
         desc_start: entry_start + trimmed.len(),
-        end_line: line_idx,
+        end_line: cursor.line,
     }
 }
 
@@ -435,64 +396,55 @@ fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usi
 /// assert_eq!(returns.len(), 1);
 /// ```
 pub fn parse_google(input: &str) -> GoogleDocstring {
-    let offsets = build_line_offsets(input);
-    let total_lines = num_lines(input, &offsets);
+    let mut cursor = Cursor::new(input);
     let mut docstring = GoogleDocstring::new();
     docstring.source = input.to_string();
 
-    if total_lines == 0 {
+    if cursor.total_lines() == 0 {
         return docstring;
     }
 
-    let mut i = 0;
-
     // --- Skip leading blank lines ---
-    while i < total_lines && line_text(input, i, &offsets).trim().is_empty() {
-        i += 1;
-    }
-    if i >= total_lines {
+    cursor.skip_blank_lines();
+    if cursor.is_eof() {
         return docstring;
     }
 
     // Detect base indentation from the first non-empty line
-    let base_indent = indent_len(line_text(input, i, &offsets));
+    let base_indent = cursor.current_indent();
 
     // --- Summary ---
-    if !is_section_header(line_text(input, i, &offsets), base_indent) {
-        let line = line_text(input, i, &offsets);
-        let trimmed = line.trim();
+    if !is_section_header(cursor.current_line_text(), base_indent) {
+        let trimmed = cursor.current_trimmed();
         if !trimmed.is_empty() {
-            let col = indent_len(line);
-            docstring.summary = make_spanned(
+            let col = cursor.current_indent();
+            docstring.summary = cursor.make_spanned(
                 trimmed.to_string(),
-                i,
+                cursor.line,
                 col,
-                i,
+                cursor.line,
                 col + trimmed.len(),
-                &offsets,
             );
-            i += 1;
+            cursor.advance();
         }
     }
 
     // skip blanks
-    while i < total_lines && line_text(input, i, &offsets).trim().is_empty() {
-        i += 1;
-    }
+    cursor.skip_blank_lines();
 
     // --- Extended description ---
-    if i < total_lines && !is_section_header(line_text(input, i, &offsets), base_indent) {
-        let start_line = i;
+    if !cursor.is_eof() && !is_section_header(cursor.current_line_text(), base_indent) {
+        let start_line = cursor.line;
         let mut desc_lines: Vec<&str> = Vec::new();
-        let mut last_non_empty = i;
+        let mut last_non_empty = cursor.line;
 
-        while i < total_lines && !is_section_header(line_text(input, i, &offsets), base_indent) {
-            let trimmed = line_text(input, i, &offsets).trim();
+        while !cursor.is_eof() && !is_section_header(cursor.current_line_text(), base_indent) {
+            let trimmed = cursor.current_trimmed();
             desc_lines.push(trimmed);
             if !trimmed.is_empty() {
-                last_non_empty = i;
+                last_non_empty = cursor.line;
             }
-            i += 1;
+            cursor.advance();
         }
 
         let keep = last_non_empty - start_line + 1;
@@ -500,35 +452,33 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
 
         let joined = desc_lines.join("\n");
         if !joined.trim().is_empty() {
-            let first_line = line_text(input, start_line, &offsets);
+            let first_line = cursor.line_text(start_line);
             let first_col = indent_len(first_line);
-            let last_line = line_text(input, last_non_empty, &offsets);
+            let last_line = cursor.line_text(last_non_empty);
             let last_trimmed = last_line.trim();
             let last_col = indent_len(last_line) + last_trimmed.len();
-            docstring.extended_summary = Some(make_spanned(
+            docstring.extended_summary = Some(cursor.make_spanned(
                 joined,
                 start_line,
                 first_col,
                 last_non_empty,
                 last_col,
-                &offsets,
             ));
         }
     }
 
     // --- Sections ---
-    while i < total_lines {
-        let cur_line = line_text(input, i, &offsets);
-        if cur_line.trim().is_empty() {
-            i += 1;
+    while !cursor.is_eof() {
+        if cursor.current_is_blank() {
+            cursor.advance();
             continue;
         }
 
-        if is_section_header(cur_line, base_indent) {
-            let section_start = i;
-            let header_line = cur_line;
+        if is_section_header(cursor.current_line_text(), base_indent) {
+            let section_start = cursor.line;
+            let header_line = cursor.current_line_text();
             let header_trimmed = header_line.trim();
-            let header_col = indent_len(header_line);
+            let header_col = cursor.current_indent();
 
             // Extract the section name and whether a colon is present.
             // Handles "Args:", "Args :", and colonless "Args".
@@ -538,79 +488,65 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
             let colon = if has_colon {
                 // Colon is always the last character of the trimmed line
                 let colon_col = header_col + header_trimmed.len() - 1;
-                Some(make_spanned(
+                Some(cursor.make_spanned(
                     ":".to_string(),
-                    i,
+                    cursor.line,
                     colon_col,
-                    i,
+                    cursor.line,
                     colon_col + 1,
-                    &offsets,
                 ))
             } else {
                 None
             };
 
             let header = GoogleSectionHeader {
-                range: make_range(
-                    i,
+                range: cursor.make_range(
+                    cursor.line,
                     header_col,
-                    i,
+                    cursor.line,
                     header_col + header_trimmed.len(),
-                    &offsets,
                 ),
-                name: make_spanned(
+                name: cursor.make_spanned(
                     header_name.to_string(),
-                    i,
+                    cursor.line,
                     header_col,
-                    i,
+                    cursor.line,
                     header_col + header_name.len(),
-                    &offsets,
                 ),
                 colon,
             };
 
-            i += 1; // skip header line
+            cursor.advance(); // skip header line
 
             let normalized = header_name.to_ascii_lowercase();
             let section_kind = GoogleSectionKind::from_name(&normalized);
-            let (body, next_i) = match section_kind {
+            let body = match section_kind {
                 // ----- Parameter-like sections -----
                 Some(GoogleSectionKind::Args) => {
-                    let (args, ni) = parse_args(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Args(args), ni)
+                    GoogleSectionBody::Args(parse_args(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::KeywordArgs) => {
-                    let (args, ni) = parse_args(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::KeywordArgs(args), ni)
+                    GoogleSectionBody::KeywordArgs(parse_args(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::OtherParameters) => {
-                    let (args, ni) = parse_args(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::OtherParameters(args), ni)
+                    GoogleSectionBody::OtherParameters(parse_args(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::Receives) => {
-                    let (args, ni) = parse_args(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Receives(args), ni)
+                    GoogleSectionBody::Receives(parse_args(&mut cursor, base_indent))
                 }
                 // ----- Return/yield sections -----
                 Some(GoogleSectionKind::Returns) => {
-                    let (returns, ni) =
-                        parse_returns_section(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Returns(returns), ni)
+                    GoogleSectionBody::Returns(parse_returns_section(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::Yields) => {
-                    let (yields, ni) =
-                        parse_returns_section(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Yields(yields), ni)
+                    GoogleSectionBody::Yields(parse_returns_section(&mut cursor, base_indent))
                 }
                 // ----- Exception/warning sections -----
                 Some(GoogleSectionKind::Raises) => {
-                    let (raises, ni) =
-                        parse_raises_section(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Raises(raises), ni)
+                    GoogleSectionBody::Raises(parse_raises_section(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::Warns) => {
-                    let (raises, ni) =
-                        parse_raises_section(input, i, &offsets, total_lines, base_indent);
+                    let raises = parse_raises_section(&mut cursor, base_indent);
                     let warns = raises
                         .into_iter()
                         .map(|e| GoogleWarning {
@@ -619,11 +555,11 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                             description: e.description,
                         })
                         .collect();
-                    (GoogleSectionBody::Warns(warns), ni)
+                    GoogleSectionBody::Warns(warns)
                 }
                 // ----- Structured sections -----
                 Some(GoogleSectionKind::Attributes) => {
-                    let (args, ni) = parse_args(input, i, &offsets, total_lines, base_indent);
+                    let args = parse_args(&mut cursor, base_indent);
                     let attrs = args
                         .into_iter()
                         .map(|a| GoogleAttribute {
@@ -633,10 +569,10 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                             description: a.description,
                         })
                         .collect();
-                    (GoogleSectionBody::Attributes(attrs), ni)
+                    GoogleSectionBody::Attributes(attrs)
                 }
                 Some(GoogleSectionKind::Methods) => {
-                    let (args, ni) = parse_args(input, i, &offsets, total_lines, base_indent);
+                    let args = parse_args(&mut cursor, base_indent);
                     let methods = args
                         .into_iter()
                         .map(|a| GoogleMethod {
@@ -645,87 +581,58 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                             description: a.description,
                         })
                         .collect();
-                    (GoogleSectionBody::Methods(methods), ni)
+                    GoogleSectionBody::Methods(methods)
                 }
                 Some(GoogleSectionKind::SeeAlso) => {
-                    let (items, ni) =
-                        parse_see_also_section(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::SeeAlso(items), ni)
+                    GoogleSectionBody::SeeAlso(parse_see_also_section(&mut cursor, base_indent))
                 }
                 // ----- Free-text / admonition sections -----
                 Some(GoogleSectionKind::Notes) => {
-                    let (content, ni) =
-                        parse_section_content(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Notes(content), ni)
+                    GoogleSectionBody::Notes(parse_section_content(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::Examples) => {
-                    let (content, ni) =
-                        parse_section_content(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Examples(content), ni)
+                    GoogleSectionBody::Examples(parse_section_content(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::Todo) => {
-                    let (content, ni) =
-                        parse_section_content(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Todo(content), ni)
+                    GoogleSectionBody::Todo(parse_section_content(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::References) => {
-                    let (content, ni) =
-                        parse_section_content(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::References(content), ni)
+                    GoogleSectionBody::References(parse_section_content(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::Warnings) => {
-                    let (content, ni) =
-                        parse_section_content(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Warnings(content), ni)
+                    GoogleSectionBody::Warnings(parse_section_content(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::Attention) => {
-                    let (content, ni) =
-                        parse_section_content(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Attention(content), ni)
+                    GoogleSectionBody::Attention(parse_section_content(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::Caution) => {
-                    let (content, ni) =
-                        parse_section_content(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Caution(content), ni)
+                    GoogleSectionBody::Caution(parse_section_content(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::Danger) => {
-                    let (content, ni) =
-                        parse_section_content(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Danger(content), ni)
+                    GoogleSectionBody::Danger(parse_section_content(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::Error) => {
-                    let (content, ni) =
-                        parse_section_content(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Error(content), ni)
+                    GoogleSectionBody::Error(parse_section_content(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::Hint) => {
-                    let (content, ni) =
-                        parse_section_content(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Hint(content), ni)
+                    GoogleSectionBody::Hint(parse_section_content(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::Important) => {
-                    let (content, ni) =
-                        parse_section_content(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Important(content), ni)
+                    GoogleSectionBody::Important(parse_section_content(&mut cursor, base_indent))
                 }
                 Some(GoogleSectionKind::Tip) => {
-                    let (content, ni) =
-                        parse_section_content(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Tip(content), ni)
+                    GoogleSectionBody::Tip(parse_section_content(&mut cursor, base_indent))
                 }
                 None => {
-                    let (content, ni) =
-                        parse_section_content(input, i, &offsets, total_lines, base_indent);
-                    (GoogleSectionBody::Unknown(content), ni)
+                    GoogleSectionBody::Unknown(parse_section_content(&mut cursor, base_indent))
                 }
             };
 
             // Compute section span
             let section_end_line = {
-                let mut end = next_i.saturating_sub(1);
+                let mut end = cursor.line.saturating_sub(1);
                 while end > section_start {
-                    let end_line = line_text(input, end, &offsets);
-                    if !end_line.trim().is_empty() {
+                    if !cursor.line_text(end).trim().is_empty() {
                         break;
                     }
                     end -= 1;
@@ -733,32 +640,29 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                 end
             };
             let section_end_col = {
-                let end_line = line_text(input, section_end_line, &offsets);
+                let end_line = cursor.line_text(section_end_line);
                 indent_len(end_line) + end_line.trim().len()
             };
 
             docstring.sections.push(GoogleSection {
-                range: make_range(
+                range: cursor.make_range(
                     section_start,
                     header_col,
                     section_end_line,
                     section_end_col,
-                    &offsets,
                 ),
                 header,
                 body,
             });
-
-            i = next_i;
         } else {
-            i += 1;
+            cursor.advance();
         }
     }
 
     // --- Docstring span ---
-    let last_line_idx = total_lines.saturating_sub(1);
-    let last_col = line_text(input, last_line_idx, &offsets).len();
-    docstring.range = make_range(0, 0, last_line_idx, last_col, &offsets);
+    let last_line_idx = cursor.total_lines().saturating_sub(1);
+    let last_col = cursor.line_text(last_line_idx).len();
+    docstring.range = cursor.make_range(0, 0, last_line_idx, last_col);
 
     docstring
 }
@@ -768,19 +672,14 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
 // =============================================================================
 
 /// Parse the Args / Arguments section body.
-fn parse_args(
-    source: &str,
-    start: usize,
-    offsets: &[usize],
-    total_lines: usize,
-    base_indent: usize,
-) -> (Vec<GoogleArg>, usize) {
+///
+/// On return, `cursor.line` points to the first line after the section.
+fn parse_args(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleArg> {
     let mut args = Vec::new();
-    let mut i = start;
     let mut entry_indent: Option<usize> = None;
 
-    while i < total_lines {
-        let line = line_text(source, i, offsets);
+    while !cursor.is_eof() {
+        let line = cursor.current_line_text();
         if is_section_header(line, base_indent) {
             break;
         }
@@ -788,11 +687,11 @@ fn parse_args(
         let trimmed = line.trim();
 
         if trimmed.is_empty() {
-            i += 1;
+            cursor.advance();
             continue;
         }
 
-        let indent = indent_len(line);
+        let indent = cursor.current_indent();
         if indent <= base_indent {
             break;
         }
@@ -802,9 +701,9 @@ fn parse_args(
         // Entry line at entry indent level
         if indent <= ei {
             let col = indent;
-            let entry_start_line = i;
+            let entry_start_line = cursor.line;
 
-            let header = parse_entry_header(source, i, offsets, total_lines);
+            let header = parse_entry_header(cursor);
 
             // Name
             let name_spanned = Spanned::new(
@@ -847,47 +746,44 @@ fn parse_args(
             let first_desc = header.desc_text;
             let desc_first_line = header.end_line;
             let desc_first_col = if !first_desc.is_empty() {
-                offset_to_line_col(header.desc_start, offsets).1
+                cursor.offset_to_line_col(header.desc_start).1
             } else {
                 0 // irrelevant when first_desc is empty
             };
 
-            i = header.end_line + 1;
-            let (cont_desc, next_i) =
-                collect_description(source, i, offsets, total_lines, ei, base_indent);
+            cursor.line = header.end_line + 1;
+            let cont_desc = collect_description(cursor, ei, base_indent);
             let full_desc = build_full_description(
                 first_desc,
                 desc_first_col,
                 desc_first_line,
                 &cont_desc,
-                offsets,
+                cursor,
             );
 
             let (end_line, end_col) = if full_desc.value.is_empty() {
-                let last_header_line = line_text(source, header.end_line, offsets);
+                let last_header_line = cursor.line_text(header.end_line);
                 (
                     header.end_line,
                     indent_len(last_header_line) + last_header_line.trim().len(),
                 )
             } else {
-                offset_to_line_col(full_desc.range.end().raw() as usize, offsets)
+                cursor.offset_to_line_col(full_desc.range.end().raw() as usize)
             };
 
             args.push(GoogleArg {
-                range: make_range(entry_start_line, col, end_line, end_col, offsets),
+                range: cursor.make_range(entry_start_line, col, end_line, end_col),
                 name: name_spanned,
                 r#type: arg_type,
                 description: full_desc,
                 optional,
             });
-
-            i = next_i;
         } else {
-            i += 1;
+            cursor.advance();
         }
     }
 
-    (args, i)
+    args
 }
 
 // =============================================================================
@@ -901,19 +797,14 @@ fn parse_args(
 /// int: The result.          # typed
 /// The result description.   # untyped
 /// ```
-fn parse_returns_section(
-    source: &str,
-    start: usize,
-    offsets: &[usize],
-    total_lines: usize,
-    base_indent: usize,
-) -> (Vec<GoogleReturns>, usize) {
+///
+/// On return, `cursor.line` points to the first line after the section.
+fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleReturns> {
     let mut returns = Vec::new();
-    let mut i = start;
     let mut entry_indent: Option<usize> = None;
 
-    while i < total_lines {
-        let line = line_text(source, i, offsets);
+    while !cursor.is_eof() {
+        let line = cursor.current_line_text();
         if is_section_header(line, base_indent) {
             break;
         }
@@ -921,11 +812,11 @@ fn parse_returns_section(
         let trimmed = line.trim();
 
         if trimmed.is_empty() {
-            i += 1;
+            cursor.advance();
             continue;
         }
 
-        let indent = indent_len(line);
+        let indent = cursor.current_indent();
         if indent <= base_indent {
             break;
         }
@@ -934,32 +825,30 @@ fn parse_returns_section(
 
         if indent <= ei {
             let col = indent;
-            let entry_start = i;
+            let entry_start = cursor.line;
 
             // Try `type: description` pattern
             let (return_type, first_desc, desc_col) = if let Some(colon_pos) = trimmed.find(": ") {
                 let type_str = &trimmed[..colon_pos];
                 let desc_str = &trimmed[colon_pos + 2..];
                 let type_col = col;
-                let rt = Some(make_spanned(
+                let rt = Some(cursor.make_spanned(
                     type_str.to_string(),
-                    i,
+                    cursor.line,
                     type_col,
-                    i,
+                    cursor.line,
                     type_col + type_str.len(),
-                    offsets,
                 ));
                 (rt, desc_str, col + colon_pos + 2)
             } else if let Some(type_str) = trimmed.strip_suffix(':') {
                 // Type only, description on next line
                 let type_col = col;
-                let rt = Some(make_spanned(
+                let rt = Some(cursor.make_spanned(
                     type_str.to_string(),
-                    i,
+                    cursor.line,
                     type_col,
-                    i,
+                    cursor.line,
                     type_col + type_str.len(),
-                    offsets,
                 ));
                 (rt, "", col + trimmed.len())
             } else {
@@ -967,31 +856,28 @@ fn parse_returns_section(
                 (None, trimmed, col)
             };
 
-            i += 1;
-            let (cont_desc, next_i) =
-                collect_description(source, i, offsets, total_lines, ei, base_indent);
+            cursor.advance();
+            let cont_desc = collect_description(cursor, ei, base_indent);
             let full_desc =
-                build_full_description(first_desc, desc_col, entry_start, &cont_desc, offsets);
+                build_full_description(first_desc, desc_col, entry_start, &cont_desc, cursor);
 
             let (end_line, end_col) = if full_desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
-                offset_to_line_col(full_desc.range.end().raw() as usize, offsets)
+                cursor.offset_to_line_col(full_desc.range.end().raw() as usize)
             };
 
             returns.push(GoogleReturns {
-                range: make_range(entry_start, col, end_line, end_col, offsets),
+                range: cursor.make_range(entry_start, col, end_line, end_col),
                 return_type,
                 description: full_desc,
             });
-
-            i = next_i;
         } else {
-            i += 1;
+            cursor.advance();
         }
     }
 
-    (returns, i)
+    returns
 }
 
 // =============================================================================
@@ -1001,19 +887,14 @@ fn parse_returns_section(
 /// Parse the Raises section body.
 ///
 /// Format: `ExceptionType: description`
-fn parse_raises_section(
-    source: &str,
-    start: usize,
-    offsets: &[usize],
-    total_lines: usize,
-    base_indent: usize,
-) -> (Vec<GoogleException>, usize) {
+///
+/// On return, `cursor.line` points to the first line after the section.
+fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleException> {
     let mut raises = Vec::new();
-    let mut i = start;
     let mut entry_indent: Option<usize> = None;
 
-    while i < total_lines {
-        let line = line_text(source, i, offsets);
+    while !cursor.is_eof() {
+        let line = cursor.current_line_text();
         if is_section_header(line, base_indent) {
             break;
         }
@@ -1021,11 +902,11 @@ fn parse_raises_section(
         let trimmed = line.trim();
 
         if trimmed.is_empty() {
-            i += 1;
+            cursor.advance();
             continue;
         }
 
-        let indent = indent_len(line);
+        let indent = cursor.current_indent();
         if indent <= base_indent {
             break;
         }
@@ -1034,7 +915,7 @@ fn parse_raises_section(
 
         if indent <= ei {
             let col = indent;
-            let entry_start = i;
+            let entry_start = cursor.line;
 
             let (exc_type_str, first_desc, desc_col) =
                 if let Some(colon_pos) = trimmed.find(": ") {
@@ -1047,40 +928,36 @@ fn parse_raises_section(
                     (trimmed, "", col + trimmed.len())
                 };
 
-            let exc_type = make_spanned(
+            let exc_type = cursor.make_spanned(
                 exc_type_str.to_string(),
-                i,
+                cursor.line,
                 col,
-                i,
+                cursor.line,
                 col + exc_type_str.len(),
-                offsets,
             );
 
-            i += 1;
-            let (cont_desc, next_i) =
-                collect_description(source, i, offsets, total_lines, ei, base_indent);
+            cursor.advance();
+            let cont_desc = collect_description(cursor, ei, base_indent);
             let full_desc =
-                build_full_description(first_desc, desc_col, entry_start, &cont_desc, offsets);
+                build_full_description(first_desc, desc_col, entry_start, &cont_desc, cursor);
 
             let (end_line, end_col) = if full_desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
-                offset_to_line_col(full_desc.range.end().raw() as usize, offsets)
+                cursor.offset_to_line_col(full_desc.range.end().raw() as usize)
             };
 
             raises.push(GoogleException {
-                range: make_range(entry_start, col, end_line, end_col, offsets),
+                range: cursor.make_range(entry_start, col, end_line, end_col),
                 r#type: exc_type,
                 description: full_desc,
             });
-
-            i = next_i;
         } else {
-            i += 1;
+            cursor.advance();
         }
     }
 
-    (raises, i)
+    raises
 }
 
 // =============================================================================
@@ -1090,20 +967,15 @@ fn parse_raises_section(
 /// Parse a free-text section body (Notes, Examples, References, Warnings, …).
 ///
 /// Collects all indented lines until the next section header.
-fn parse_section_content(
-    source: &str,
-    start: usize,
-    offsets: &[usize],
-    total_lines: usize,
-    base_indent: usize,
-) -> (Spanned<String>, usize) {
+///
+/// On return, `cursor.line` points to the first line after the section.
+fn parse_section_content(cursor: &mut Cursor, base_indent: usize) -> Spanned<String> {
     let mut content_lines: Vec<&str> = Vec::new();
-    let mut i = start;
     let mut first_content_line: Option<usize> = None;
-    let mut last_content_line = start;
+    let mut last_content_line = cursor.line;
 
-    while i < total_lines {
-        let line = line_text(source, i, offsets);
+    while !cursor.is_eof() {
+        let line = cursor.current_line_text();
         if is_section_header(line, base_indent) {
             break;
         }
@@ -1117,11 +989,11 @@ fn parse_section_content(
         content_lines.push(trimmed);
         if !trimmed.is_empty() {
             if first_content_line.is_none() {
-                first_content_line = Some(i);
+                first_content_line = Some(cursor.line);
             }
-            last_content_line = i;
+            last_content_line = cursor.line;
         }
-        i += 1;
+        cursor.advance();
     }
 
     // Trim leading / trailing empty
@@ -1134,18 +1006,16 @@ fn parse_section_content(
 
     let text = content_lines.join("\n");
 
-    let spanned = if let Some(first) = first_content_line {
-        let first_line = line_text(source, first, offsets);
+    if let Some(first) = first_content_line {
+        let first_line = cursor.line_text(first);
         let first_col = indent_len(first_line);
-        let last_line = line_text(source, last_content_line, offsets);
+        let last_line = cursor.line_text(last_content_line);
         let last_trimmed = last_line.trim();
         let last_col = indent_len(last_line) + last_trimmed.len();
-        make_spanned(text, first, first_col, last_content_line, last_col, offsets)
+        cursor.make_spanned(text, first, first_col, last_content_line, last_col)
     } else {
         Spanned::empty_string()
-    };
-
-    (spanned, i)
+    }
 }
 
 // =============================================================================
@@ -1161,19 +1031,14 @@ fn parse_section_content(
 ///     func_b, func_c
 ///     :meth:`func_d`: Description.
 /// ```
-fn parse_see_also_section(
-    source: &str,
-    start: usize,
-    offsets: &[usize],
-    total_lines: usize,
-    base_indent: usize,
-) -> (Vec<GoogleSeeAlsoItem>, usize) {
+///
+/// On return, `cursor.line` points to the first line after the section.
+fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleSeeAlsoItem> {
     let mut items = Vec::new();
-    let mut i = start;
     let mut entry_indent: Option<usize> = None;
 
-    while i < total_lines {
-        let line = line_text(source, i, offsets);
+    while !cursor.is_eof() {
+        let line = cursor.current_line_text();
         if is_section_header(line, base_indent) {
             break;
         }
@@ -1181,11 +1046,11 @@ fn parse_see_also_section(
         let trimmed = line.trim();
 
         if trimmed.is_empty() {
-            i += 1;
+            cursor.advance();
             continue;
         }
 
-        let indent = indent_len(line);
+        let indent = cursor.current_indent();
         if indent <= base_indent {
             break;
         }
@@ -1194,7 +1059,7 @@ fn parse_see_also_section(
 
         if indent <= ei {
             let col = indent;
-            let entry_start = i;
+            let entry_start = cursor.line;
 
             // Split on ` : ` or `: ` for description
             let (names_part, first_desc, desc_col) = if let Some(colon_pos) = trimmed.find(": ") {
@@ -1215,23 +1080,21 @@ fn parse_see_also_section(
                 if !name.is_empty() {
                     // Find the actual position of this name within the line
                     let name_start = name_offset + (part.len() - part.trim_start().len());
-                    names.push(make_spanned(
+                    names.push(cursor.make_spanned(
                         name.to_string(),
-                        i,
+                        cursor.line,
                         name_start,
-                        i,
+                        cursor.line,
                         name_start + name.len(),
-                        offsets,
                     ));
                 }
                 name_offset += part.len() + 1; // +1 for the comma
             }
 
-            i += 1;
-            let (cont_desc, next_i) =
-                collect_description(source, i, offsets, total_lines, ei, base_indent);
+            cursor.advance();
+            let cont_desc = collect_description(cursor, ei, base_indent);
             let full_desc =
-                build_full_description(first_desc, desc_col, entry_start, &cont_desc, offsets);
+                build_full_description(first_desc, desc_col, entry_start, &cont_desc, cursor);
 
             let description = if full_desc.value.is_empty() {
                 None
@@ -1240,24 +1103,22 @@ fn parse_see_also_section(
             };
 
             let (end_line, end_col) = if let Some(ref d) = description {
-                offset_to_line_col(d.range.end().raw() as usize, offsets)
+                cursor.offset_to_line_col(d.range.end().raw() as usize)
             } else {
                 (entry_start, col + trimmed.len())
             };
 
             items.push(GoogleSeeAlsoItem {
-                range: make_range(entry_start, col, end_line, end_col, offsets),
+                range: cursor.make_range(entry_start, col, end_line, end_col),
                 names,
                 description,
             });
-
-            i = next_i;
         } else {
-            i += 1;
+            cursor.advance();
         }
     }
 
-    (items, i)
+    items
 }
 
 // =============================================================================
@@ -1348,9 +1209,8 @@ mod tests {
 
     /// Helper to parse an entry header from a single-line string.
     fn header_from(text: &str) -> EntryHeader<'_> {
-        let offsets = crate::ast::build_line_offsets(text);
-        let total = num_lines(text, &offsets);
-        parse_entry_header(text, 0, &offsets, total)
+        let cursor = Cursor::new(text);
+        parse_entry_header(&cursor)
     }
 
     #[test]
@@ -1412,9 +1272,8 @@ mod tests {
     #[test]
     fn test_parse_entry_header_multiline_type() {
         let input = "x (Dict[str,\n        int]): The value.";
-        let offsets = crate::ast::build_line_offsets(input);
-        let total = num_lines(input, &offsets);
-        let header = parse_entry_header(input, 0, &offsets, total);
+        let cursor = Cursor::new(input);
+        let header = parse_entry_header(&cursor);
         assert_eq!(header.name, "x");
         let ti = header.type_info.unwrap();
         assert_eq!(ti.clean_type, "Dict[str,\n        int]");
