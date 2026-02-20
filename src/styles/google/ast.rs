@@ -37,7 +37,7 @@ pub struct GoogleSectionHeader {
 /// Body content of a Google-style section.
 ///
 /// Each variant corresponds to a specific section kind.
-/// Section names follow the Sphinx Napoleon extension.
+/// Section names follow the Napoleon convention.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GoogleSectionBody {
     // ----- Parameter-like sections -----
