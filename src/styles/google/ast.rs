@@ -99,21 +99,25 @@ impl GoogleSectionKind {
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "args" | "arguments" | "params" | "parameters" => Some(Self::Args),
-            "keyword args" | "keyword arguments" => Some(Self::KeywordArgs),
-            "other parameters" => Some(Self::OtherParameters),
+            "keyword args" | "keyword arguments" | "keyword params" | "keyword parameters" => {
+                Some(Self::KeywordArgs)
+            }
+            "other args" | "other arguments" | "other params" | "other parameters" => {
+                Some(Self::OtherParameters)
+            }
             "receives" | "receive" => Some(Self::Receives),
             "returns" | "return" => Some(Self::Returns),
             "yields" | "yield" => Some(Self::Yields),
             "raises" | "raise" => Some(Self::Raises),
             "warns" | "warn" => Some(Self::Warns),
+            "see also" => Some(Self::SeeAlso),
             "attributes" | "attribute" => Some(Self::Attributes),
             "methods" => Some(Self::Methods),
-            "see also" => Some(Self::SeeAlso),
-            "note" | "notes" => Some(Self::Notes),
-            "example" | "examples" => Some(Self::Examples),
+            "notes" | "note" => Some(Self::Notes),
+            "examples" | "example" => Some(Self::Examples),
             "todo" => Some(Self::Todo),
             "references" => Some(Self::References),
-            "warning" | "warnings" => Some(Self::Warnings),
+            "warnings" | "warning" => Some(Self::Warnings),
             "attention" => Some(Self::Attention),
             "caution" => Some(Self::Caution),
             "danger" => Some(Self::Danger),
@@ -142,9 +146,9 @@ impl fmt::Display for GoogleSectionKind {
             Self::Yields => "Yields",
             Self::Raises => "Raises",
             Self::Warns => "Warns",
+            Self::SeeAlso => "See Also",
             Self::Attributes => "Attributes",
             Self::Methods => "Methods",
-            Self::SeeAlso => "See Also",
             Self::Notes => "Notes",
             Self::Examples => "Examples",
             Self::Todo => "Todo",
@@ -409,22 +413,6 @@ impl GoogleDocstring {
             extended_summary: None,
             items: Vec::new(),
         }
-    }
-
-    /// Iterate over only the [`GoogleSection`] items in document order.
-    pub fn sections(&self) -> impl Iterator<Item = &GoogleSection> {
-        self.items.iter().filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => Some(s),
-            _ => None,
-        })
-    }
-
-    /// Iterate over only the stray-line items in document order.
-    pub fn stray_lines(&self) -> impl Iterator<Item = &Spanned<String>> {
-        self.items.iter().filter_map(|item| match item {
-            GoogleDocstringItem::StrayLine(s) => Some(s),
-            _ => None,
-        })
     }
 }
 

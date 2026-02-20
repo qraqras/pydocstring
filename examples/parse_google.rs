@@ -1,7 +1,7 @@
 //! Example: Parsing Google-style docstrings
 
 use pydocstring::google::parse_google;
-use pydocstring::GoogleSectionBody;
+use pydocstring::{GoogleDocstringItem, GoogleSectionBody};
 
 fn main() {
     let docstring = r#"
@@ -29,10 +29,18 @@ Raises:
         println!("Description: {}", desc.value);
     }
 
-    let args: Vec<_> = doc.sections().filter_map(|s| match &s.body {
-        GoogleSectionBody::Args(v) => Some(v.iter()),
-        _ => None,
-    }).flatten().collect();
+    let args: Vec<_> = doc
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            GoogleDocstringItem::Section(s) => match &s.body {
+                GoogleSectionBody::Args(v) => Some(v.iter()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .flatten()
+        .collect();
     println!("\nArgs ({}):", args.len());
     for arg in &args {
         let type_str = arg.r#type.as_ref().map(|t| t.value.as_str()).unwrap_or("?");
@@ -42,10 +50,18 @@ Raises:
         );
     }
 
-    let returns: Vec<_> = doc.sections().filter_map(|s| match &s.body {
-        GoogleSectionBody::Returns(v) => Some(v.iter()),
-        _ => None,
-    }).flatten().collect();
+    let returns: Vec<_> = doc
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            GoogleDocstringItem::Section(s) => match &s.body {
+                GoogleSectionBody::Returns(v) => Some(v.iter()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .flatten()
+        .collect();
     println!("\nReturns ({}):", returns.len());
     for ret in &returns {
         let type_str = ret
@@ -56,17 +72,33 @@ Raises:
         println!("  {}: {}", type_str, ret.description.value);
     }
 
-    let raises: Vec<_> = doc.sections().filter_map(|s| match &s.body {
-        GoogleSectionBody::Raises(v) => Some(v.iter()),
-        _ => None,
-    }).flatten().collect();
+    let raises: Vec<_> = doc
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            GoogleDocstringItem::Section(s) => match &s.body {
+                GoogleSectionBody::Raises(v) => Some(v.iter()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .flatten()
+        .collect();
     println!("\nRaises ({}):", raises.len());
     for exc in &raises {
         println!("  {}: {}", exc.r#type.value, exc.description.value);
     }
 
-    println!("\nSections ({}):", doc.sections().count());
-    for section in doc.sections() {
+    let all_sections: Vec<_> = doc
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            GoogleDocstringItem::Section(s) => Some(s),
+            _ => None,
+        })
+        .collect();
+    println!("\nSections ({}):", all_sections.len());
+    for section in &all_sections {
         println!(
             "  {} (header: {:?})",
             section.header.name.value, section.header.range

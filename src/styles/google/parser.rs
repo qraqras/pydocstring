@@ -382,15 +382,21 @@ fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usi
 ///
 /// assert_eq!(doc.summary.value, "Summary.");
 ///
-/// let args: Vec<_> = doc.sections().filter_map(|s| match &s.body {
-///     GoogleSectionBody::Args(v) => Some(v.iter()),
+/// let args: Vec<_> = doc.items.iter().filter_map(|item| match item {
+///     pydocstring::GoogleDocstringItem::Section(s) => match &s.body {
+///         GoogleSectionBody::Args(v) => Some(v.iter()),
+///         _ => None,
+///     },
 ///     _ => None,
 /// }).flatten().collect();
 /// assert_eq!(args.len(), 1);
 /// assert_eq!(args[0].name.value, "x");
 ///
-/// let returns: Vec<_> = doc.sections().filter_map(|s| match &s.body {
-///     GoogleSectionBody::Returns(v) => Some(v.iter()),
+/// let returns: Vec<_> = doc.items.iter().filter_map(|item| match item {
+///     pydocstring::GoogleDocstringItem::Section(s) => match &s.body {
+///         GoogleSectionBody::Returns(v) => Some(v.iter()),
+///         _ => None,
+///     },
 ///     _ => None,
 /// }).flatten().collect();
 /// assert_eq!(returns.len(), 1);
@@ -1143,9 +1149,13 @@ mod tests {
     // -- test-local helpers --
 
     fn args(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
-        doc.sections()
-            .filter_map(|s| match &s.body {
-                GoogleSectionBody::Args(v) => Some(v.iter()),
+        doc.items
+            .iter()
+            .filter_map(|item| match item {
+                GoogleDocstringItem::Section(s) => match &s.body {
+                    GoogleSectionBody::Args(v) => Some(v.iter()),
+                    _ => None,
+                },
                 _ => None,
             })
             .flatten()
@@ -1153,9 +1163,13 @@ mod tests {
     }
 
     fn returns(doc: &GoogleDocstring) -> Vec<&GoogleReturns> {
-        doc.sections()
-            .filter_map(|s| match &s.body {
-                GoogleSectionBody::Returns(v) => Some(v.iter()),
+        doc.items
+            .iter()
+            .filter_map(|item| match item {
+                GoogleDocstringItem::Section(s) => match &s.body {
+                    GoogleSectionBody::Returns(v) => Some(v.iter()),
+                    _ => None,
+                },
                 _ => None,
             })
             .flatten()
@@ -1163,9 +1177,13 @@ mod tests {
     }
 
     fn raises(doc: &GoogleDocstring) -> Vec<&GoogleException> {
-        doc.sections()
-            .filter_map(|s| match &s.body {
-                GoogleSectionBody::Raises(v) => Some(v.iter()),
+        doc.items
+            .iter()
+            .filter_map(|item| match item {
+                GoogleDocstringItem::Section(s) => match &s.body {
+                    GoogleSectionBody::Raises(v) => Some(v.iter()),
+                    _ => None,
+                },
                 _ => None,
             })
             .flatten()

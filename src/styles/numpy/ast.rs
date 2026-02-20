@@ -71,11 +71,13 @@ impl NumPySectionKind {
     /// `NumPySectionBody::Unknown` by the parser).
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
-            "parameters" | "params" => Some(Self::Parameters),
+            "parameters" | "parameter" | "params" | "param" => Some(Self::Parameters),
             "returns" | "return" => Some(Self::Returns),
             "yields" | "yield" => Some(Self::Yields),
             "receives" | "receive" => Some(Self::Receives),
-            "other parameters" | "other params" => Some(Self::OtherParameters),
+            "other parameters" | "other parameter" | "other params" | "other param" => {
+                Some(Self::OtherParameters)
+            }
             "raises" | "raise" => Some(Self::Raises),
             "warns" | "warn" => Some(Self::Warns),
             "warnings" | "warning" => Some(Self::Warnings),
