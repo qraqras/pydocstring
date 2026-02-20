@@ -35,8 +35,8 @@ pub struct GoogleSectionHeader {
     /// Section name (e.g., "Args", "Returns") with its span.
     /// Stored without the trailing colon.
     pub name: Spanned<String>,
-    /// The trailing colon (`:`) with its span.
-    pub colon: Spanned<String>,
+    /// The trailing colon (`:`) with its span, if present.
+    pub colon: Option<Spanned<String>>,
 }
 
 /// Body content of a Google-style section.

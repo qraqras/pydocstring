@@ -22,7 +22,7 @@ Raises:
 "#;
 
     let result = parse_google(docstring);
-    let doc = &result.value;
+    let doc = &result;
 
     println!("Summary: {}", doc.summary.value);
     if let Some(desc) = &doc.extended_summary {
@@ -71,12 +71,5 @@ Raises:
             "  {} (header: {:?})",
             section.header.name.value, section.header.range
         );
-    }
-
-    if !result.diagnostics.is_empty() {
-        println!("\nDiagnostics:");
-        for d in &result.diagnostics {
-            println!("  {}", d);
-        }
     }
 }

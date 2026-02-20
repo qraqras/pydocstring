@@ -20,7 +20,6 @@
 use crate::ast::{
     Spanned, build_line_offsets, indent_len, make_range, make_spanned, offset_to_line_col,
 };
-use crate::error::{Diagnostic, ParseResult};
 use crate::styles::google::ast::{
     GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturns,
     GoogleSection, GoogleSectionBody, GoogleSectionHeader, GoogleSeeAlsoItem, GoogleWarning,
@@ -30,44 +29,97 @@ use crate::styles::google::ast::{
 // Section detection
 // =============================================================================
 
+/// Known Google-style section names (lowercase, without colon).
+///
+/// Used to recognise colonless headers like `Args` in addition to the
+/// standard `Args:` form.
+const KNOWN_SECTIONS: &[&str] = &[
+    "args",
+    "arguments",
+    "parameters",
+    "params",
+    "keyword args",
+    "keyword arguments",
+    "other parameters",
+    "receive",
+    "receives",
+    "returns",
+    "return",
+    "yields",
+    "yield",
+    "raises",
+    "raise",
+    "warns",
+    "warn",
+    "attributes",
+    "attribute",
+    "methods",
+    "see also",
+    "note",
+    "notes",
+    "example",
+    "examples",
+    "todo",
+    "references",
+    "warning",
+    "warnings",
+    "attention",
+    "caution",
+    "danger",
+    "error",
+    "hint",
+    "important",
+    "tip",
+];
+
+/// Check if a lowercased, trimmed name matches a known section name.
+fn is_known_section_name(name: &str) -> bool {
+    KNOWN_SECTIONS.contains(&name)
+}
+
+/// Extract the section name from a trimmed header line.
+///
+/// Strips the trailing colon (and any whitespace before it) if present.
+/// Returns `(name, has_colon)` where `name` is the clean section name.
+fn extract_section_name(trimmed: &str) -> (&str, bool) {
+    if let Some(stripped) = trimmed.strip_suffix(':') {
+        (stripped.trim_end(), true)
+    } else {
+        (trimmed, false)
+    }
+}
+
 /// Check if a line is a Google-style section header at the given base indentation.
 ///
-/// A section header is a line at `base_indent` that looks like `Word:` or
-/// `Two Words:` — short, ends with `:`, no trailing content, no embedded colons.
-/// Actual section name dispatching is handled by the `match` in [`parse_google`],
-/// mirroring the NumPy parser's approach.
+/// A section header is a line at `base_indent` that matches one of:
+/// - `Word:` / `Two Words:` — standard form with colon
+/// - `Word :` — colon preceded by whitespace
+/// - `Word` — colonless form, only for known section names
+///
+/// For the colon forms, any short name (≤ 40 chars, starts with alpha, no
+/// embedded colons) is accepted (dispatched as Unknown if unrecognised).
+/// For the colonless form, only names in [`KNOWN_SECTIONS`] are accepted
+/// to avoid treating ordinary text lines as headers.
 fn is_section_header(line: &str, base_indent: usize) -> bool {
     let indent = indent_len(line);
     if indent != base_indent {
         return false;
     }
     let trimmed = line.trim();
-    if !trimmed.ends_with(':') || trimmed.len() < 2 {
+    let (name, has_colon) = extract_section_name(trimmed);
+
+    if name.is_empty() || !name.starts_with(|c: char| c.is_ascii_alphabetic()) {
         return false;
     }
-    let name_part = &trimmed[..trimmed.len() - 1];
-    !name_part.is_empty()
-        && name_part.len() <= 40
-        && !name_part.contains(':')
-        && name_part.starts_with(|c: char| c.is_ascii_alphabetic())
-}
 
-/// Detect the entry indentation level for a section body.
-///
-/// Scans forward from `start` to find the first non-empty line (that is not
-/// itself a section header). Returns its indentation level, or `base_indent + 4`
-/// as a sensible default.
-fn detect_entry_indent(lines: &[&str], start: usize, base_indent: usize) -> usize {
-    for line in &lines[start..] {
-        if is_section_header(line, base_indent) {
-            break;
-        }
-        let trimmed = line.trim();
-        if !trimmed.is_empty() {
-            return indent_len(line);
-        }
+    if has_colon {
+        // Standard / space-before-colon form: accept any short name without
+        // embedded colons.
+        name.len() <= 40 && !name.contains(':')
+    } else {
+        // Colonless form: only known names.
+        is_known_section_name(&name.to_ascii_lowercase())
     }
-    base_indent + 4
 }
 
 // =============================================================================
@@ -359,7 +411,7 @@ fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usi
 /// use pydocstring::GoogleSectionBody;
 ///
 /// let input = "Summary.\n\nArgs:\n    x (int): The value.\n\nReturns:\n    int: The result.";
-/// let doc = &parse_google(input).value;
+/// let doc = &parse_google(input);
 ///
 /// assert_eq!(doc.summary.value, "Summary.");
 ///
@@ -376,14 +428,14 @@ fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usi
 /// }).flatten().collect();
 /// assert_eq!(returns.len(), 1);
 /// ```
-pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
+pub fn parse_google(input: &str) -> GoogleDocstring {
     let offsets = build_line_offsets(input);
     let lines: Vec<&str> = input.lines().collect();
     let mut docstring = GoogleDocstring::new();
     docstring.source = input.to_string();
 
     if lines.is_empty() {
-        return ParseResult::ok(docstring);
+        return docstring;
     }
 
     let mut i = 0;
@@ -393,7 +445,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
         i += 1;
     }
     if i >= lines.len() {
-        return ParseResult::ok(docstring);
+        return docstring;
     }
 
     // Detect base indentation from the first non-empty line
@@ -456,8 +508,6 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
         }
     }
 
-    let mut diagnostics: Vec<Diagnostic> = Vec::new();
-
     // --- Sections ---
     while i < lines.len() {
         if lines[i].trim().is_empty() {
@@ -471,9 +521,26 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
             let header_trimmed = header_line.trim();
             let header_col = indent_len(header_line);
 
-            // Build section header (name without trailing colon)
-            let header_name = &header_trimmed[..header_trimmed.len() - 1];
-            let colon_col = header_col + header_name.len();
+            // Extract the section name and whether a colon is present.
+            // Handles "Args:", "Args :", and colonless "Args".
+            let (raw_name, has_colon) = extract_section_name(header_trimmed);
+            let header_name = raw_name.trim_end();
+
+            let colon = if has_colon {
+                // Colon is always the last character of the trimmed line
+                let colon_col = header_col + header_trimmed.len() - 1;
+                Some(make_spanned(
+                    ":".to_string(),
+                    i,
+                    colon_col,
+                    i,
+                    colon_col + 1,
+                    &offsets,
+                ))
+            } else {
+                None
+            };
+
             let header = GoogleSectionHeader {
                 range: make_range(
                     i,
@@ -490,62 +557,46 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
                     header_col + header_name.len(),
                     &offsets,
                 ),
-                colon: make_spanned(":".to_string(), i, colon_col, i, colon_col + 1, &offsets),
+                colon,
             };
 
             i += 1; // skip header line
 
-            let normalized = header_trimmed.to_ascii_lowercase();
+            let normalized = header_name.to_ascii_lowercase();
             let (body, next_i) = match normalized.as_str() {
                 // ----- Parameter-like sections -----
-                "args:" | "arguments:" | "parameters:" | "params:" => {
-                    let result = parse_args(&lines, i, &offsets, base_indent);
-                    diagnostics.extend(result.diagnostics);
-                    let (args, ni) = result.value;
+                "args" | "arguments" | "parameters" | "params" => {
+                    let (args, ni) = parse_args(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Args(args), ni)
                 }
-                "keyword args:" | "keyword arguments:" => {
-                    let result = parse_args(&lines, i, &offsets, base_indent);
-                    diagnostics.extend(result.diagnostics);
-                    let (args, ni) = result.value;
+                "keyword args" | "keyword arguments" => {
+                    let (args, ni) = parse_args(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::KeywordArgs(args), ni)
                 }
-                "other parameters:" => {
-                    let result = parse_args(&lines, i, &offsets, base_indent);
-                    diagnostics.extend(result.diagnostics);
-                    let (args, ni) = result.value;
+                "other parameters" => {
+                    let (args, ni) = parse_args(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::OtherParameters(args), ni)
                 }
-                "receive:" | "receives:" => {
-                    let result = parse_args(&lines, i, &offsets, base_indent);
-                    diagnostics.extend(result.diagnostics);
-                    let (args, ni) = result.value;
+                "receive" | "receives" => {
+                    let (args, ni) = parse_args(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Receives(args), ni)
                 }
                 // ----- Return/yield sections -----
-                "returns:" | "return:" => {
-                    let result = parse_returns_section(&lines, i, &offsets, base_indent);
-                    diagnostics.extend(result.diagnostics);
-                    let (returns, ni) = result.value;
+                "returns" | "return" => {
+                    let (returns, ni) = parse_returns_section(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Returns(returns), ni)
                 }
-                "yields:" | "yield:" => {
-                    let result = parse_returns_section(&lines, i, &offsets, base_indent);
-                    diagnostics.extend(result.diagnostics);
-                    let (yields, ni) = result.value;
+                "yields" | "yield" => {
+                    let (yields, ni) = parse_returns_section(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Yields(yields), ni)
                 }
                 // ----- Exception/warning sections -----
-                "raises:" | "raise:" => {
-                    let result = parse_raises_section(&lines, i, &offsets, base_indent);
-                    diagnostics.extend(result.diagnostics);
-                    let (raises, ni) = result.value;
+                "raises" | "raise" => {
+                    let (raises, ni) = parse_raises_section(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Raises(raises), ni)
                 }
-                "warns:" | "warn:" => {
-                    let result = parse_raises_section(&lines, i, &offsets, base_indent);
-                    diagnostics.extend(result.diagnostics);
-                    let (raises, ni) = result.value;
+                "warns" | "warn" => {
+                    let (raises, ni) = parse_raises_section(&lines, i, &offsets, base_indent);
                     let warns = raises
                         .into_iter()
                         .map(|e| GoogleWarning {
@@ -557,10 +608,8 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
                     (GoogleSectionBody::Warns(warns), ni)
                 }
                 // ----- Structured sections -----
-                "attributes:" | "attribute:" => {
-                    let result = parse_args(&lines, i, &offsets, base_indent);
-                    diagnostics.extend(result.diagnostics);
-                    let (args, ni) = result.value;
+                "attributes" | "attribute" => {
+                    let (args, ni) = parse_args(&lines, i, &offsets, base_indent);
                     let attrs = args
                         .into_iter()
                         .map(|a| GoogleAttribute {
@@ -572,10 +621,8 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
                         .collect();
                     (GoogleSectionBody::Attributes(attrs), ni)
                 }
-                "methods:" => {
-                    let result = parse_args(&lines, i, &offsets, base_indent);
-                    diagnostics.extend(result.diagnostics);
-                    let (args, ni) = result.value;
+                "methods" => {
+                    let (args, ni) = parse_args(&lines, i, &offsets, base_indent);
                     let methods = args
                         .into_iter()
                         .map(|a| GoogleMethod {
@@ -586,118 +633,64 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
                         .collect();
                     (GoogleSectionBody::Methods(methods), ni)
                 }
-                "see also:" => {
-                    let result = parse_see_also_section(&lines, i, &offsets, base_indent);
-                    diagnostics.extend(result.diagnostics);
-                    let (items, ni) = result.value;
+                "see also" => {
+                    let (items, ni) = parse_see_also_section(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::SeeAlso(items), ni)
                 }
                 // ----- Free-text / admonition sections -----
-                "note:" | "notes:" => {
-                    let (content, ni) =
-                        parse_section_content(&lines, i, &offsets, base_indent).value;
+                "note" | "notes" => {
+                    let (content, ni) = parse_section_content(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Notes(content), ni)
                 }
-                "example:" | "examples:" => {
-                    let (content, ni) =
-                        parse_section_content(&lines, i, &offsets, base_indent).value;
+                "example" | "examples" => {
+                    let (content, ni) = parse_section_content(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Examples(content), ni)
                 }
-                "todo:" => {
-                    let (content, ni) =
-                        parse_section_content(&lines, i, &offsets, base_indent).value;
+                "todo" => {
+                    let (content, ni) = parse_section_content(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Todo(content), ni)
                 }
-                "references:" => {
-                    let (content, ni) =
-                        parse_section_content(&lines, i, &offsets, base_indent).value;
+                "references" => {
+                    let (content, ni) = parse_section_content(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::References(content), ni)
                 }
-                "warning:" | "warnings:" => {
-                    let (content, ni) =
-                        parse_section_content(&lines, i, &offsets, base_indent).value;
+                "warning" | "warnings" => {
+                    let (content, ni) = parse_section_content(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Warnings(content), ni)
                 }
-                "attention:" => {
-                    let (content, ni) =
-                        parse_section_content(&lines, i, &offsets, base_indent).value;
+                "attention" => {
+                    let (content, ni) = parse_section_content(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Attention(content), ni)
                 }
-                "caution:" => {
-                    let (content, ni) =
-                        parse_section_content(&lines, i, &offsets, base_indent).value;
+                "caution" => {
+                    let (content, ni) = parse_section_content(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Caution(content), ni)
                 }
-                "danger:" => {
-                    let (content, ni) =
-                        parse_section_content(&lines, i, &offsets, base_indent).value;
+                "danger" => {
+                    let (content, ni) = parse_section_content(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Danger(content), ni)
                 }
-                "error:" => {
-                    let (content, ni) =
-                        parse_section_content(&lines, i, &offsets, base_indent).value;
+                "error" => {
+                    let (content, ni) = parse_section_content(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Error(content), ni)
                 }
-                "hint:" => {
-                    let (content, ni) =
-                        parse_section_content(&lines, i, &offsets, base_indent).value;
+                "hint" => {
+                    let (content, ni) = parse_section_content(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Hint(content), ni)
                 }
-                "important:" => {
-                    let (content, ni) =
-                        parse_section_content(&lines, i, &offsets, base_indent).value;
+                "important" => {
+                    let (content, ni) = parse_section_content(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Important(content), ni)
                 }
-                "tip:" => {
-                    let (content, ni) =
-                        parse_section_content(&lines, i, &offsets, base_indent).value;
+                "tip" => {
+                    let (content, ni) = parse_section_content(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Tip(content), ni)
                 }
                 _ => {
-                    let (content, ni) =
-                        parse_section_content(&lines, i, &offsets, base_indent).value;
+                    let (content, ni) = parse_section_content(&lines, i, &offsets, base_indent);
                     (GoogleSectionBody::Unknown(content), ni)
                 }
             };
-
-            // Detect empty section body
-            let is_empty = match &body {
-                GoogleSectionBody::Args(v)
-                | GoogleSectionBody::KeywordArgs(v)
-                | GoogleSectionBody::OtherParameters(v)
-                | GoogleSectionBody::Receives(v) => v.is_empty(),
-                GoogleSectionBody::Returns(v) | GoogleSectionBody::Yields(v) => v.is_empty(),
-                GoogleSectionBody::Raises(v) => v.is_empty(),
-                GoogleSectionBody::Warns(v) => v.is_empty(),
-                GoogleSectionBody::Attributes(v) => v.is_empty(),
-                GoogleSectionBody::Methods(v) => v.is_empty(),
-                GoogleSectionBody::SeeAlso(v) => v.is_empty(),
-                GoogleSectionBody::Notes(s)
-                | GoogleSectionBody::Examples(s)
-                | GoogleSectionBody::Todo(s)
-                | GoogleSectionBody::References(s)
-                | GoogleSectionBody::Warnings(s)
-                | GoogleSectionBody::Attention(s)
-                | GoogleSectionBody::Caution(s)
-                | GoogleSectionBody::Danger(s)
-                | GoogleSectionBody::Error(s)
-                | GoogleSectionBody::Hint(s)
-                | GoogleSectionBody::Important(s)
-                | GoogleSectionBody::Tip(s)
-                | GoogleSectionBody::Unknown(s) => s.value.is_empty(),
-            };
-            if is_empty {
-                diagnostics.push(Diagnostic::warning(
-                    make_range(
-                        section_start,
-                        header_col,
-                        section_start,
-                        header_col + header_trimmed.len(),
-                        &offsets,
-                    ),
-                    format!("empty section body for '{}'", header_name),
-                ));
-            }
 
             // Compute section span
             let section_end_line = {
@@ -735,7 +728,7 @@ pub fn parse_google(input: &str) -> ParseResult<GoogleDocstring> {
     let last_col = lines.last().map(|l| l.len()).unwrap_or(0);
     docstring.range = make_range(0, 0, last_line, last_col, &offsets);
 
-    ParseResult::with_diagnostics(docstring, diagnostics)
+    docstring
 }
 
 // =============================================================================
@@ -748,11 +741,10 @@ fn parse_args(
     start: usize,
     offsets: &[usize],
     base_indent: usize,
-) -> ParseResult<(Vec<GoogleArg>, usize)> {
+) -> (Vec<GoogleArg>, usize) {
     let mut args = Vec::new();
-    let mut diagnostics = Vec::new();
     let mut i = start;
-    let entry_indent = detect_entry_indent(lines, start, base_indent);
+    let mut entry_indent: Option<usize> = None;
 
     while i < lines.len() {
         if is_section_header(lines[i], base_indent) {
@@ -772,33 +764,12 @@ fn parse_args(
             break;
         }
 
+        let ei = *entry_indent.get_or_insert(indent);
+
         // Entry line at entry indent level
-        if indent <= entry_indent {
+        if indent <= ei {
             let col = indent;
             let entry_start = i;
-
-            // Detect unclosed type parentheses before parsing
-            if let Some(sp) = trimmed.find(" (") {
-                let paren_start = sp + 1;
-                if find_matching_close(trimmed, paren_start).is_none() {
-                    let paren_col = col + paren_start;
-                    diagnostics.push(Diagnostic::warning(
-                        make_range(i, paren_col, i, col + trimmed.len(), offsets),
-                        "unclosed parenthesis in type annotation",
-                    ));
-                }
-            }
-
-            // Detect missing colon separator
-            if !trimmed.contains(':') {
-                diagnostics.push(Diagnostic::warning(
-                    make_range(i, col, i, col + trimmed.len(), offsets),
-                    format!(
-                        "missing ':' after parameter name '{}'",
-                        trimmed.split_whitespace().next().unwrap_or(trimmed)
-                    ),
-                ));
-            }
 
             let header = parse_entry_header(trimmed);
 
@@ -850,8 +821,7 @@ fn parse_args(
             let first_desc_col = col + desc_off;
 
             i += 1;
-            let (cont_desc, next_i) =
-                collect_description(lines, i, offsets, entry_indent, base_indent);
+            let (cont_desc, next_i) = collect_description(lines, i, offsets, ei, base_indent);
             let full_desc = build_full_description(
                 first_desc,
                 first_desc_col,
@@ -859,14 +829,6 @@ fn parse_args(
                 &cont_desc,
                 offsets,
             );
-
-            // Detect missing description
-            if full_desc.value.is_empty() {
-                diagnostics.push(Diagnostic::hint(
-                    make_range(entry_start, col, entry_start, col + trimmed.len(), offsets),
-                    format!("missing description for parameter '{}'", header.name),
-                ));
-            }
 
             let (end_line, end_col) = if full_desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
@@ -892,7 +854,7 @@ fn parse_args(
         }
     }
 
-    ParseResult::with_diagnostics((args, i), diagnostics)
+    (args, i)
 }
 
 // =============================================================================
@@ -911,11 +873,10 @@ fn parse_returns_section(
     start: usize,
     offsets: &[usize],
     base_indent: usize,
-) -> ParseResult<(Vec<GoogleReturns>, usize)> {
+) -> (Vec<GoogleReturns>, usize) {
     let mut returns = Vec::new();
-    let mut diagnostics = Vec::new();
     let mut i = start;
-    let entry_indent = detect_entry_indent(lines, start, base_indent);
+    let mut entry_indent: Option<usize> = None;
 
     while i < lines.len() {
         if is_section_header(lines[i], base_indent) {
@@ -935,7 +896,9 @@ fn parse_returns_section(
             break;
         }
 
-        if indent <= entry_indent {
+        let ei = *entry_indent.get_or_insert(indent);
+
+        if indent <= ei {
             let col = indent;
             let entry_start = i;
 
@@ -971,23 +934,9 @@ fn parse_returns_section(
             };
 
             i += 1;
-            let (cont_desc, next_i) =
-                collect_description(lines, i, offsets, entry_indent, base_indent);
+            let (cont_desc, next_i) = collect_description(lines, i, offsets, ei, base_indent);
             let full_desc =
                 build_full_description(first_desc, desc_col, entry_start, &cont_desc, offsets);
-
-            // Detect missing description
-            if full_desc.value.is_empty() {
-                let label = return_type
-                    .as_ref()
-                    .map_or("return entry".to_string(), |rt| {
-                        format!("return type '{}'", rt.value)
-                    });
-                diagnostics.push(Diagnostic::hint(
-                    make_range(entry_start, col, entry_start, col + trimmed.len(), offsets),
-                    format!("missing description for {}", label),
-                ));
-            }
 
             let (end_line, end_col) = if full_desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
@@ -1011,7 +960,7 @@ fn parse_returns_section(
         }
     }
 
-    ParseResult::with_diagnostics((returns, i), diagnostics)
+    (returns, i)
 }
 
 // =============================================================================
@@ -1026,11 +975,10 @@ fn parse_raises_section(
     start: usize,
     offsets: &[usize],
     base_indent: usize,
-) -> ParseResult<(Vec<GoogleException>, usize)> {
+) -> (Vec<GoogleException>, usize) {
     let mut raises = Vec::new();
-    let mut diagnostics = Vec::new();
     let mut i = start;
-    let entry_indent = detect_entry_indent(lines, start, base_indent);
+    let mut entry_indent: Option<usize> = None;
 
     while i < lines.len() {
         if is_section_header(lines[i], base_indent) {
@@ -1050,20 +998,11 @@ fn parse_raises_section(
             break;
         }
 
-        if indent <= entry_indent {
+        let ei = *entry_indent.get_or_insert(indent);
+
+        if indent <= ei {
             let col = indent;
             let entry_start = i;
-
-            // Detect missing colon separator
-            if !trimmed.contains(':') {
-                diagnostics.push(Diagnostic::warning(
-                    make_range(i, col, i, col + trimmed.len(), offsets),
-                    format!(
-                        "missing ':' after exception type '{}'",
-                        trimmed.split_whitespace().next().unwrap_or(trimmed)
-                    ),
-                ));
-            }
 
             let (exc_type_str, first_desc, desc_col) = if let Some(colon_pos) = trimmed.find(": ") {
                 let et = &trimmed[..colon_pos];
@@ -1085,18 +1024,9 @@ fn parse_raises_section(
             );
 
             i += 1;
-            let (cont_desc, next_i) =
-                collect_description(lines, i, offsets, entry_indent, base_indent);
+            let (cont_desc, next_i) = collect_description(lines, i, offsets, ei, base_indent);
             let full_desc =
                 build_full_description(first_desc, desc_col, entry_start, &cont_desc, offsets);
-
-            // Detect missing description
-            if full_desc.value.is_empty() {
-                diagnostics.push(Diagnostic::hint(
-                    make_range(entry_start, col, entry_start, col + trimmed.len(), offsets),
-                    format!("missing description for exception '{}'", exc_type_str),
-                ));
-            }
 
             let (end_line, end_col) = if full_desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
@@ -1120,7 +1050,7 @@ fn parse_raises_section(
         }
     }
 
-    ParseResult::with_diagnostics((raises, i), diagnostics)
+    (raises, i)
 }
 
 // =============================================================================
@@ -1135,7 +1065,7 @@ fn parse_section_content(
     start: usize,
     offsets: &[usize],
     base_indent: usize,
-) -> ParseResult<(Spanned<String>, usize)> {
+) -> (Spanned<String>, usize) {
     let mut content_lines: Vec<&str> = Vec::new();
     let mut i = start;
     let mut first_content_line: Option<usize> = None;
@@ -1182,7 +1112,7 @@ fn parse_section_content(
         Spanned::empty_string()
     };
 
-    ParseResult::ok((spanned, i))
+    (spanned, i)
 }
 
 // =============================================================================
@@ -1203,11 +1133,10 @@ fn parse_see_also_section(
     start: usize,
     offsets: &[usize],
     base_indent: usize,
-) -> ParseResult<(Vec<GoogleSeeAlsoItem>, usize)> {
+) -> (Vec<GoogleSeeAlsoItem>, usize) {
     let mut items = Vec::new();
-    let diagnostics = Vec::new();
     let mut i = start;
-    let entry_indent = detect_entry_indent(lines, start, base_indent);
+    let mut entry_indent: Option<usize> = None;
 
     while i < lines.len() {
         if is_section_header(lines[i], base_indent) {
@@ -1227,7 +1156,9 @@ fn parse_see_also_section(
             break;
         }
 
-        if indent <= entry_indent {
+        let ei = *entry_indent.get_or_insert(indent);
+
+        if indent <= ei {
             let col = indent;
             let entry_start = i;
 
@@ -1263,8 +1194,7 @@ fn parse_see_also_section(
             }
 
             i += 1;
-            let (cont_desc, next_i) =
-                collect_description(lines, i, offsets, entry_indent, base_indent);
+            let (cont_desc, next_i) = collect_description(lines, i, offsets, ei, base_indent);
             let full_desc =
                 build_full_description(first_desc, desc_col, entry_start, &cont_desc, offsets);
 
@@ -1295,7 +1225,7 @@ fn parse_see_also_section(
         }
     }
 
-    ParseResult::with_diagnostics((items, i), diagnostics)
+    (items, i)
 }
 
 // =============================================================================
@@ -1345,10 +1275,11 @@ mod tests {
 
     #[test]
     fn test_is_section_header() {
+        // Standard colon form
         assert!(is_section_header("Args:", 0));
         assert!(is_section_header("    Args:", 4));
         assert!(!is_section_header("    Args:", 0));
-        // "NotASection:" is now detected as an unknown section header
+        // "NotASection:" is still detected as an unknown section header (has colon)
         assert!(is_section_header("NotASection:", 0));
         assert!(is_section_header("Returns:", 0));
         // Case-insensitive
@@ -1363,18 +1294,22 @@ mod tests {
         ));
         // Not a section header: starts with space but indent doesn't match
         assert!(!is_section_header("  Custom:", 4));
-    }
 
-    #[test]
-    fn test_detect_entry_indent_basic() {
-        let lines = vec!["    x (int): Description."];
-        assert_eq!(detect_entry_indent(&lines, 0, 0), 4);
+        // Space-before-colon form
+        assert!(is_section_header("Args :", 0));
+        assert!(is_section_header("Returns :", 0));
+        assert!(is_section_header("    Args :", 4));
 
-        let lines = vec!["", "    x (int): Description."];
-        assert_eq!(detect_entry_indent(&lines, 0, 0), 4);
-
-        // Default when empty
-        assert_eq!(detect_entry_indent(&[], 0, 0), 4);
+        // Colonless form — only known section names
+        assert!(is_section_header("Args", 0));
+        assert!(is_section_header("Returns", 0));
+        assert!(is_section_header("    Args", 4));
+        assert!(is_section_header("args", 0));
+        assert!(is_section_header("RETURNS", 0));
+        assert!(is_section_header("See Also", 0));
+        // Unknown names without colon are NOT headers
+        assert!(!is_section_header("NotASection", 0));
+        assert!(!is_section_header("SomeWord", 0));
     }
 
     // -- entry header parsing --
@@ -1452,26 +1387,26 @@ mod tests {
 
     #[test]
     fn test_parse_simple_summary() {
-        let result = parse_google("Brief description.").value;
+        let result = parse_google("Brief description.");
         assert_eq!(result.summary.value, "Brief description.");
     }
 
     #[test]
     fn test_parse_empty() {
-        let result = parse_google("").value;
+        let result = parse_google("");
         assert_eq!(result.summary.value, "");
     }
 
     #[test]
     fn test_parse_whitespace_only() {
-        let result = parse_google("   \n   \n").value;
+        let result = parse_google("   \n   \n");
         assert_eq!(result.summary.value, "");
     }
 
     #[test]
     fn test_parse_summary_with_description() {
         let input = "Brief summary.\n\nExtended description.\nMore text.";
-        let result = parse_google(input).value;
+        let result = parse_google(input);
         assert_eq!(result.summary.value, "Brief summary.");
         assert_eq!(
             result.extended_summary.as_ref().unwrap().value,
@@ -1482,7 +1417,7 @@ mod tests {
     #[test]
     fn test_parse_args() {
         let input = "Summary.\n\nArgs:\n    x (int): The value.\n    y (str): The name.";
-        let result = parse_google(input).value;
+        let result = parse_google(input);
         let a = args(&result);
         assert_eq!(a.len(), 2);
         assert_eq!(a[0].name.value, "x");
@@ -1494,7 +1429,7 @@ mod tests {
     #[test]
     fn test_parse_args_multiline_desc() {
         let input = "Summary.\n\nArgs:\n    x (int): First line.\n        Second line.";
-        let result = parse_google(input).value;
+        let result = parse_google(input);
         assert_eq!(
             args(&result)[0].description.value,
             "First line.\nSecond line."
@@ -1504,7 +1439,7 @@ mod tests {
     #[test]
     fn test_parse_returns() {
         let input = "Summary.\n\nReturns:\n    int: The result.";
-        let result = parse_google(input).value;
+        let result = parse_google(input);
         let r = returns(&result);
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].return_type.as_ref().unwrap().value, "int");
@@ -1514,14 +1449,14 @@ mod tests {
     #[test]
     fn test_parse_returns_multiple() {
         let input = "Summary.\n\nReturns:\n    int: The count.\n    str: The message.";
-        let result = parse_google(input).value;
+        let result = parse_google(input);
         assert_eq!(returns(&result).len(), 2);
     }
 
     #[test]
     fn test_parse_raises() {
         let input = "Summary.\n\nRaises:\n    ValueError: If invalid.";
-        let result = parse_google(input).value;
+        let result = parse_google(input);
         let r = raises(&result);
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].r#type.value, "ValueError");
@@ -1531,7 +1466,7 @@ mod tests {
     #[test]
     fn test_parse_span_accuracy() {
         let input = "Summary line.";
-        let result = parse_google(input).value;
+        let result = parse_google(input);
         assert_eq!(result.summary.range.start().raw(), 0);
         assert_eq!(result.summary.range.end().raw(), 13);
         assert_eq!(

@@ -34,65 +34,57 @@ Examples
 "#;
 
     let result = parse_numpy(docstring);
-    let doc = &result.value;
-    {
-        println!("Summary: {}", doc.summary.value);
-        println!(
-            "\nExtended Summary: {}",
-            doc.extended_summary
-                .as_ref()
-                .map(|s| s.value.as_str())
-                .unwrap_or_default()
-        );
+    let doc = &result;
 
-        for section in &doc.sections {
-            match &section.body {
-                NumPySectionBody::Parameters(params) => {
-                    println!("\nParameters:");
-                    for param in params {
-                        let names: Vec<&str> =
-                            param.names.iter().map(|n| n.value.as_str()).collect();
-                        println!(
-                            "  - {:?}: {:?}",
-                            names,
-                            param.r#type.as_ref().map(|t| t.value.as_str())
-                        );
-                        println!("    {}", param.description.value);
-                    }
-                }
-                NumPySectionBody::Returns(rets) => {
-                    println!("\nReturns:");
-                    for ret in rets {
-                        println!(
-                            "  Type: {:?}",
-                            ret.return_type.as_ref().map(|t| t.value.as_str())
-                        );
-                        println!("  {}", ret.description.value);
-                    }
-                }
-                NumPySectionBody::Raises(excs) => {
-                    println!("\nRaises:");
-                    for exc in excs {
-                        println!("  - {}: {}", exc.r#type.value, exc.description.value);
-                    }
-                }
-                NumPySectionBody::Notes(text) => {
-                    println!("\nNotes:");
-                    println!("  {}", text.value);
-                }
-                NumPySectionBody::Examples(text) => {
-                    println!("\nExamples:");
-                    println!("{}", text.value);
-                }
-                _ => {}
-            }
-        }
+    println!("Summary: {}", doc.summary.value);
+    println!(
+        "\nExtended Summary: {}",
+        doc.extended_summary
+            .as_ref()
+            .map(|s| s.value.as_str())
+            .unwrap_or_default()
+    );
 
-        if !result.diagnostics.is_empty() {
-            println!("\nDiagnostics:");
-            for d in &result.diagnostics {
-                println!("  {}", d);
+    for section in &doc.sections {
+        match &section.body {
+            NumPySectionBody::Parameters(params) => {
+                println!("\nParameters:");
+                for param in params {
+                    let names: Vec<&str> =
+                        param.names.iter().map(|n| n.value.as_str()).collect();
+                    println!(
+                        "  - {:?}: {:?}",
+                        names,
+                        param.r#type.as_ref().map(|t| t.value.as_str())
+                    );
+                    println!("    {}", param.description.value);
+                }
             }
+            NumPySectionBody::Returns(rets) => {
+                println!("\nReturns:");
+                for ret in rets {
+                    println!(
+                        "  Type: {:?}",
+                        ret.return_type.as_ref().map(|t| t.value.as_str())
+                    );
+                    println!("  {}", ret.description.value);
+                }
+            }
+            NumPySectionBody::Raises(excs) => {
+                println!("\nRaises:");
+                for exc in excs {
+                    println!("  - {}: {}", exc.r#type.value, exc.description.value);
+                }
+            }
+            NumPySectionBody::Notes(text) => {
+                println!("\nNotes:");
+                println!("  {}", text.value);
+            }
+            NumPySectionBody::Examples(text) => {
+                println!("\nExamples:");
+                println!("{}", text.value);
+            }
+            _ => {}
         }
     }
 }
