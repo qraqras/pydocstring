@@ -20,11 +20,12 @@
 //! ```
 
 use crate::ast::{
-    Spanned, build_line_offsets, indent_len, make_range, make_spanned, offset_to_line_col,
+    Spanned, build_line_offsets, indent_len, line_text, make_range, make_spanned, num_lines,
+    offset_to_line_col,
 };
 use crate::styles::numpy::ast::{
     NumPyDeprecation, NumPyDocstring, NumPyException, NumPyParameter, NumPyReturns, NumPySection,
-    NumPySectionBody, NumPySectionHeader,
+    NumPySectionBody, NumPySectionHeader, NumPySectionKind,
 };
 
 // =============================================================================
@@ -37,15 +38,20 @@ fn is_underline(trimmed: &str) -> bool {
 }
 
 /// Find the line index where the next section header starts at or after `start`,
-/// or `lines.len()` if there are no more sections.
+/// or `total_lines` if there are no more sections.
 ///
 /// Uses the "pending line" pattern: each line is read once, and when a dash
 /// line is encountered the previous non-empty line is identified as the header.
-fn find_next_section_start(lines: &[&str], start: usize) -> usize {
+fn find_next_section_start(
+    source: &str,
+    start: usize,
+    offsets: &[usize],
+    total_lines: usize,
+) -> usize {
     let mut prev_non_empty = false;
     let mut prev_idx = start;
-    for i in start..lines.len() {
-        let trimmed = lines[i].trim();
+    for i in start..total_lines {
+        let trimmed = line_text(source, i, offsets).trim();
         if prev_non_empty && is_underline(trimmed) {
             return prev_idx;
         }
@@ -54,7 +60,7 @@ fn find_next_section_start(lines: &[&str], start: usize) -> usize {
             prev_idx = i;
         }
     }
-    lines.len()
+    total_lines
 }
 
 // =============================================================================
@@ -65,7 +71,7 @@ fn find_next_section_start(lines: &[&str], start: usize) -> usize {
 /// lines between paragraphs. Returns the spanned description text and the next
 /// line index to process.
 fn collect_description(
-    lines: &[&str],
+    source: &str,
     start: usize,
     end: usize,
     offsets: &[usize],
@@ -77,7 +83,7 @@ fn collect_description(
     let mut last_content_line = start;
 
     while i < end {
-        let line = lines[i];
+        let line = line_text(source, i, offsets);
         // Non-empty line at or below entry indentation signals end of description
         if !line.trim().is_empty() && indent_len(line) <= entry_indent {
             break;
@@ -104,9 +110,11 @@ fn collect_description(
     let text = desc_parts.join("\n");
 
     if let Some(first) = first_content_line {
-        let first_col = indent_len(lines[first]);
-        let last_trimmed = lines[last_content_line].trim();
-        let last_col = indent_len(lines[last_content_line]) + last_trimmed.len();
+        let first_line = line_text(source, first, offsets);
+        let first_col = indent_len(first_line);
+        let last_line = line_text(source, last_content_line, offsets);
+        let last_trimmed = last_line.trim();
+        let last_col = indent_len(last_line) + last_trimmed.len();
         (
             make_spanned(text, first, first_col, last_content_line, last_col, offsets),
             i,
@@ -123,29 +131,29 @@ fn collect_description(
 /// Parse a NumPy-style docstring.
 pub fn parse_numpy(input: &str) -> NumPyDocstring {
     let offsets = build_line_offsets(input);
-    let lines: Vec<&str> = input.lines().collect();
-    let first_section = find_next_section_start(&lines, 0);
+    let total_lines = num_lines(input, &offsets);
+    let first_section = find_next_section_start(input, 0, &offsets, total_lines);
     let mut docstring = NumPyDocstring::new();
     docstring.source = input.to_string();
 
-    if lines.is_empty() {
+    if total_lines == 0 {
         return docstring;
     }
 
     let mut i = 0;
 
     // --- Skip leading blank lines ---
-    while i < lines.len() && lines[i].trim().is_empty() {
+    while i < total_lines && line_text(input, i, &offsets).trim().is_empty() {
         i += 1;
     }
 
-    if i >= lines.len() {
+    if i >= total_lines {
         return docstring;
     }
 
     // --- Summary ---
     if i < first_section {
-        let line = lines[i];
+        let line = line_text(input, i, &offsets);
         let trimmed = line.trim();
         if !trimmed.is_empty() {
             let col = indent_len(line);
@@ -162,15 +170,16 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
     }
 
     // skip blanks
-    while i < lines.len() && lines[i].trim().is_empty() {
+    while i < total_lines && line_text(input, i, &offsets).trim().is_empty() {
         i += 1;
     }
 
     // --- Deprecation directive ---
-    if i < lines.len() {
-        let trimmed = lines[i].trim();
+    if i < total_lines {
+        let line = line_text(input, i, &offsets);
+        let trimmed = line.trim();
         if trimmed.starts_with(".. deprecated::") {
-            let col = indent_len(lines[i]);
+            let col = indent_len(line);
             let prefix = ".. deprecated::";
             let after_prefix = &trimmed[prefix.len()..];
             let ws_len = after_prefix.len() - after_prefix.trim_start().len();
@@ -191,7 +200,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
 
             // Collect indented body lines
             let (desc_spanned, next_i) =
-                collect_description(&lines, i, first_section, &offsets, col);
+                collect_description(input, i, first_section, &offsets, col);
             i = next_i;
 
             // Compute deprecation span
@@ -208,7 +217,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
             });
 
             // skip blanks
-            while i < lines.len() && lines[i].trim().is_empty() {
+            while i < total_lines && line_text(input, i, &offsets).trim().is_empty() {
                 i += 1;
             }
         }
@@ -221,7 +230,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
         let mut last_non_empty_line = i;
 
         while i < first_section {
-            let trimmed = lines[i].trim();
+            let trimmed = line_text(input, i, &offsets).trim();
             desc_lines.push(trimmed);
             if !trimmed.is_empty() {
                 last_non_empty_line = i;
@@ -235,9 +244,11 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
 
         let joined = desc_lines.join("\n");
         if !joined.trim().is_empty() {
-            let first_col = indent_len(lines[start_line]);
-            let last_trimmed = lines[last_non_empty_line].trim();
-            let last_col = indent_len(lines[last_non_empty_line]) + last_trimmed.len();
+            let first_line = line_text(input, start_line, &offsets);
+            let first_col = indent_len(first_line);
+            let last_line = line_text(input, last_non_empty_line, &offsets);
+            let last_trimmed = last_line.trim();
+            let last_col = indent_len(last_line) + last_trimmed.len();
             docstring.extended_summary = Some(make_spanned(
                 joined,
                 start_line,
@@ -251,11 +262,14 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
 
     // --- Sections ---
     let mut i = first_section;
-    while i < lines.len() {
+    while i < total_lines {
         // Verify this line is actually a section header (non-empty + next is underline)
-        let header_line = lines[i];
+        let header_line = line_text(input, i, &offsets);
         let header_trimmed = header_line.trim();
-        if header_trimmed.is_empty() || i + 1 >= lines.len() || !is_underline(lines[i + 1].trim()) {
+        if header_trimmed.is_empty()
+            || i + 1 >= total_lines
+            || !is_underline(line_text(input, i + 1, &offsets).trim())
+        {
             i += 1;
             continue;
         }
@@ -263,7 +277,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
         let section_start = i;
         let header_col = indent_len(header_line);
 
-        let underline_line = lines[i + 1];
+        let underline_line = line_text(input, i + 1, &offsets);
         let underline_trimmed = underline_line.trim();
         let underline_col = indent_len(underline_line);
 
@@ -295,35 +309,41 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
 
         i += 2; // skip header + underline
 
-        let section_end = find_next_section_start(&lines, i);
+        let section_end = find_next_section_start(input, i, &offsets, total_lines);
         let normalized = header_trimmed.to_ascii_lowercase();
-        let (body, next_i) = match normalized.as_str() {
-            "parameters" | "params" => {
-                let (params, ni) = parse_parameters(&lines, i, section_end, &offsets, header_col);
+        let section_kind = NumPySectionKind::from_name(&normalized);
+        let (body, next_i) = match section_kind {
+            Some(NumPySectionKind::Parameters) => {
+                let (params, ni) =
+                    parse_parameters(input, i, section_end, &offsets, header_col);
                 (NumPySectionBody::Parameters(params), ni)
             }
-            "returns" | "return" => {
-                let (rets, ni) = parse_returns(&lines, i, section_end, &offsets, header_col);
+            Some(NumPySectionKind::Returns) => {
+                let (rets, ni) = parse_returns(input, i, section_end, &offsets, header_col);
                 (NumPySectionBody::Returns(rets), ni)
             }
-            "raises" | "raise" => {
-                let (raises, ni) = parse_raises(&lines, i, section_end, &offsets, header_col);
+            Some(NumPySectionKind::Raises) => {
+                let (raises, ni) =
+                    parse_raises(input, i, section_end, &offsets, header_col);
                 (NumPySectionBody::Raises(raises), ni)
             }
-            "yields" | "yield" => {
-                let (yields, ni) = parse_returns(&lines, i, section_end, &offsets, header_col);
+            Some(NumPySectionKind::Yields) => {
+                let (yields, ni) = parse_returns(input, i, section_end, &offsets, header_col);
                 (NumPySectionBody::Yields(yields), ni)
             }
-            "receives" | "receive" => {
-                let (receives, ni) = parse_parameters(&lines, i, section_end, &offsets, header_col);
+            Some(NumPySectionKind::Receives) => {
+                let (receives, ni) =
+                    parse_parameters(input, i, section_end, &offsets, header_col);
                 (NumPySectionBody::Receives(receives), ni)
             }
-            "other parameters" | "other params" => {
-                let (params, ni) = parse_parameters(&lines, i, section_end, &offsets, header_col);
+            Some(NumPySectionKind::OtherParameters) => {
+                let (params, ni) =
+                    parse_parameters(input, i, section_end, &offsets, header_col);
                 (NumPySectionBody::OtherParameters(params), ni)
             }
-            "warns" | "warn" => {
-                let (raises, ni) = parse_raises(&lines, i, section_end, &offsets, header_col);
+            Some(NumPySectionKind::Warns) => {
+                let (raises, ni) =
+                    parse_raises(input, i, section_end, &offsets, header_col);
                 let warns = raises
                     .into_iter()
                     .map(|e| crate::styles::numpy::ast::NumPyWarning {
@@ -334,28 +354,34 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                     .collect();
                 (NumPySectionBody::Warns(warns), ni)
             }
-            "notes" | "note" => {
-                let (content, ni) = parse_section_content(&lines, i, section_end, &offsets);
+            Some(NumPySectionKind::Notes) => {
+                let (content, ni) =
+                    parse_section_content(input, i, section_end, &offsets);
                 (NumPySectionBody::Notes(content), ni)
             }
-            "examples" | "example" => {
-                let (content, ni) = parse_section_content(&lines, i, section_end, &offsets);
+            Some(NumPySectionKind::Examples) => {
+                let (content, ni) =
+                    parse_section_content(input, i, section_end, &offsets);
                 (NumPySectionBody::Examples(content), ni)
             }
-            "warnings" | "warning" => {
-                let (content, ni) = parse_section_content(&lines, i, section_end, &offsets);
+            Some(NumPySectionKind::Warnings) => {
+                let (content, ni) =
+                    parse_section_content(input, i, section_end, &offsets);
                 (NumPySectionBody::Warnings(content), ni)
             }
-            "see also" => {
-                let (items, ni) = parse_see_also(&lines, i, section_end, &offsets);
+            Some(NumPySectionKind::SeeAlso) => {
+                let (items, ni) =
+                    parse_see_also(input, i, section_end, &offsets);
                 (NumPySectionBody::SeeAlso(items), ni)
             }
-            "references" => {
-                let (refs, ni) = parse_references(&lines, i, section_end, &offsets);
+            Some(NumPySectionKind::References) => {
+                let (refs, ni) =
+                    parse_references(input, i, section_end, &offsets);
                 (NumPySectionBody::References(refs), ni)
             }
-            "attributes" => {
-                let (params, ni) = parse_parameters(&lines, i, section_end, &offsets, header_col);
+            Some(NumPySectionKind::Attributes) => {
+                let (params, ni) =
+                    parse_parameters(input, i, section_end, &offsets, header_col);
                 let attrs = params
                     .into_iter()
                     .map(|p| crate::styles::numpy::ast::NumPyAttribute {
@@ -371,8 +397,9 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                     .collect();
                 (NumPySectionBody::Attributes(attrs), ni)
             }
-            "methods" => {
-                let (params, ni) = parse_parameters(&lines, i, section_end, &offsets, header_col);
+            Some(NumPySectionKind::Methods) => {
+                let (params, ni) =
+                    parse_parameters(input, i, section_end, &offsets, header_col);
                 let methods = params
                     .into_iter()
                     .map(|p| crate::styles::numpy::ast::NumPyMethod {
@@ -387,8 +414,9 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                     .collect();
                 (NumPySectionBody::Methods(methods), ni)
             }
-            _ => {
-                let (content, ni) = parse_section_content(&lines, i, section_end, &offsets);
+            None => {
+                let (content, ni) =
+                    parse_section_content(input, i, section_end, &offsets);
                 (NumPySectionBody::Unknown(content), ni)
             }
         };
@@ -396,15 +424,19 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
         // Compute section span (header to last non-empty body line)
         let section_end_line = {
             let mut end = next_i.saturating_sub(1);
-            while end > section_start && lines.get(end).is_none_or(|l| l.trim().is_empty()) {
+            while end > section_start {
+                let end_line_text = line_text(input, end, &offsets);
+                if !end_line_text.trim().is_empty() {
+                    break;
+                }
                 end -= 1;
             }
             end
         };
-        let section_end_col = lines
-            .get(section_end_line)
-            .map(|l| indent_len(l) + l.trim().len())
-            .unwrap_or(0);
+        let section_end_col = {
+            let end_line_text = line_text(input, section_end_line, &offsets);
+            indent_len(end_line_text) + end_line_text.trim().len()
+        };
 
         docstring.sections.push(NumPySection {
             range: make_range(
@@ -422,9 +454,9 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
     }
 
     // Docstring span
-    let last_line = lines.len().saturating_sub(1);
-    let last_col = lines.last().map(|l| l.len()).unwrap_or(0);
-    docstring.range = make_range(0, 0, last_line, last_col, &offsets);
+    let last_line_idx = total_lines.saturating_sub(1);
+    let last_col = line_text(input, last_line_idx, &offsets).len();
+    docstring.range = make_range(0, 0, last_line_idx, last_col, &offsets);
 
     docstring
 }
@@ -435,7 +467,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
 
 /// Parse the Parameters section body.
 fn parse_parameters(
-    lines: &[&str],
+    source: &str,
     start: usize,
     end: usize,
     offsets: &[usize],
@@ -445,7 +477,7 @@ fn parse_parameters(
     let mut i = start;
 
     while i < end {
-        let line = lines[i];
+        let line = line_text(source, i, offsets);
         let trimmed = line.trim();
 
         // A parameter header is a non-empty line at entry indentation with ` : ` or ending with ` :`
@@ -456,7 +488,7 @@ fn parse_parameters(
                 parse_name_and_type(trimmed, i, col, offsets);
 
             i += 1;
-            let (desc, next_i) = collect_description(lines, i, end, offsets, entry_indent);
+            let (desc, next_i) = collect_description(source, i, end, offsets, entry_indent);
 
             let (entry_end_line, entry_end_col) = if desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
@@ -652,7 +684,7 @@ fn parse_name_list(
 ///     Description.
 /// ```
 fn parse_returns(
-    lines: &[&str],
+    source: &str,
     start: usize,
     end: usize,
     offsets: &[usize],
@@ -662,7 +694,7 @@ fn parse_returns(
     let mut i = start;
 
     while i < end {
-        let line = lines[i];
+        let line = line_text(source, i, offsets);
         let trimmed = line.trim();
 
         if !trimmed.is_empty() && indent_len(line) <= entry_indent {
@@ -710,7 +742,7 @@ fn parse_returns(
             };
 
             i += 1;
-            let (desc, next_i) = collect_description(lines, i, end, offsets, entry_indent);
+            let (desc, next_i) = collect_description(source, i, end, offsets, entry_indent);
 
             let (entry_end_line, entry_end_col) = if desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
@@ -740,7 +772,7 @@ fn parse_returns(
 
 /// Parse the Raises section body.
 fn parse_raises(
-    lines: &[&str],
+    source: &str,
     start: usize,
     end: usize,
     offsets: &[usize],
@@ -750,7 +782,7 @@ fn parse_raises(
     let mut i = start;
 
     while i < end {
-        let line = lines[i];
+        let line = line_text(source, i, offsets);
         let trimmed = line.trim();
 
         if !trimmed.is_empty() && indent_len(line) <= entry_indent {
@@ -761,7 +793,7 @@ fn parse_raises(
                 make_spanned(trimmed.to_string(), i, col, i, col + trimmed.len(), offsets);
 
             i += 1;
-            let (desc, next_i) = collect_description(lines, i, end, offsets, entry_indent);
+            let (desc, next_i) = collect_description(source, i, end, offsets, entry_indent);
 
             let (entry_end_line, entry_end_col) = if desc.value.is_empty() {
                 (entry_start, col + trimmed.len())
@@ -792,7 +824,7 @@ fn parse_raises(
 ///
 /// Preserves blank lines between paragraphs.
 fn parse_section_content(
-    lines: &[&str],
+    source: &str,
     start: usize,
     end: usize,
     offsets: &[usize],
@@ -803,7 +835,8 @@ fn parse_section_content(
     let mut last_content_line = start;
 
     while i < end {
-        let trimmed = lines[i].trim();
+        let line = line_text(source, i, offsets);
+        let trimmed = line.trim();
         content_lines.push(trimmed);
         if !trimmed.is_empty() {
             if first_content_line.is_none() {
@@ -825,9 +858,11 @@ fn parse_section_content(
     let text = content_lines.join("\n");
 
     let spanned = if let Some(first) = first_content_line {
-        let first_col = indent_len(lines[first]);
-        let last_trimmed = lines[last_content_line].trim();
-        let last_col = indent_len(lines[last_content_line]) + last_trimmed.len();
+        let first_line = line_text(source, first, offsets);
+        let first_col = indent_len(first_line);
+        let last_line = line_text(source, last_content_line, offsets);
+        let last_trimmed = last_line.trim();
+        let last_col = indent_len(last_line) + last_trimmed.len();
         make_spanned(text, first, first_col, last_content_line, last_col, offsets)
     } else {
         Spanned::empty_string()
@@ -847,7 +882,7 @@ fn parse_section_content(
 /// func_b, func_c
 /// ```
 fn parse_see_also(
-    lines: &[&str],
+    source: &str,
     start: usize,
     end: usize,
     offsets: &[usize],
@@ -856,7 +891,7 @@ fn parse_see_also(
     let mut i = start;
 
     while i < end {
-        let line = lines[i];
+        let line = line_text(source, i, offsets);
         let trimmed = line.trim();
 
         if trimmed.is_empty() {
@@ -909,7 +944,7 @@ fn parse_see_also(
 ///
 /// Supports RST citation references like `.. [1] Author, Title`.
 fn parse_references(
-    lines: &[&str],
+    source: &str,
     start: usize,
     end: usize,
     offsets: &[usize],
@@ -924,7 +959,7 @@ fn parse_references(
     let mut current_col = 0usize;
 
     while i < end {
-        let line = lines[i];
+        let line = line_text(source, i, offsets);
         let trimmed = line.trim();
 
         // Check for `.. [N]` pattern
@@ -1037,24 +1072,34 @@ mod tests {
 
     #[test]
     fn test_find_next_section_start() {
-        // Simple case
-        assert_eq!(find_next_section_start(&["Parameters", "----------"], 0), 0);
+        let s1 = "Parameters\n----------";
+        let o1 = build_line_offsets(s1);
+        let t1 = num_lines(s1, &o1);
+        assert_eq!(find_next_section_start(s1, 0, &o1, t1), 0);
 
         // No section
-        assert_eq!(
-            find_next_section_start(&["just text", "more text"], 0),
-            2 // lines.len()
-        );
+        let s2 = "just text\nmore text";
+        let o2 = build_line_offsets(s2);
+        let t2 = num_lines(s2, &o2);
+        assert_eq!(find_next_section_start(s2, 0, &o2, t2), t2);
 
         // Empty line before underline — not a header
-        assert_eq!(find_next_section_start(&["", "----------"], 0), 2);
+        let s3 = "\n----------";
+        let o3 = build_line_offsets(s3);
+        let t3 = num_lines(s3, &o3);
+        assert_eq!(find_next_section_start(s3, 0, &o3, t3), t3);
 
         // Single line — no room for underline
-        assert_eq!(find_next_section_start(&["Only one line"], 0), 1);
+        let s4 = "Only one line";
+        let o4 = build_line_offsets(s4);
+        let t4 = num_lines(s4, &o4);
+        assert_eq!(find_next_section_start(s4, 0, &o4, t4), t4);
 
         // Start after first section finds second
-        let lines = &["Parameters", "----------", "x : int", "Returns", "-------"];
-        assert_eq!(find_next_section_start(lines, 0), 0);
-        assert_eq!(find_next_section_start(lines, 2), 3);
+        let s5 = "Parameters\n----------\nx : int\nReturns\n-------";
+        let o5 = build_line_offsets(s5);
+        let t5 = num_lines(s5, &o5);
+        assert_eq!(find_next_section_start(s5, 0, &o5, t5), 0);
+        assert_eq!(find_next_section_start(s5, 2, &o5, t5), 3);
     }
 }

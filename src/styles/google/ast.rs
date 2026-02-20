@@ -6,6 +6,162 @@ use crate::ast::{Spanned, TextRange};
 // Google Style Types
 // =============================================================================
 
+/// Known Google-style section kinds.
+///
+/// Each variant represents a recognised section name (or group of aliases).
+/// Use [`GoogleSectionKind::from_name`] to convert a lowercased section name
+/// to a variant — unknown names return `None`.
+///
+/// Having an enum instead of a plain string list gives compile-time
+/// exhaustiveness checks: every variant must be handled when matching.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GoogleSectionKind {
+    /// `Args` / `Arguments` / `Parameters` / `Params`
+    Args,
+    /// `Keyword Args` / `Keyword Arguments`
+    KeywordArgs,
+    /// `Other Parameters`
+    OtherParameters,
+    /// `Receive` / `Receives`
+    Receives,
+    /// `Returns` / `Return`
+    Returns,
+    /// `Yields` / `Yield`
+    Yields,
+    /// `Raises` / `Raise`
+    Raises,
+    /// `Warns` / `Warn`
+    Warns,
+    /// `Attributes` / `Attribute`
+    Attributes,
+    /// `Methods`
+    Methods,
+    /// `See Also`
+    SeeAlso,
+    /// `Note` / `Notes`
+    Notes,
+    /// `Example` / `Examples`
+    Examples,
+    /// `Todo`
+    Todo,
+    /// `References`
+    References,
+    /// `Warning` / `Warnings`
+    Warnings,
+    /// `Attention`
+    Attention,
+    /// `Caution`
+    Caution,
+    /// `Danger`
+    Danger,
+    /// `Error`
+    Error,
+    /// `Hint`
+    Hint,
+    /// `Important`
+    Important,
+    /// `Tip`
+    Tip,
+}
+
+impl GoogleSectionKind {
+    /// All known section kinds (useful for iteration / testing).
+    pub const ALL: &[GoogleSectionKind] = &[
+        Self::Args,
+        Self::KeywordArgs,
+        Self::OtherParameters,
+        Self::Receives,
+        Self::Returns,
+        Self::Yields,
+        Self::Raises,
+        Self::Warns,
+        Self::Attributes,
+        Self::Methods,
+        Self::SeeAlso,
+        Self::Notes,
+        Self::Examples,
+        Self::Todo,
+        Self::References,
+        Self::Warnings,
+        Self::Attention,
+        Self::Caution,
+        Self::Danger,
+        Self::Error,
+        Self::Hint,
+        Self::Important,
+        Self::Tip,
+    ];
+
+    /// Convert a **lowercased** section name to a [`GoogleSectionKind`].
+    ///
+    /// Returns `None` for unrecognised names (which are dispatched as
+    /// `GoogleSectionBody::Unknown` by the parser).
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "args" | "arguments" | "params" | "parameters" => Some(Self::Args),
+            "keyword args" | "keyword arguments" => Some(Self::KeywordArgs),
+            "other parameters" => Some(Self::OtherParameters),
+            "receives" | "receive" => Some(Self::Receives),
+            "returns" | "return" => Some(Self::Returns),
+            "yields" | "yield" => Some(Self::Yields),
+            "raises" | "raise" => Some(Self::Raises),
+            "warns" | "warn" => Some(Self::Warns),
+            "attributes" | "attribute" => Some(Self::Attributes),
+            "methods" => Some(Self::Methods),
+            "see also" => Some(Self::SeeAlso),
+            "note" | "notes" => Some(Self::Notes),
+            "example" | "examples" => Some(Self::Examples),
+            "todo" => Some(Self::Todo),
+            "references" => Some(Self::References),
+            "warning" | "warnings" => Some(Self::Warnings),
+            "attention" => Some(Self::Attention),
+            "caution" => Some(Self::Caution),
+            "danger" => Some(Self::Danger),
+            "error" => Some(Self::Error),
+            "hint" => Some(Self::Hint),
+            "important" => Some(Self::Important),
+            "tip" => Some(Self::Tip),
+            _ => None,
+        }
+    }
+
+    /// Check if a lowercased name is a known section name.
+    pub fn is_known(name: &str) -> bool {
+        Self::from_name(name).is_some()
+    }
+}
+
+impl fmt::Display for GoogleSectionKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Args => "Args",
+            Self::KeywordArgs => "Keyword Args",
+            Self::OtherParameters => "Other Parameters",
+            Self::Receives => "Receives",
+            Self::Returns => "Returns",
+            Self::Yields => "Yields",
+            Self::Raises => "Raises",
+            Self::Warns => "Warns",
+            Self::Attributes => "Attributes",
+            Self::Methods => "Methods",
+            Self::SeeAlso => "See Also",
+            Self::Notes => "Notes",
+            Self::Examples => "Examples",
+            Self::Todo => "Todo",
+            Self::References => "References",
+            Self::Warnings => "Warnings",
+            Self::Attention => "Attention",
+            Self::Caution => "Caution",
+            Self::Danger => "Danger",
+            Self::Error => "Error",
+            Self::Hint => "Hint",
+            Self::Important => "Important",
+            Self::Tip => "Tip",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 /// A single Google-style section, combining header and body.
 ///
 /// ```text

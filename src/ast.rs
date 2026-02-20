@@ -340,6 +340,44 @@ pub(crate) fn indent_len(line: &str) -> usize {
     line.len() - line.trim_start().len()
 }
 
+/// Number of text lines in source, consistent with `source.lines().count()`.
+pub(crate) fn num_lines(source: &str, offsets: &[usize]) -> usize {
+    if source.is_empty() {
+        0
+    } else if source.ends_with('\n') {
+        offsets.len() - 1
+    } else {
+        offsets.len()
+    }
+}
+
+/// Get the text of line `line_idx` (without trailing newline).
+///
+/// Returns an empty string if `line_idx` is out of bounds.
+pub(crate) fn line_text<'a>(source: &'a str, line_idx: usize, offsets: &[usize]) -> &'a str {
+    if line_idx >= offsets.len() {
+        return "";
+    }
+    let start = offsets[line_idx];
+    let end = if line_idx + 1 < offsets.len() {
+        offsets[line_idx + 1].saturating_sub(1)
+    } else {
+        source.len()
+    };
+    if start >= source.len() {
+        return "";
+    }
+    &source[start..end]
+}
+
+/// Compute the byte offset of a substring within the containing string.
+///
+/// Both `inner` and `outer` must point into the same string allocation.
+/// Returns the byte distance from the start of `outer` to the start of `inner`.
+pub(crate) fn substr_offset(outer: &str, inner: &str) -> usize {
+    inner.as_ptr() as usize - outer.as_ptr() as usize
+}
+
 // =============================================================================
 // Style
 // =============================================================================

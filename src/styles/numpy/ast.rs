@@ -6,6 +6,117 @@ use crate::ast::{Spanned, TextRange};
 // NumPy Style Types
 // =============================================================================
 
+/// Known NumPy-style section kinds.
+///
+/// Each variant represents a recognised section name (or group of aliases).
+/// Use [`NumPySectionKind::from_name`] to convert a lowercased section name
+/// to a variant — unknown names return `None`.
+///
+/// Having an enum instead of a plain string list gives compile-time
+/// exhaustiveness checks: every variant must be handled when matching.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NumPySectionKind {
+    /// `Parameters` / `Params`
+    Parameters,
+    /// `Returns` / `Return`
+    Returns,
+    /// `Yields` / `Yield`
+    Yields,
+    /// `Receives` / `Receive`
+    Receives,
+    /// `Other Parameters` / `Other Params`
+    OtherParameters,
+    /// `Raises` / `Raise`
+    Raises,
+    /// `Warns` / `Warn`
+    Warns,
+    /// `Warnings` / `Warning`
+    Warnings,
+    /// `See Also`
+    SeeAlso,
+    /// `Notes` / `Note`
+    Notes,
+    /// `References`
+    References,
+    /// `Examples` / `Example`
+    Examples,
+    /// `Attributes`
+    Attributes,
+    /// `Methods`
+    Methods,
+}
+
+impl NumPySectionKind {
+    /// All known section kinds (useful for iteration / testing).
+    pub const ALL: &[NumPySectionKind] = &[
+        Self::Parameters,
+        Self::Returns,
+        Self::Yields,
+        Self::Receives,
+        Self::OtherParameters,
+        Self::Raises,
+        Self::Warns,
+        Self::Warnings,
+        Self::SeeAlso,
+        Self::Notes,
+        Self::References,
+        Self::Examples,
+        Self::Attributes,
+        Self::Methods,
+    ];
+
+    /// Convert a **lowercased** section name to a [`NumPySectionKind`].
+    ///
+    /// Returns `None` for unrecognised names (which are dispatched as
+    /// `NumPySectionBody::Unknown` by the parser).
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "parameters" | "params" => Some(Self::Parameters),
+            "returns" | "return" => Some(Self::Returns),
+            "yields" | "yield" => Some(Self::Yields),
+            "receives" | "receive" => Some(Self::Receives),
+            "other parameters" | "other params" => Some(Self::OtherParameters),
+            "raises" | "raise" => Some(Self::Raises),
+            "warns" | "warn" => Some(Self::Warns),
+            "warnings" | "warning" => Some(Self::Warnings),
+            "see also" => Some(Self::SeeAlso),
+            "notes" | "note" => Some(Self::Notes),
+            "references" => Some(Self::References),
+            "examples" | "example" => Some(Self::Examples),
+            "attributes" => Some(Self::Attributes),
+            "methods" => Some(Self::Methods),
+            _ => None,
+        }
+    }
+
+    /// Check if a lowercased name is a known section name.
+    pub fn is_known(name: &str) -> bool {
+        Self::from_name(name).is_some()
+    }
+}
+
+impl fmt::Display for NumPySectionKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Parameters => "Parameters",
+            Self::Returns => "Returns",
+            Self::Yields => "Yields",
+            Self::Receives => "Receives",
+            Self::OtherParameters => "Other Parameters",
+            Self::Raises => "Raises",
+            Self::Warns => "Warns",
+            Self::Warnings => "Warnings",
+            Self::SeeAlso => "See Also",
+            Self::Notes => "Notes",
+            Self::References => "References",
+            Self::Examples => "Examples",
+            Self::Attributes => "Attributes",
+            Self::Methods => "Methods",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 /// A single NumPy-style section, combining header and body.
 ///
 /// ```text

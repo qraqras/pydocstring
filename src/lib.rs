@@ -48,11 +48,11 @@ pub use ast::{LineIndex, Spanned, Style, TextRange, TextSize};
 pub use parser::detect_style;
 pub use styles::google::{
     self, GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod,
-    GoogleReturns, GoogleSection, GoogleSectionBody, GoogleSectionHeader, GoogleSeeAlsoItem,
-    GoogleWarning,
+    GoogleReturns, GoogleSection, GoogleSectionBody, GoogleSectionHeader, GoogleSectionKind,
+    GoogleSeeAlsoItem, GoogleWarning,
 };
 pub use styles::numpy::{
     self, NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod,
     NumPyParameter, NumPyReference, NumPyReturns, NumPySection, NumPySectionBody,
-    NumPySectionHeader, NumPyWarning, SeeAlsoItem,
+    NumPySectionHeader, NumPySectionKind, NumPyWarning, SeeAlsoItem,
 };

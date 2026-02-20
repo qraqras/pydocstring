@@ -7,7 +7,7 @@ pub mod parser;
 
 pub use ast::{
     NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod, NumPyParameter,
-    NumPyReference, NumPyReturns, NumPySection, NumPySectionBody, NumPySectionHeader, NumPyWarning,
-    SeeAlsoItem,
+    NumPyReference, NumPyReturns, NumPySection, NumPySectionBody, NumPySectionHeader,
+    NumPySectionKind, NumPyWarning, SeeAlsoItem,
 };
 pub use parser::parse_numpy;
