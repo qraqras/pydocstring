@@ -29,7 +29,7 @@ Raises:
         println!("Description: {}", desc.value);
     }
 
-    let args: Vec<_> = doc.sections.iter().filter_map(|s| match &s.body {
+    let args: Vec<_> = doc.sections().filter_map(|s| match &s.body {
         GoogleSectionBody::Args(v) => Some(v.iter()),
         _ => None,
     }).flatten().collect();
@@ -42,7 +42,7 @@ Raises:
         );
     }
 
-    let returns: Vec<_> = doc.sections.iter().filter_map(|s| match &s.body {
+    let returns: Vec<_> = doc.sections().filter_map(|s| match &s.body {
         GoogleSectionBody::Returns(v) => Some(v.iter()),
         _ => None,
     }).flatten().collect();
@@ -56,7 +56,7 @@ Raises:
         println!("  {}: {}", type_str, ret.description.value);
     }
 
-    let raises: Vec<_> = doc.sections.iter().filter_map(|s| match &s.body {
+    let raises: Vec<_> = doc.sections().filter_map(|s| match &s.body {
         GoogleSectionBody::Raises(v) => Some(v.iter()),
         _ => None,
     }).flatten().collect();
@@ -65,8 +65,8 @@ Raises:
         println!("  {}: {}", exc.r#type.value, exc.description.value);
     }
 
-    println!("\nSections ({}):", doc.sections.len());
-    for section in &doc.sections {
+    println!("\nSections ({}):", doc.sections().count());
+    for section in doc.sections() {
         println!(
             "  {} (header: {:?})",
             section.header.name.value, section.header.range

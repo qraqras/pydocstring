@@ -1,11 +1,11 @@
 //! Integration tests for Google-style docstring parser.
 
+use pydocstring::GoogleSectionBody;
 use pydocstring::google::parse_google;
 use pydocstring::google::{
     GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturns,
     GoogleSeeAlsoItem, GoogleWarning,
 };
-use pydocstring::GoogleSectionBody;
 use pydocstring::{LineIndex, TextSize};
 
 // =============================================================================
@@ -13,8 +13,7 @@ use pydocstring::{LineIndex, TextSize};
 // =============================================================================
 
 fn args(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
-    doc.sections
-        .iter()
+    doc.sections()
         .filter_map(|s| match &s.body {
             GoogleSectionBody::Args(v) => Some(v.iter()),
             _ => None,
@@ -24,8 +23,7 @@ fn args(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
 }
 
 fn returns(doc: &GoogleDocstring) -> Vec<&GoogleReturns> {
-    doc.sections
-        .iter()
+    doc.sections()
         .filter_map(|s| match &s.body {
             GoogleSectionBody::Returns(v) => Some(v.iter()),
             _ => None,
@@ -35,8 +33,7 @@ fn returns(doc: &GoogleDocstring) -> Vec<&GoogleReturns> {
 }
 
 fn yields(doc: &GoogleDocstring) -> Vec<&GoogleReturns> {
-    doc.sections
-        .iter()
+    doc.sections()
         .filter_map(|s| match &s.body {
             GoogleSectionBody::Yields(v) => Some(v.iter()),
             _ => None,
@@ -46,8 +43,7 @@ fn yields(doc: &GoogleDocstring) -> Vec<&GoogleReturns> {
 }
 
 fn raises(doc: &GoogleDocstring) -> Vec<&GoogleException> {
-    doc.sections
-        .iter()
+    doc.sections()
         .filter_map(|s| match &s.body {
             GoogleSectionBody::Raises(v) => Some(v.iter()),
             _ => None,
@@ -57,8 +53,7 @@ fn raises(doc: &GoogleDocstring) -> Vec<&GoogleException> {
 }
 
 fn attributes(doc: &GoogleDocstring) -> Vec<&GoogleAttribute> {
-    doc.sections
-        .iter()
+    doc.sections()
         .filter_map(|s| match &s.body {
             GoogleSectionBody::Attributes(v) => Some(v.iter()),
             _ => None,
@@ -68,8 +63,7 @@ fn attributes(doc: &GoogleDocstring) -> Vec<&GoogleAttribute> {
 }
 
 fn keyword_args(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
-    doc.sections
-        .iter()
+    doc.sections()
         .filter_map(|s| match &s.body {
             GoogleSectionBody::KeywordArgs(v) => Some(v.iter()),
             _ => None,
@@ -79,8 +73,7 @@ fn keyword_args(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
 }
 
 fn other_parameters(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
-    doc.sections
-        .iter()
+    doc.sections()
         .filter_map(|s| match &s.body {
             GoogleSectionBody::OtherParameters(v) => Some(v.iter()),
             _ => None,
@@ -90,8 +83,7 @@ fn other_parameters(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
 }
 
 fn receives(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
-    doc.sections
-        .iter()
+    doc.sections()
         .filter_map(|s| match &s.body {
             GoogleSectionBody::Receives(v) => Some(v.iter()),
             _ => None,
@@ -101,8 +93,7 @@ fn receives(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
 }
 
 fn warns(doc: &GoogleDocstring) -> Vec<&GoogleWarning> {
-    doc.sections
-        .iter()
+    doc.sections()
         .filter_map(|s| match &s.body {
             GoogleSectionBody::Warns(v) => Some(v.iter()),
             _ => None,
@@ -112,8 +103,7 @@ fn warns(doc: &GoogleDocstring) -> Vec<&GoogleWarning> {
 }
 
 fn see_also(doc: &GoogleDocstring) -> Vec<&GoogleSeeAlsoItem> {
-    doc.sections
-        .iter()
+    doc.sections()
         .filter_map(|s| match &s.body {
             GoogleSectionBody::SeeAlso(v) => Some(v.iter()),
             _ => None,
@@ -123,8 +113,7 @@ fn see_also(doc: &GoogleDocstring) -> Vec<&GoogleSeeAlsoItem> {
 }
 
 fn methods(doc: &GoogleDocstring) -> Vec<&GoogleMethod> {
-    doc.sections
-        .iter()
+    doc.sections()
         .filter_map(|s| match &s.body {
             GoogleSectionBody::Methods(v) => Some(v.iter()),
             _ => None,
@@ -134,35 +123,35 @@ fn methods(doc: &GoogleDocstring) -> Vec<&GoogleMethod> {
 }
 
 fn notes(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
-    doc.sections.iter().find_map(|s| match &s.body {
+    doc.sections().find_map(|s| match &s.body {
         GoogleSectionBody::Notes(v) => Some(v),
         _ => None,
     })
 }
 
 fn examples(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
-    doc.sections.iter().find_map(|s| match &s.body {
+    doc.sections().find_map(|s| match &s.body {
         GoogleSectionBody::Examples(v) => Some(v),
         _ => None,
     })
 }
 
 fn todo(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
-    doc.sections.iter().find_map(|s| match &s.body {
+    doc.sections().find_map(|s| match &s.body {
         GoogleSectionBody::Todo(v) => Some(v),
         _ => None,
     })
 }
 
 fn references(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
-    doc.sections.iter().find_map(|s| match &s.body {
+    doc.sections().find_map(|s| match &s.body {
         GoogleSectionBody::References(v) => Some(v),
         _ => None,
     })
 }
 
 fn warnings(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
-    doc.sections.iter().find_map(|s| match &s.body {
+    doc.sections().find_map(|s| match &s.body {
         GoogleSectionBody::Warnings(v) => Some(v),
         _ => None,
     })
@@ -665,16 +654,17 @@ fn test_sections_with_blank_lines() {
 fn test_section_order() {
     let docstring = "Summary.\n\nReturns:\n    int: Value.\n\nArgs:\n    x: Input.";
     let result = parse_google(docstring);
-    assert_eq!(result.sections.len(), 2);
-    assert_eq!(result.sections[0].header.name.value, "Returns");
-    assert_eq!(result.sections[1].header.name.value, "Args");
+    let sections: Vec<_> = result.sections().collect();
+    assert_eq!(sections.len(), 2);
+    assert_eq!(sections[0].header.name.value, "Returns");
+    assert_eq!(sections[1].header.name.value, "Args");
 }
 
 #[test]
 fn test_section_header_span() {
     let docstring = "Summary.\n\nArgs:\n    x: Value.";
     let result = parse_google(docstring);
-    let header = &result.sections[0].header;
+    let header = &result.sections().next().unwrap().header;
     assert_eq!(header.name.value, "Args");
     assert_eq!(header.name.range.source_text(&result.source), "Args");
     assert_eq!(header.range.source_text(&result.source), "Args:");
@@ -684,7 +674,7 @@ fn test_section_header_span() {
 fn test_section_span() {
     let docstring = "Summary.\n\nArgs:\n    x: Value.";
     let result = parse_google(docstring);
-    let section = &result.sections[0];
+    let section = result.sections().next().unwrap();
     assert_eq!(
         section.range.source_text(&result.source),
         "Args:\n    x: Value."
@@ -699,9 +689,10 @@ fn test_section_span() {
 fn test_unknown_section_preserved() {
     let docstring = "Summary.\n\nCustom:\n    Some custom content.";
     let result = parse_google(docstring);
-    assert_eq!(result.sections.len(), 1);
-    assert_eq!(result.sections[0].header.name.value, "Custom");
-    match &result.sections[0].body {
+    let sections: Vec<_> = result.sections().collect();
+    assert_eq!(sections.len(), 1);
+    assert_eq!(sections[0].header.name.value, "Custom");
+    match &sections[0].body {
         GoogleSectionBody::Unknown(text) => {
             assert_eq!(text.value, "Some custom content.");
         }
@@ -714,10 +705,11 @@ fn test_unknown_section_with_known() {
     let docstring =
         "Summary.\n\nArgs:\n    x: Value.\n\nCustom:\n    Content.\n\nReturns:\n    int: Result.";
     let result = parse_google(docstring);
-    assert_eq!(result.sections.len(), 3);
-    assert_eq!(result.sections[0].header.name.value, "Args");
-    assert_eq!(result.sections[1].header.name.value, "Custom");
-    assert_eq!(result.sections[2].header.name.value, "Returns");
+    let sections: Vec<_> = result.sections().collect();
+    assert_eq!(sections.len(), 3);
+    assert_eq!(sections[0].header.name.value, "Args");
+    assert_eq!(sections[1].header.name.value, "Custom");
+    assert_eq!(sections[2].header.name.value, "Returns");
     // Known sections still accessible via helpers
     assert_eq!(args(&result).len(), 1);
     assert_eq!(returns(&result).len(), 1);
@@ -727,9 +719,10 @@ fn test_unknown_section_with_known() {
 fn test_multiple_unknown_sections() {
     let docstring = "Summary.\n\nCustom One:\n    First.\n\nCustom Two:\n    Second.";
     let result = parse_google(docstring);
-    assert_eq!(result.sections.len(), 2);
-    assert_eq!(result.sections[0].header.name.value, "Custom One");
-    assert_eq!(result.sections[1].header.name.value, "Custom Two");
+    let sections: Vec<_> = result.sections().collect();
+    assert_eq!(sections.len(), 2);
+    assert_eq!(sections[0].header.name.value, "Custom One");
+    assert_eq!(sections[1].header.name.value, "Custom Two");
 }
 
 // =============================================================================
@@ -873,7 +866,6 @@ fn test_complex_optional_type() {
     assert!(a[0].optional.is_some());
 }
 
-
 // =============================================================================
 // Napoleon: Parameters / Params aliases
 // =============================================================================
@@ -884,7 +876,10 @@ fn test_parameters_alias() {
     let result = parse_google(docstring);
     assert_eq!(args(&result).len(), 1);
     assert_eq!(args(&result)[0].name.value, "x");
-    assert_eq!(result.sections[0].header.name.value, "Parameters");
+    assert_eq!(
+        result.sections().next().unwrap().header.name.value,
+        "Parameters"
+    );
 }
 
 #[test]
@@ -892,7 +887,10 @@ fn test_params_alias() {
     let docstring = "Summary.\n\nParams:\n    x (int): The value.";
     let result = parse_google(docstring);
     assert_eq!(args(&result).len(), 1);
-    assert_eq!(result.sections[0].header.name.value, "Params");
+    assert_eq!(
+        result.sections().next().unwrap().header.name.value,
+        "Params"
+    );
 }
 
 // =============================================================================
@@ -915,14 +913,17 @@ fn test_keyword_arguments_alias() {
     let docstring = "Summary.\n\nKeyword Arguments:\n    key (str): The key.";
     let result = parse_google(docstring);
     assert_eq!(keyword_args(&result).len(), 1);
-    assert_eq!(result.sections[0].header.name.value, "Keyword Arguments");
+    assert_eq!(
+        result.sections().next().unwrap().header.name.value,
+        "Keyword Arguments"
+    );
 }
 
 #[test]
 fn test_keyword_args_section_body_variant() {
     let docstring = "Summary.\n\nKeyword Args:\n    k (str): Key.";
     let result = parse_google(docstring);
-    match &result.sections[0].body {
+    match &result.sections().next().unwrap().body {
         GoogleSectionBody::KeywordArgs(args) => {
             assert_eq!(args.len(), 1);
         }
@@ -949,7 +950,7 @@ fn test_other_parameters() {
 fn test_other_parameters_section_body_variant() {
     let docstring = "Summary.\n\nOther Parameters:\n    x (int): Extra.";
     let result = parse_google(docstring);
-    match &result.sections[0].body {
+    match &result.sections().next().unwrap().body {
         GoogleSectionBody::OtherParameters(args) => {
             assert_eq!(args.len(), 1);
         }
@@ -976,7 +977,10 @@ fn test_receive_alias() {
     let docstring = "Summary.\n\nReceive:\n    msg (str): The message.";
     let result = parse_google(docstring);
     assert_eq!(receives(&result).len(), 1);
-    assert_eq!(result.sections[0].header.name.value, "Receive");
+    assert_eq!(
+        result.sections().next().unwrap().header.name.value,
+        "Receive"
+    );
 }
 
 // =============================================================================
@@ -990,7 +994,7 @@ fn test_raise_alias() {
     let r = raises(&result);
     assert_eq!(r.len(), 1);
     assert_eq!(r[0].r#type.value, "ValueError");
-    assert_eq!(result.sections[0].header.name.value, "Raise");
+    assert_eq!(result.sections().next().unwrap().header.name.value, "Raise");
 }
 
 // =============================================================================
@@ -1023,7 +1027,7 @@ fn test_warn_alias() {
     let docstring = "Summary.\n\nWarn:\n    FutureWarning: Will change.";
     let result = parse_google(docstring);
     assert_eq!(warns(&result).len(), 1);
-    assert_eq!(result.sections[0].header.name.value, "Warn");
+    assert_eq!(result.sections().next().unwrap().header.name.value, "Warn");
 }
 
 #[test]
@@ -1040,7 +1044,7 @@ fn test_warns_multiline_description() {
 fn test_warns_section_body_variant() {
     let docstring = "Summary.\n\nWarns:\n    UserWarning: Desc.";
     let result = parse_google(docstring);
-    match &result.sections[0].body {
+    match &result.sections().next().unwrap().body {
         GoogleSectionBody::Warns(warns) => {
             assert_eq!(warns.len(), 1);
         }
@@ -1057,7 +1061,10 @@ fn test_warning_singular_alias() {
     let docstring = "Summary.\n\nWarning:\n    This is deprecated.";
     let result = parse_google(docstring);
     assert_eq!(warnings(&result).unwrap().value, "This is deprecated.");
-    assert_eq!(result.sections[0].header.name.value, "Warning");
+    assert_eq!(
+        result.sections().next().unwrap().header.name.value,
+        "Warning"
+    );
 }
 
 // =============================================================================
@@ -1069,7 +1076,10 @@ fn test_attribute_singular_alias() {
     let docstring = "Summary.\n\nAttribute:\n    name (str): The name.";
     let result = parse_google(docstring);
     assert_eq!(attributes(&result).len(), 1);
-    assert_eq!(result.sections[0].header.name.value, "Attribute");
+    assert_eq!(
+        result.sections().next().unwrap().header.name.value,
+        "Attribute"
+    );
 }
 
 // =============================================================================
@@ -1101,7 +1111,7 @@ fn test_methods_without_parens() {
 fn test_methods_section_body_variant() {
     let docstring = "Summary.\n\nMethods:\n    foo(): Does bar.";
     let result = parse_google(docstring);
-    match &result.sections[0].body {
+    match &result.sections().next().unwrap().body {
         GoogleSectionBody::Methods(methods) => {
             assert_eq!(methods.len(), 1);
         }
@@ -1156,7 +1166,7 @@ fn test_see_also_mixed() {
 fn test_see_also_section_body_variant() {
     let docstring = "Summary.\n\nSee Also:\n    func_a: Desc.";
     let result = parse_google(docstring);
-    match &result.sections[0].body {
+    match &result.sections().next().unwrap().body {
         GoogleSectionBody::SeeAlso(items) => {
             assert_eq!(items.len(), 1);
         }
@@ -1172,7 +1182,7 @@ fn test_see_also_section_body_variant() {
 fn test_attention_section() {
     let docstring = "Summary.\n\nAttention:\n    This requires careful handling.";
     let result = parse_google(docstring);
-    match &result.sections[0].body {
+    match &result.sections().next().unwrap().body {
         GoogleSectionBody::Attention(text) => {
             assert_eq!(text.value, "This requires careful handling.");
         }
@@ -1184,7 +1194,7 @@ fn test_attention_section() {
 fn test_caution_section() {
     let docstring = "Summary.\n\nCaution:\n    Use with care.";
     let result = parse_google(docstring);
-    match &result.sections[0].body {
+    match &result.sections().next().unwrap().body {
         GoogleSectionBody::Caution(text) => {
             assert_eq!(text.value, "Use with care.");
         }
@@ -1196,7 +1206,7 @@ fn test_caution_section() {
 fn test_danger_section() {
     let docstring = "Summary.\n\nDanger:\n    May cause data loss.";
     let result = parse_google(docstring);
-    match &result.sections[0].body {
+    match &result.sections().next().unwrap().body {
         GoogleSectionBody::Danger(text) => {
             assert_eq!(text.value, "May cause data loss.");
         }
@@ -1208,7 +1218,7 @@ fn test_danger_section() {
 fn test_error_section() {
     let docstring = "Summary.\n\nError:\n    Known issue with large inputs.";
     let result = parse_google(docstring);
-    match &result.sections[0].body {
+    match &result.sections().next().unwrap().body {
         GoogleSectionBody::Error(text) => {
             assert_eq!(text.value, "Known issue with large inputs.");
         }
@@ -1220,7 +1230,7 @@ fn test_error_section() {
 fn test_hint_section() {
     let docstring = "Summary.\n\nHint:\n    Try using a smaller batch size.";
     let result = parse_google(docstring);
-    match &result.sections[0].body {
+    match &result.sections().next().unwrap().body {
         GoogleSectionBody::Hint(text) => {
             assert_eq!(text.value, "Try using a smaller batch size.");
         }
@@ -1232,7 +1242,7 @@ fn test_hint_section() {
 fn test_important_section() {
     let docstring = "Summary.\n\nImportant:\n    Must be called before init().";
     let result = parse_google(docstring);
-    match &result.sections[0].body {
+    match &result.sections().next().unwrap().body {
         GoogleSectionBody::Important(text) => {
             assert_eq!(text.value, "Must be called before init().");
         }
@@ -1244,7 +1254,7 @@ fn test_important_section() {
 fn test_tip_section() {
     let docstring = "Summary.\n\nTip:\n    Use vectorized operations for speed.";
     let result = parse_google(docstring);
-    match &result.sections[0].body {
+    match &result.sections().next().unwrap().body {
         GoogleSectionBody::Tip(text) => {
             assert_eq!(text.value, "Use vectorized operations for speed.");
         }
@@ -1333,9 +1343,9 @@ fn test_section_header_space_before_colon() {
     assert_eq!(a[0].name.value, "x");
 
     // Header name should be "Args" (trimmed), not "Args "
-    assert_eq!(doc.sections[0].header.name.value, "Args");
+    assert_eq!(doc.sections().next().unwrap().header.name.value, "Args");
     // Colon should still be present
-    assert!(doc.sections[0].header.colon.is_some());
+    assert!(doc.sections().next().unwrap().header.colon.is_some());
 }
 
 /// `Returns :` with space before colon.
@@ -1360,9 +1370,9 @@ fn test_section_header_no_colon() {
     assert_eq!(a[0].name.value, "x");
 
     // Header name should be "Args"
-    assert_eq!(doc.sections[0].header.name.value, "Args");
+    assert_eq!(doc.sections().next().unwrap().header.name.value, "Args");
     // Colon should be None
-    assert!(doc.sections[0].header.colon.is_none());
+    assert!(doc.sections().next().unwrap().header.colon.is_none());
 }
 
 /// Missing colon on section header should emit a diagnostic.
@@ -1396,7 +1406,7 @@ fn test_unknown_name_without_colon_not_header() {
     let doc = &result;
     // "SomeWord" is not a known section name, so it becomes extended description
     assert!(
-        doc.sections.is_empty(),
+        doc.sections().next().is_none(),
         "unknown colonless name should not become a section"
     );
 }

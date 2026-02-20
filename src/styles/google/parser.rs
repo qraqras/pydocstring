@@ -20,9 +20,9 @@
 use crate::ast::{Spanned, TextRange, TextSize};
 use crate::cursor::{Cursor, indent_len};
 use crate::styles::google::ast::{
-    GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturns,
-    GoogleSection, GoogleSectionBody, GoogleSectionHeader, GoogleSectionKind, GoogleSeeAlsoItem,
-    GoogleWarning,
+    GoogleArg, GoogleAttribute, GoogleDocstring, GoogleDocstringItem, GoogleException,
+    GoogleMethod, GoogleReturns, GoogleSection, GoogleSectionBody, GoogleSectionHeader,
+    GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning,
 };
 
 // =============================================================================
@@ -382,14 +382,14 @@ fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usi
 ///
 /// assert_eq!(doc.summary.value, "Summary.");
 ///
-/// let args: Vec<_> = doc.sections.iter().filter_map(|s| match &s.body {
+/// let args: Vec<_> = doc.sections().filter_map(|s| match &s.body {
 ///     GoogleSectionBody::Args(v) => Some(v.iter()),
 ///     _ => None,
 /// }).flatten().collect();
 /// assert_eq!(args.len(), 1);
 /// assert_eq!(args[0].name.value, "x");
 ///
-/// let returns: Vec<_> = doc.sections.iter().filter_map(|s| match &s.body {
+/// let returns: Vec<_> = doc.sections().filter_map(|s| match &s.body {
 ///     GoogleSectionBody::Returns(v) => Some(v.iter()),
 ///     _ => None,
 /// }).flatten().collect();
@@ -457,13 +457,8 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
             let last_line = cursor.line_text(last_non_empty);
             let last_trimmed = last_line.trim();
             let last_col = indent_len(last_line) + last_trimmed.len();
-            docstring.extended_summary = Some(cursor.make_spanned(
-                joined,
-                start_line,
-                first_col,
-                last_non_empty,
-                last_col,
-            ));
+            docstring.extended_summary =
+                Some(cursor.make_spanned(joined, start_line, first_col, last_non_empty, last_col));
         }
     }
 
@@ -623,9 +618,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                 Some(GoogleSectionKind::Tip) => {
                     GoogleSectionBody::Tip(parse_section_content(&mut cursor, base_indent))
                 }
-                None => {
-                    GoogleSectionBody::Unknown(parse_section_content(&mut cursor, base_indent))
-                }
+                None => GoogleSectionBody::Unknown(parse_section_content(&mut cursor, base_indent)),
             };
 
             // Compute section span
@@ -644,17 +637,36 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                 indent_len(end_line) + end_line.trim().len()
             };
 
-            docstring.sections.push(GoogleSection {
-                range: cursor.make_range(
-                    section_start,
-                    header_col,
-                    section_end_line,
-                    section_end_col,
-                ),
-                header,
-                body,
-            });
+            docstring
+                .items
+                .push(GoogleDocstringItem::Section(GoogleSection {
+                    range: cursor.make_range(
+                        section_start,
+                        header_col,
+                        section_end_line,
+                        section_end_col,
+                    ),
+                    header,
+                    body,
+                }));
         } else {
+            // Not a section header and not blank: record as a stray line
+            // so that a linter layer can inspect it later.
+            let line = cursor.current_line_text();
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                let col = cursor.current_indent();
+                let spanned = cursor.make_spanned(
+                    trimmed.to_string(),
+                    cursor.line,
+                    col,
+                    cursor.line,
+                    col + trimmed.len(),
+                );
+                docstring
+                    .items
+                    .push(GoogleDocstringItem::StrayLine(spanned));
+            }
             cursor.advance();
         }
     }
@@ -917,16 +929,15 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
             let col = indent;
             let entry_start = cursor.line;
 
-            let (exc_type_str, first_desc, desc_col) =
-                if let Some(colon_pos) = trimmed.find(": ") {
-                    let et = &trimmed[..colon_pos];
-                    let desc = &trimmed[colon_pos + 2..];
-                    (et, desc, col + colon_pos + 2)
-                } else if let Some(prefix) = trimmed.strip_suffix(':') {
-                    (prefix, "", col + trimmed.len())
-                } else {
-                    (trimmed, "", col + trimmed.len())
-                };
+            let (exc_type_str, first_desc, desc_col) = if let Some(colon_pos) = trimmed.find(": ") {
+                let et = &trimmed[..colon_pos];
+                let desc = &trimmed[colon_pos + 2..];
+                (et, desc, col + colon_pos + 2)
+            } else if let Some(prefix) = trimmed.strip_suffix(':') {
+                (prefix, "", col + trimmed.len())
+            } else {
+                (trimmed, "", col + trimmed.len())
+            };
 
             let exc_type = cursor.make_spanned(
                 exc_type_str.to_string(),
@@ -1132,8 +1143,7 @@ mod tests {
     // -- test-local helpers --
 
     fn args(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
-        doc.sections
-            .iter()
+        doc.sections()
             .filter_map(|s| match &s.body {
                 GoogleSectionBody::Args(v) => Some(v.iter()),
                 _ => None,
@@ -1143,8 +1153,7 @@ mod tests {
     }
 
     fn returns(doc: &GoogleDocstring) -> Vec<&GoogleReturns> {
-        doc.sections
-            .iter()
+        doc.sections()
             .filter_map(|s| match &s.body {
                 GoogleSectionBody::Returns(v) => Some(v.iter()),
                 _ => None,
@@ -1154,8 +1163,7 @@ mod tests {
     }
 
     fn raises(doc: &GoogleDocstring) -> Vec<&GoogleException> {
-        doc.sections
-            .iter()
+        doc.sections()
             .filter_map(|s| match &s.body {
                 GoogleSectionBody::Raises(v) => Some(v.iter()),
                 _ => None,

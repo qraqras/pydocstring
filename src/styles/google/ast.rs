@@ -162,6 +162,24 @@ impl fmt::Display for GoogleSectionKind {
     }
 }
 
+/// A single item in the body of a Google-style docstring (after the summary
+/// and optional extended summary).
+///
+/// Preserving both sections and stray lines in a single ordered `Vec` ensures
+/// the original source order is never lost, which matters for linters that
+/// want to report diagnostics in document order.
+#[derive(Debug, Clone, PartialEq)]
+pub enum GoogleDocstringItem {
+    /// A recognised (or unknown-name) section, e.g. `Args:` or `Custom:`.
+    Section(GoogleSection),
+    /// A non-blank line that appeared between sections but was neither blank
+    /// nor recognised as a section header.
+    ///
+    /// Typical causes include misplaced prose, a section name whose colon was
+    /// accidentally omitted, or an entry that was not indented correctly.
+    StrayLine(Spanned<String>),
+}
+
 /// A single Google-style section, combining header and body.
 ///
 /// ```text
@@ -279,8 +297,12 @@ pub struct GoogleDocstring {
     pub summary: Spanned<String>,
     /// Extended summary (multiple paragraphs before any section header).
     pub extended_summary: Option<Spanned<String>>,
-    /// All sections in order of appearance.
-    pub sections: Vec<GoogleSection>,
+    /// All sections and stray lines in document order.
+    ///
+    /// Use [`sections()`](Self::sections) to iterate only over
+    /// [`GoogleSection`] items, or [`stray_lines()`](Self::stray_lines) to
+    /// iterate only over stray lines.
+    pub items: Vec<GoogleDocstringItem>,
 }
 
 /// Google-style argument.
@@ -385,8 +407,24 @@ impl GoogleDocstring {
             range: TextRange::empty(),
             summary: Spanned::empty_string(),
             extended_summary: None,
-            sections: Vec::new(),
+            items: Vec::new(),
         }
+    }
+
+    /// Iterate over only the [`GoogleSection`] items in document order.
+    pub fn sections(&self) -> impl Iterator<Item = &GoogleSection> {
+        self.items.iter().filter_map(|item| match item {
+            GoogleDocstringItem::Section(s) => Some(s),
+            _ => None,
+        })
+    }
+
+    /// Iterate over only the stray-line items in document order.
+    pub fn stray_lines(&self) -> impl Iterator<Item = &Spanned<String>> {
+        self.items.iter().filter_map(|item| match item {
+            GoogleDocstringItem::StrayLine(s) => Some(s),
+            _ => None,
+        })
     }
 }
 

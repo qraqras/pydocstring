@@ -48,9 +48,9 @@ pub mod styles;
 pub use ast::{LineIndex, Spanned, Style, TextRange, TextSize};
 pub use parser::detect_style;
 pub use styles::google::{
-    self, GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod,
-    GoogleReturns, GoogleSection, GoogleSectionBody, GoogleSectionHeader, GoogleSectionKind,
-    GoogleSeeAlsoItem, GoogleWarning,
+    self, GoogleArg, GoogleAttribute, GoogleDocstring, GoogleDocstringItem, GoogleException,
+    GoogleMethod, GoogleReturns, GoogleSection, GoogleSectionBody, GoogleSectionHeader,
+    GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning,
 };
 pub use styles::numpy::{
     self, NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod,
