@@ -1,7 +1,7 @@
 //! Integration tests for NumPy-style docstring parser.
 
 use pydocstring::numpy::parse_numpy;
-use pydocstring::{TextSize, LineIndex};
+use pydocstring::TextSize;
 
 // =============================================================================
 // Basic parsing
@@ -64,11 +64,11 @@ fn test_docstring_span_covers_entire_input() {
 }
 
 // =============================================================================
-// Signature
+// Signature-like line is treated as summary
 // =============================================================================
 
 #[test]
-fn test_parse_with_signature() {
+fn test_parse_with_signature_line() {
     let docstring = r#"add(a, b)
 
 The sum of two numbers.
@@ -81,11 +81,8 @@ b : int
     Second number.
 "#;
     let result = parse_numpy(docstring).value;
-    assert_eq!(
-        result.signature.as_ref().map(|s| s.value.as_str()),
-        Some("add(a, b)")
-    );
-    assert_eq!(result.summary.value, "The sum of two numbers.");
+    // The signature-like line is now parsed as the summary
+    assert_eq!(result.summary.value, "add(a, b)");
     assert_eq!(result.parameters().len(), 2);
 }
 
@@ -426,9 +423,9 @@ References
     let result = parse_numpy(docstring).value;
     let refs = result.references();
     assert_eq!(refs.len(), 2);
-    assert_eq!(refs[0].number, 1);
+    assert_eq!(refs[0].number.value, "1");
     assert!(refs[0].content.value.contains("Author A"));
-    assert_eq!(refs[1].number, 2);
+    assert_eq!(refs[1].number.value, "2");
     assert!(refs[1].content.value.contains("Author B"));
 }
 
@@ -480,7 +477,7 @@ x : int
     let result = parse_numpy(docstring).value;
     let hdr = &result.sections[0].header;
     assert_eq!(hdr.name.range.source_text(&result.source), "Parameters");
-    assert_eq!(hdr.underline.source_text(&result.source), "----------");
+    assert_eq!(hdr.underline.value, "----------");
 }
 
 // =============================================================================
@@ -504,7 +501,7 @@ x : int
         result.sections[0].header.name.range.source_text(src),
         "Parameters"
     );
-    let underline = result.sections[0].header.underline.source_text(src);
+    let underline = &result.sections[0].header.underline.value;
     assert!(underline.chars().all(|c| c == '-'));
 
     let p = &result.parameters()[0];
@@ -636,4 +633,138 @@ fn test_mixed_indent_first_line() {
     assert_eq!(result.parameters().len(), 1);
     assert_eq!(result.parameters()[0].names[0].value, "x");
     assert_eq!(result.parameters()[0].description.value, "Description.");
+}
+
+// =============================================================================
+// Diagnostics
+// =============================================================================
+
+#[test]
+fn test_diagnostic_empty_section_body() {
+    let docstring = "Summary.\n\nParameters\n----------\n\nReturns\n-------\nint\n    Result.";
+    let result = parse_numpy(docstring);
+    let diags: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.message.contains("empty section body"))
+        .collect();
+    assert_eq!(diags.len(), 1);
+    assert!(diags[0].message.contains("Parameters"));
+}
+
+#[test]
+fn test_diagnostic_underline_length_mismatch() {
+    let docstring = "Summary.\n\nParameters\n---\nx : int\n    Desc.";
+    let result = parse_numpy(docstring);
+    let diags: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.message.contains("underline length"))
+        .collect();
+    assert_eq!(diags.len(), 1);
+    assert!(diags[0].message.contains("10")); // "Parameters" is 10 chars
+    assert!(diags[0].message.contains("3")); // "---" is 3 chars
+}
+
+#[test]
+fn test_diagnostic_underline_length_match_no_warning() {
+    let docstring = "Summary.\n\nParameters\n----------\nx : int\n    Desc.";
+    let result = parse_numpy(docstring);
+    let diags: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.message.contains("underline length"))
+        .collect();
+    assert!(diags.is_empty());
+}
+
+#[test]
+fn test_diagnostic_missing_parameter_description() {
+    let docstring = "Summary.\n\nParameters\n----------\nx : int";
+    let result = parse_numpy(docstring);
+    let diags: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.message.contains("missing description"))
+        .collect();
+    assert_eq!(diags.len(), 1);
+    assert!(diags[0].message.contains("'x'"));
+}
+
+#[test]
+fn test_diagnostic_missing_return_description() {
+    let docstring = "Summary.\n\nReturns\n-------\nint";
+    let result = parse_numpy(docstring);
+    let diags: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.message.contains("missing description"))
+        .collect();
+    assert_eq!(diags.len(), 1);
+    assert!(diags[0].message.contains("int"));
+}
+
+#[test]
+fn test_diagnostic_missing_exception_description() {
+    let docstring = "Summary.\n\nRaises\n------\nValueError";
+    let result = parse_numpy(docstring);
+    let diags: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.message.contains("missing description"))
+        .collect();
+    assert_eq!(diags.len(), 1);
+    assert!(diags[0].message.contains("ValueError"));
+}
+
+#[test]
+fn test_no_diagnostics_when_complete() {
+    let docstring = "Summary.\n\nParameters\n----------\nx : int\n    The value.\n\nReturns\n-------\nint\n    The result.\n\nRaises\n------\nValueError\n    If invalid.";
+    let result = parse_numpy(docstring);
+    assert!(
+        result.diagnostics.is_empty(),
+        "expected no diagnostics, got: {:?}",
+        result.diagnostics
+    );
+}
+
+// =============================================================================
+// Enum / choices type
+// =============================================================================
+
+#[test]
+fn test_enum_type_as_string() {
+    let docstring =
+        "Summary.\n\nParameters\n----------\norder : {'C', 'F', 'A'}\n    Memory layout.";
+    let result = parse_numpy(docstring).value;
+    let params = result.parameters();
+    assert_eq!(params.len(), 1);
+
+    let p = &params[0];
+    assert_eq!(p.names[0].value, "order");
+    assert_eq!(p.param_type.as_ref().unwrap().value, "{'C', 'F', 'A'}");
+    assert_eq!(p.description.value, "Memory layout.");
+}
+
+#[test]
+fn test_enum_type_with_optional() {
+    let docstring =
+        "Summary.\n\nParameters\n----------\norder : {'C', 'F'}, optional\n    Memory layout.";
+    let result = parse_numpy(docstring).value;
+    let params = result.parameters();
+    let p = &params[0];
+
+    assert!(p.optional.is_some());
+    assert_eq!(p.param_type.as_ref().unwrap().value, "{'C', 'F'}");
+}
+
+#[test]
+fn test_enum_type_with_default() {
+    let docstring = "Summary.\n\nParameters\n----------\norder : {'C', 'F', 'A'}, default 'C'\n    Memory layout.";
+    let result = parse_numpy(docstring).value;
+    let params = result.parameters();
+    let p = &params[0];
+
+    assert_eq!(p.param_type.as_ref().unwrap().value, "{'C', 'F', 'A'}");
+    assert_eq!(p.default.as_ref().unwrap().value, "'C'");
 }

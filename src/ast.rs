@@ -310,11 +310,6 @@ pub(crate) fn make_range(
     )
 }
 
-/// Create a [`TextRange`] directly from byte offsets.
-pub(crate) fn make_range_raw(start: usize, end: usize) -> TextRange {
-    TextRange::new(TextSize::new(start as u32), TextSize::new(end as u32))
-}
-
 /// Create a [`Spanned<String>`] with a computed range.
 pub(crate) fn make_spanned(
     value: String,

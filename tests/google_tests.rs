@@ -213,8 +213,8 @@ fn test_args_type_span() {
 fn test_args_optional_span() {
     let docstring = "Summary.\n\nArgs:\n    x (int, optional): Value.";
     let result = parse_google(docstring).value;
-    let opt_span = result.args()[0].optional.unwrap();
-    assert_eq!(opt_span.source_text(&result.source), "optional");
+    let opt_span = result.args()[0].optional.as_ref().unwrap();
+    assert_eq!(opt_span.range.source_text(&result.source), "optional");
 }
 
 // =============================================================================

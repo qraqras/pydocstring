@@ -133,9 +133,9 @@ pub struct GoogleArgument {
     pub arg_type: Option<Spanned<String>>,
     /// Argument description with its span.
     pub description: Spanned<String>,
-    /// Source range of the `optional` marker, if present.
-    /// `None` means not marked as optional, `Some(range)` gives the location of `optional` text.
-    pub optional: Option<TextRange>,
+    /// The `optional` marker, if present.
+    /// `None` means not marked as optional.
+    pub optional: Option<Spanned<String>>,
 }
 
 /// Google-style return or yield value.

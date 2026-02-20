@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::ast::{TextRange, Spanned};
+use crate::ast::{Spanned, TextRange};
 
 // =============================================================================
 // NumPy Style Types
@@ -37,8 +37,8 @@ pub struct NumPySectionHeader {
     pub range: TextRange,
     /// Section name (e.g., "Parameters", "Returns") with its span.
     pub name: Spanned<String>,
-    /// Source span of the underline (dashes) line.
-    pub underline: TextRange,
+    /// Underline (dashes) line with its span.
+    pub underline: Spanned<String>,
 }
 
 /// Body content of a NumPy-style section.
@@ -93,9 +93,6 @@ pub struct NumPyDocstring {
     pub source: String,
     /// Source span of the entire docstring.
     pub range: TextRange,
-    /// Function/method signature (optional, for C functions or when not available via introspection).
-    /// Example: "add(a, b)"
-    pub signature: Option<Spanned<String>>,
     /// Brief summary (first line).
     pub summary: Spanned<String>,
     /// Deprecation warning (if applicable).
@@ -122,9 +119,9 @@ pub struct NumPyParameter {
     pub param_type: Option<Spanned<String>>,
     /// Parameter description with its span.
     pub description: Spanned<String>,
-    /// Source span of the `optional` marker, if present.
-    /// `None` means not marked as optional, `Some(span)` gives the location of `optional` text.
-    pub optional: Option<TextRange>,
+    /// The `optional` marker, if present.
+    /// `None` means not marked as optional.
+    pub optional: Option<Spanned<String>>,
     /// Default value (e.g., "True", "-1", "None") with its span.
     pub default: Option<Spanned<String>>,
 }
@@ -169,8 +166,8 @@ pub struct NumPyDeprecation {
 pub struct NumPyReference {
     /// Source span.
     pub range: TextRange,
-    /// Reference number (1, 2, 3, ...).
-    pub number: u32,
+    /// Reference number (e.g., "1", "2", "3") with its span.
+    pub number: Spanned<String>,
     /// Reference content (author, title, etc) with its span.
     pub content: Spanned<String>,
 }
@@ -231,7 +228,6 @@ impl NumPyDocstring {
         Self {
             source: String::new(),
             range: TextRange::empty(),
-            signature: None,
             summary: Spanned::empty_string(),
             deprecation: None,
             extended_summary: None,

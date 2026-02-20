@@ -19,8 +19,10 @@
 //!     Description of return value.
 //! ```
 
-use crate::ast::{build_line_offsets, indent_len, make_range, make_spanned, offset_to_line_col, Spanned, TextRange};
-use crate::error::ParseResult;
+use crate::ast::{
+    build_line_offsets, indent_len, make_range, make_spanned, offset_to_line_col, Spanned,
+};
+use crate::error::{Diagnostic, ParseResult};
 use crate::styles::numpy::ast::{
     NumPyDeprecation, NumPyDocstring, NumPyException, NumPyParameter, NumPyReturns, NumPySection,
     NumPySectionBody, NumPySectionHeader,
@@ -32,7 +34,7 @@ use crate::styles::numpy::ast::{
 
 /// Detect the indent level of the first non-empty line starting at `start`.
 ///
-/// This is used within section parsers to determine the "entry indent" —
+/// This is used within section parsers to determine the Pentry indent" —
 /// the indentation at which parameter/return entries appear. Lines more
 /// indented than this are treated as descriptions.
 fn detect_entry_indent(lines: &[&str], start: usize) -> usize {
@@ -150,36 +152,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
         return ParseResult::ok(docstring);
     }
 
-    // --- Signature / Summary ---
-    let first_trimmed = lines[i].trim();
-    let first_col = indent_len(lines[i]);
-
-    // Detect function signature: "func(args)" on its own line
-    if first_trimmed.contains('(') && first_trimmed.ends_with(')') {
-        let next_i = i + 1;
-        let is_sig = if next_i < lines.len() {
-            let nl = lines[next_i].trim();
-            nl.is_empty() || is_section_header(&lines, next_i)
-        } else {
-            true
-        };
-        if is_sig {
-            docstring.signature = Some(make_spanned(
-                first_trimmed.to_string(),
-                i,
-                first_col,
-                i,
-                first_col + first_trimmed.len(),
-                &offsets,
-            ));
-            i += 1;
-            while i < lines.len() && lines[i].trim().is_empty() {
-                i += 1;
-            }
-        }
-    }
-
-    // Parse summary line (may follow signature)
+    // --- Summary ---
     if i < lines.len() && !is_section_header(&lines, i) {
         let line = lines[i];
         let trimmed = line.trim();
@@ -284,6 +257,8 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
         }
     }
 
+    let mut diagnostics: Vec<Diagnostic> = Vec::new();
+
     // --- Sections ---
     while i < lines.len() {
         if is_section_header(&lines, i) {
@@ -312,7 +287,8 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                     header_col + header_trimmed.len(),
                     &offsets,
                 ),
-                underline: make_range(
+                underline: make_spanned(
+                    underline_trimmed.to_string(),
                     i + 1,
                     underline_col,
                     i + 1,
@@ -321,36 +297,69 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                 ),
             };
 
+            // Detect underline length mismatch
+            if underline_trimmed.len() != header_trimmed.len() {
+                diagnostics.push(Diagnostic::warning(
+                    make_range(
+                        i + 1,
+                        underline_col,
+                        i + 1,
+                        underline_col + underline_trimmed.len(),
+                        &offsets,
+                    ),
+                    format!(
+                        "underline length ({}) does not match section name '{}' ({})",
+                        underline_trimmed.len(),
+                        header_trimmed,
+                        header_trimmed.len()
+                    ),
+                ));
+            }
+
             i += 2; // skip header + underline
 
             let normalized = header_trimmed.to_ascii_lowercase();
             let (body, next_i) = match normalized.as_str() {
                 "parameters" | "params" => {
-                    let (params, ni) = parse_parameters(&lines, i, &offsets).value;
+                    let result = parse_parameters(&lines, i, &offsets);
+                    diagnostics.extend(result.diagnostics);
+                    let (params, ni) = result.value;
                     (NumPySectionBody::Parameters(params), ni)
                 }
                 "returns" | "return" => {
-                    let (rets, ni) = parse_returns(&lines, i, &offsets).value;
+                    let result = parse_returns(&lines, i, &offsets);
+                    diagnostics.extend(result.diagnostics);
+                    let (rets, ni) = result.value;
                     (NumPySectionBody::Returns(rets), ni)
                 }
                 "raises" | "raise" => {
-                    let (raises, ni) = parse_raises(&lines, i, &offsets).value;
+                    let result = parse_raises(&lines, i, &offsets);
+                    diagnostics.extend(result.diagnostics);
+                    let (raises, ni) = result.value;
                     (NumPySectionBody::Raises(raises), ni)
                 }
                 "yields" | "yield" => {
-                    let (yields, ni) = parse_returns(&lines, i, &offsets).value;
+                    let result = parse_returns(&lines, i, &offsets);
+                    diagnostics.extend(result.diagnostics);
+                    let (yields, ni) = result.value;
                     (NumPySectionBody::Yields(yields), ni)
                 }
                 "receives" | "receive" => {
-                    let (receives, ni) = parse_parameters(&lines, i, &offsets).value;
+                    let result = parse_parameters(&lines, i, &offsets);
+                    diagnostics.extend(result.diagnostics);
+                    let (receives, ni) = result.value;
                     (NumPySectionBody::Receives(receives), ni)
                 }
                 "other parameters" | "other params" => {
-                    let (params, ni) = parse_parameters(&lines, i, &offsets).value;
+                    let result = parse_parameters(&lines, i, &offsets);
+                    diagnostics.extend(result.diagnostics);
+                    let (params, ni) = result.value;
                     (NumPySectionBody::OtherParameters(params), ni)
                 }
                 "warns" | "warn" => {
-                    let (raises, ni) = parse_raises(&lines, i, &offsets).value;
+                    let result = parse_raises(&lines, i, &offsets);
+                    diagnostics.extend(result.diagnostics);
+                    let (raises, ni) = result.value;
                     let warns = raises
                         .into_iter()
                         .map(|e| crate::styles::numpy::ast::NumPyWarning {
@@ -382,7 +391,9 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                     (NumPySectionBody::References(refs), ni)
                 }
                 "attributes" => {
-                    let (params, ni) = parse_parameters(&lines, i, &offsets).value;
+                    let result = parse_parameters(&lines, i, &offsets);
+                    diagnostics.extend(result.diagnostics);
+                    let (params, ni) = result.value;
                     let attrs = params
                         .into_iter()
                         .map(|p| crate::styles::numpy::ast::NumPyAttribute {
@@ -399,7 +410,9 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                     (NumPySectionBody::Attributes(attrs), ni)
                 }
                 "methods" => {
-                    let (params, ni) = parse_parameters(&lines, i, &offsets).value;
+                    let result = parse_parameters(&lines, i, &offsets);
+                    diagnostics.extend(result.diagnostics);
+                    let (params, ni) = result.value;
                     let methods = params
                         .into_iter()
                         .map(|p| crate::styles::numpy::ast::NumPyMethod {
@@ -433,6 +446,36 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
                 .map(|l| indent_len(l) + l.trim().len())
                 .unwrap_or(0);
 
+            // Detect empty section body
+            let is_empty = match &body {
+                NumPySectionBody::Parameters(v)
+                | NumPySectionBody::Receives(v)
+                | NumPySectionBody::OtherParameters(v) => v.is_empty(),
+                NumPySectionBody::Returns(v) | NumPySectionBody::Yields(v) => v.is_empty(),
+                NumPySectionBody::Raises(v) => v.is_empty(),
+                NumPySectionBody::Warns(v) => v.is_empty(),
+                NumPySectionBody::SeeAlso(v) => v.is_empty(),
+                NumPySectionBody::Attributes(v) => v.is_empty(),
+                NumPySectionBody::Methods(v) => v.is_empty(),
+                NumPySectionBody::References(v) => v.is_empty(),
+                NumPySectionBody::Notes(s)
+                | NumPySectionBody::Examples(s)
+                | NumPySectionBody::Warnings(s)
+                | NumPySectionBody::Unknown(s) => s.value.is_empty(),
+            };
+            if is_empty {
+                diagnostics.push(Diagnostic::warning(
+                    make_range(
+                        section_start,
+                        header_col,
+                        section_start,
+                        header_col + header_trimmed.len(),
+                        &offsets,
+                    ),
+                    format!("empty section body for '{}'", header_trimmed),
+                ));
+            }
+
             docstring.sections.push(NumPySection {
                 range: make_range(
                     section_start,
@@ -456,7 +499,7 @@ pub fn parse_numpy(input: &str) -> ParseResult<NumPyDocstring> {
     let last_col = lines.last().map(|l| l.len()).unwrap_or(0);
     docstring.range = make_range(0, 0, last_line, last_col, &offsets);
 
-    ParseResult::ok(docstring)
+    ParseResult::with_diagnostics(docstring, diagnostics)
 }
 
 // =============================================================================
@@ -470,6 +513,7 @@ fn parse_parameters(
     offsets: &[usize],
 ) -> ParseResult<(Vec<NumPyParameter>, usize)> {
     let mut parameters = Vec::new();
+    let mut diagnostics = Vec::new();
     let mut i = start;
     let entry_indent = detect_entry_indent(lines, start);
 
@@ -497,6 +541,18 @@ fn parse_parameters(
                 offset_to_line_col(desc.range.end().raw() as usize, &offsets)
             };
 
+            // Detect missing description
+            if desc.value.is_empty() {
+                let name_label = names
+                    .first()
+                    .map(|n| n.value.as_str())
+                    .unwrap_or("parameter");
+                diagnostics.push(Diagnostic::hint(
+                    make_range(entry_start, col, entry_start, col + trimmed.len(), offsets),
+                    format!("missing description for parameter '{}'", name_label),
+                ));
+            }
+
             parameters.push(NumPyParameter {
                 range: make_range(entry_start, col, entry_end_line, entry_end_col, offsets),
                 names,
@@ -512,7 +568,7 @@ fn parse_parameters(
         i += 1;
     }
 
-    ParseResult::ok((parameters, i))
+    ParseResult::with_diagnostics((parameters, i), diagnostics)
 }
 
 /// Check whether `trimmed` looks like a parameter header line.
@@ -526,7 +582,7 @@ fn is_param_header(trimmed: &str) -> bool {
 type ParamHeaderParts = (
     Vec<Spanned<String>>,
     Option<Spanned<String>>,
-    Option<TextRange>,
+    Option<Spanned<String>>,
     Option<Spanned<String>>,
 );
 
@@ -567,7 +623,8 @@ fn parse_name_and_type(
     // Check for "optional" marker
     let optional = if let Some(opt_pos) = type_str.find("optional") {
         let opt_col = type_col + opt_pos;
-        Some(make_range(
+        Some(make_spanned(
+            "optional".to_string(),
             line_idx,
             opt_col,
             line_idx,
@@ -689,6 +746,7 @@ fn parse_returns(
     offsets: &[usize],
 ) -> ParseResult<(Vec<NumPyReturns>, usize)> {
     let mut returns = Vec::new();
+    let mut diagnostics = Vec::new();
     let mut i = start;
     let entry_indent = detect_entry_indent(lines, start);
 
@@ -753,6 +811,19 @@ fn parse_returns(
                 offset_to_line_col(desc.range.end().raw() as usize, &offsets)
             };
 
+            // Detect missing description
+            if desc.value.is_empty() {
+                let label = return_type
+                    .as_ref()
+                    .map_or("return entry".to_string(), |rt| {
+                        format!("return type '{}'", rt.value)
+                    });
+                diagnostics.push(Diagnostic::hint(
+                    make_range(entry_start, col, entry_start, col + trimmed.len(), offsets),
+                    format!("missing description for {}", label),
+                ));
+            }
+
             returns.push(NumPyReturns {
                 range: make_range(entry_start, col, entry_end_line, entry_end_col, offsets),
                 name,
@@ -766,7 +837,7 @@ fn parse_returns(
         i += 1;
     }
 
-    ParseResult::ok((returns, i))
+    ParseResult::with_diagnostics((returns, i), diagnostics)
 }
 
 // =============================================================================
@@ -780,6 +851,7 @@ fn parse_raises(
     offsets: &[usize],
 ) -> ParseResult<(Vec<NumPyException>, usize)> {
     let mut raises = Vec::new();
+    let mut diagnostics = Vec::new();
     let mut i = start;
     let entry_indent = detect_entry_indent(lines, start);
 
@@ -807,6 +879,14 @@ fn parse_raises(
                 offset_to_line_col(desc.range.end().raw() as usize, &offsets)
             };
 
+            // Detect missing description
+            if desc.value.is_empty() {
+                diagnostics.push(Diagnostic::hint(
+                    make_range(entry_start, col, entry_start, col + trimmed.len(), offsets),
+                    format!("missing description for exception '{}'", trimmed),
+                ));
+            }
+
             raises.push(NumPyException {
                 range: make_range(entry_start, col, entry_end_line, entry_end_col, offsets),
                 exception_type: exc_type,
@@ -819,7 +899,7 @@ fn parse_raises(
         i += 1;
     }
 
-    ParseResult::ok((raises, i))
+    ParseResult::with_diagnostics((raises, i), diagnostics)
 }
 
 // =============================================================================
@@ -956,9 +1036,11 @@ fn parse_references(
     start: usize,
     offsets: &[usize],
 ) -> ParseResult<(Vec<crate::styles::numpy::ast::NumPyReference>, usize)> {
+    use crate::ast::Spanned;
+
     let mut refs = Vec::new();
     let mut i = start;
-    let mut current_number: u32 = 0;
+    let mut current_number: Spanned<String> = Spanned::dummy(String::new());
     let mut current_content_lines: Vec<&str> = Vec::new();
     let mut current_start_line: Option<usize> = None;
     let mut current_col = 0usize;
@@ -984,7 +1066,7 @@ fn parse_references(
                 let end_col = current_col + content.lines().last().unwrap_or("").len();
                 refs.push(crate::styles::numpy::ast::NumPyReference {
                     range: make_range(start_l, current_col, end_l, end_col, offsets),
-                    number: current_number,
+                    number: current_number.clone(),
                     content: make_spanned(content, start_l, current_col, end_l, end_col, offsets),
                 });
             }
@@ -993,7 +1075,13 @@ fn parse_references(
             // Parse `.. [N] content`
             if let Some(bracket_end) = trimmed.find(']') {
                 let num_str = &trimmed[4..bracket_end];
-                current_number = num_str.parse().unwrap_or(refs.len() as u32 + 1);
+                // Span covers the number inside brackets: `[N]`
+                // In the line: `.. [N] ...`, the `[` is at col + 3, number starts at col + 4
+                let num_col = col + 4;
+                current_number = Spanned::new(
+                    num_str.to_string(),
+                    make_range(i, num_col, i, num_col + num_str.len(), offsets),
+                );
                 let after_bracket = trimmed[bracket_end + 1..].trim();
                 current_content_lines = vec![after_bracket];
                 current_start_line = Some(i);
@@ -1012,7 +1100,7 @@ fn parse_references(
                 let end_col = current_col + content.lines().last().unwrap_or("").len();
                 refs.push(crate::styles::numpy::ast::NumPyReference {
                     range: make_range(start_l, current_col, end_l, end_col, offsets),
-                    number: current_number,
+                    number: current_number.clone(),
                     content: make_spanned(content, start_l, current_col, end_l, end_col, offsets),
                 });
                 current_content_lines.clear();
@@ -1027,8 +1115,11 @@ fn parse_references(
             current_content_lines.push(trimmed);
             if current_start_line.is_none() {
                 current_start_line = Some(i);
-                current_number = refs.len() as u32 + 1;
-                current_col = indent_len(line);
+                let fallback_num = (refs.len() + 1).to_string();
+                let num_col = indent_len(line);
+                current_number =
+                    Spanned::new(fallback_num, make_range(i, num_col, i, num_col, offsets));
+                current_col = num_col;
             }
             i += 1;
         }

@@ -820,7 +820,14 @@ fn parse_args(
                     };
                     let opt = opt_off.map(|o| {
                         let oc = col + o;
-                        make_range(i, oc, i, oc + "optional".len(), offsets)
+                        make_spanned(
+                            "optional".to_string(),
+                            i,
+                            oc,
+                            i,
+                            oc + "optional".len(),
+                            offsets,
+                        )
                     });
                     (arg_t, opt)
                 }
