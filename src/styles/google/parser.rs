@@ -80,14 +80,14 @@ fn is_section_header(line: &str, base_indent: usize) -> bool {
 
 /// Find the byte offset of the first entry-separating colon in `text`.
 ///
-/// Skips colons that appear inside balanced brackets (`()`, `[]`) so that
-/// type annotations such as `Dict[str, int]` never trigger a false split.
+/// Skips colons that appear inside balanced brackets (`()`, `[]`, `{}`, `<>`)
+/// so that type annotations such as `Dict[str, int]` never trigger a false split.
 fn find_entry_colon(text: &str) -> Option<usize> {
     let mut depth: u32 = 0;
     for (i, b) in text.bytes().enumerate() {
         match b {
-            b'(' | b'[' => depth += 1,
-            b')' | b']' => depth = depth.saturating_sub(1),
+            b'(' | b'[' | b'{' | b'<' => depth += 1,
+            b')' | b']' | b'}' | b'>' => depth = depth.saturating_sub(1),
             b':' if depth == 0 => return Some(i),
             _ => {}
         }
@@ -99,7 +99,7 @@ fn find_entry_colon(text: &str) -> Option<usize> {
 // Comma splitting
 // =============================================================================
 
-/// Split `text` by top-level commas (respecting `()` and `[]` depth).
+/// Split `text` by top-level commas (respecting `()`, `[]`, `{}`, and `<>` depth).
 ///
 /// Returns a `Vec` of `(byte_offset, segment)` pairs where
 /// `byte_offset` is the start position of each segment within `text`.
@@ -110,8 +110,8 @@ fn split_comma_parts(text: &str) -> Vec<(usize, &str)> {
 
     for (i, b) in text.bytes().enumerate() {
         match b {
-            b'(' | b'[' => depth += 1,
-            b')' | b']' => depth = depth.saturating_sub(1),
+            b'(' | b'[' | b'{' | b'<' => depth += 1,
+            b')' | b']' | b'}' | b'>' => depth = depth.saturating_sub(1),
             b',' if depth == 0 => {
                 parts.push((start, &text[start..i]));
                 start = i + 1;

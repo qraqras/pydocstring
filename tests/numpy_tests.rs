@@ -1,12 +1,12 @@
 //! Integration tests for NumPy-style docstring parser.
 
+use pydocstring::NumPySectionBody;
 use pydocstring::TextSize;
 use pydocstring::numpy::parse_numpy;
 use pydocstring::numpy::{
     NumPyDocstring, NumPyDocstringItem, NumPyException, NumPyParameter, NumPyReference,
     NumPyReturns, NumPySection, NumPyWarning, SeeAlsoItem,
 };
-use pydocstring::NumPySectionBody;
 
 // =============================================================================
 // Test-local helpers
@@ -14,52 +14,79 @@ use pydocstring::NumPySectionBody;
 
 /// Extract all sections from a docstring, ignoring stray lines.
 fn sections(doc: &NumPyDocstring) -> Vec<&NumPySection> {
-    doc.items.iter().filter_map(|item| match item {
-        NumPyDocstringItem::Section(s) => Some(s),
-        _ => None,
-    }).collect()
+    doc.items
+        .iter()
+        .filter_map(|item| match item {
+            NumPyDocstringItem::Section(s) => Some(s),
+            _ => None,
+        })
+        .collect()
 }
 
 fn parameters(doc: &NumPyDocstring) -> Vec<&NumPyParameter> {
-    sections(doc).iter().filter_map(|s| match &s.body {
-        NumPySectionBody::Parameters(v) => Some(v.iter()),
-        _ => None,
-    }).flatten().collect()
+    sections(doc)
+        .iter()
+        .filter_map(|s| match &s.body {
+            NumPySectionBody::Parameters(v) => Some(v.iter()),
+            _ => None,
+        })
+        .flatten()
+        .collect()
 }
 
 fn returns(doc: &NumPyDocstring) -> Vec<&NumPyReturns> {
-    sections(doc).iter().filter_map(|s| match &s.body {
-        NumPySectionBody::Returns(v) => Some(v.iter()),
-        _ => None,
-    }).flatten().collect()
+    sections(doc)
+        .iter()
+        .filter_map(|s| match &s.body {
+            NumPySectionBody::Returns(v) => Some(v.iter()),
+            _ => None,
+        })
+        .flatten()
+        .collect()
 }
 
 fn raises(doc: &NumPyDocstring) -> Vec<&NumPyException> {
-    sections(doc).iter().filter_map(|s| match &s.body {
-        NumPySectionBody::Raises(v) => Some(v.iter()),
-        _ => None,
-    }).flatten().collect()
+    sections(doc)
+        .iter()
+        .filter_map(|s| match &s.body {
+            NumPySectionBody::Raises(v) => Some(v.iter()),
+            _ => None,
+        })
+        .flatten()
+        .collect()
 }
 
 fn warns(doc: &NumPyDocstring) -> Vec<&NumPyWarning> {
-    sections(doc).iter().filter_map(|s| match &s.body {
-        NumPySectionBody::Warns(v) => Some(v.iter()),
-        _ => None,
-    }).flatten().collect()
+    sections(doc)
+        .iter()
+        .filter_map(|s| match &s.body {
+            NumPySectionBody::Warns(v) => Some(v.iter()),
+            _ => None,
+        })
+        .flatten()
+        .collect()
 }
 
 fn see_also(doc: &NumPyDocstring) -> Vec<&SeeAlsoItem> {
-    sections(doc).iter().filter_map(|s| match &s.body {
-        NumPySectionBody::SeeAlso(v) => Some(v.iter()),
-        _ => None,
-    }).flatten().collect()
+    sections(doc)
+        .iter()
+        .filter_map(|s| match &s.body {
+            NumPySectionBody::SeeAlso(v) => Some(v.iter()),
+            _ => None,
+        })
+        .flatten()
+        .collect()
 }
 
 fn references(doc: &NumPyDocstring) -> Vec<&NumPyReference> {
-    sections(doc).iter().filter_map(|s| match &s.body {
-        NumPySectionBody::References(v) => Some(v.iter()),
-        _ => None,
-    }).flatten().collect()
+    sections(doc)
+        .iter()
+        .filter_map(|s| match &s.body {
+            NumPySectionBody::References(v) => Some(v.iter()),
+            _ => None,
+        })
+        .flatten()
+        .collect()
 }
 
 fn notes(doc: &NumPyDocstring) -> Option<&pydocstring::Spanned<String>> {
@@ -357,7 +384,14 @@ fn test_see_also_no_space_before_colon() {
     let sa = see_also(&result);
     assert_eq!(sa.len(), 1);
     assert_eq!(sa[0].names[0].value, "func_a");
-    assert!(sa[0].description.as_ref().unwrap().value.contains("Description"));
+    assert!(
+        sa[0]
+            .description
+            .as_ref()
+            .unwrap()
+            .value
+            .contains("Description")
+    );
 }
 
 #[test]
@@ -757,7 +791,6 @@ fn test_mixed_indent_first_line() {
     assert_eq!(parameters(&result)[0].description.value, "Description.");
 }
 
-
 // =============================================================================
 // Enum / choices type
 // =============================================================================
@@ -796,5 +829,7 @@ fn test_enum_type_with_default() {
     let p = &params[0];
 
     assert_eq!(p.r#type.as_ref().unwrap().value, "{'C', 'F', 'A'}");
-    assert_eq!(p.default.as_ref().unwrap().value, "'C'");
+    assert_eq!(p.default_keyword.as_ref().unwrap().value, "default");
+    assert!(p.default_separator.is_none()); // space-separated
+    assert_eq!(p.default_value.as_ref().unwrap().value, "'C'");
 }

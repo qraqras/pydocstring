@@ -269,8 +269,14 @@ pub struct NumPyParameter {
     /// The `optional` marker, if present.
     /// `None` means not marked as optional.
     pub optional: Option<Spanned<String>>,
+    /// The `default` keyword, if present (e.g., `"default"`).
+    pub default_keyword: Option<Spanned<String>>,
+    /// The separator after `default` (`=` or `:`), if present.
+    /// `None` when the value follows after whitespace only (e.g., `default True`).
+    pub default_separator: Option<Spanned<String>>,
     /// Default value (e.g., "True", "-1", "None") with its span.
-    pub default: Option<Spanned<String>>,
+    /// `None` when `default` appears alone without a value.
+    pub default_value: Option<Spanned<String>>,
 }
 
 /// NumPy-style return or yield value.
