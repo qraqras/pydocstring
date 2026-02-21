@@ -3,8 +3,8 @@
 use pydocstring::TextSize;
 use pydocstring::numpy::parse_numpy;
 use pydocstring::numpy::{
-    NumPyDocstring, NumPyException, NumPyParameter, NumPyReference, NumPyReturns, NumPyWarning,
-    SeeAlsoItem,
+    NumPyDocstring, NumPyDocstringItem, NumPyException, NumPyParameter, NumPyReference,
+    NumPyReturns, NumPySection, NumPyWarning, SeeAlsoItem,
 };
 use pydocstring::NumPySectionBody;
 
@@ -12,57 +12,65 @@ use pydocstring::NumPySectionBody;
 // Test-local helpers
 // =============================================================================
 
+/// Extract all sections from a docstring, ignoring stray lines.
+fn sections(doc: &NumPyDocstring) -> Vec<&NumPySection> {
+    doc.items.iter().filter_map(|item| match item {
+        NumPyDocstringItem::Section(s) => Some(s),
+        _ => None,
+    }).collect()
+}
+
 fn parameters(doc: &NumPyDocstring) -> Vec<&NumPyParameter> {
-    doc.sections.iter().filter_map(|s| match &s.body {
+    sections(doc).iter().filter_map(|s| match &s.body {
         NumPySectionBody::Parameters(v) => Some(v.iter()),
         _ => None,
     }).flatten().collect()
 }
 
 fn returns(doc: &NumPyDocstring) -> Vec<&NumPyReturns> {
-    doc.sections.iter().filter_map(|s| match &s.body {
+    sections(doc).iter().filter_map(|s| match &s.body {
         NumPySectionBody::Returns(v) => Some(v.iter()),
         _ => None,
     }).flatten().collect()
 }
 
 fn raises(doc: &NumPyDocstring) -> Vec<&NumPyException> {
-    doc.sections.iter().filter_map(|s| match &s.body {
+    sections(doc).iter().filter_map(|s| match &s.body {
         NumPySectionBody::Raises(v) => Some(v.iter()),
         _ => None,
     }).flatten().collect()
 }
 
 fn warns(doc: &NumPyDocstring) -> Vec<&NumPyWarning> {
-    doc.sections.iter().filter_map(|s| match &s.body {
+    sections(doc).iter().filter_map(|s| match &s.body {
         NumPySectionBody::Warns(v) => Some(v.iter()),
         _ => None,
     }).flatten().collect()
 }
 
 fn see_also(doc: &NumPyDocstring) -> Vec<&SeeAlsoItem> {
-    doc.sections.iter().filter_map(|s| match &s.body {
+    sections(doc).iter().filter_map(|s| match &s.body {
         NumPySectionBody::SeeAlso(v) => Some(v.iter()),
         _ => None,
     }).flatten().collect()
 }
 
 fn references(doc: &NumPyDocstring) -> Vec<&NumPyReference> {
-    doc.sections.iter().filter_map(|s| match &s.body {
+    sections(doc).iter().filter_map(|s| match &s.body {
         NumPySectionBody::References(v) => Some(v.iter()),
         _ => None,
     }).flatten().collect()
 }
 
 fn notes(doc: &NumPyDocstring) -> Option<&pydocstring::Spanned<String>> {
-    doc.sections.iter().find_map(|s| match &s.body {
+    sections(doc).iter().find_map(|s| match &s.body {
         NumPySectionBody::Notes(v) => Some(v),
         _ => None,
     })
 }
 
 fn examples(doc: &NumPyDocstring) -> Option<&pydocstring::Spanned<String>> {
-    doc.sections.iter().find_map(|s| match &s.body {
+    sections(doc).iter().find_map(|s| match &s.body {
         NumPySectionBody::Examples(v) => Some(v),
         _ => None,
     })
@@ -574,8 +582,8 @@ Some notes here.
     assert_eq!(returns(&result).len(), 1);
     assert!(notes(&result).is_some());
     // Original text is preserved in header
-    assert_eq!(result.sections[0].header.name.value, "parameters");
-    assert_eq!(result.sections[2].header.name.value, "NOTES");
+    assert_eq!(sections(&result)[0].header.name.value, "parameters");
+    assert_eq!(sections(&result)[2].header.name.value, "NOTES");
 }
 
 // =============================================================================
@@ -592,7 +600,7 @@ x : int
     Desc.
 "#;
     let result = parse_numpy(docstring);
-    let hdr = &result.sections[0].header;
+    let hdr = &sections(&result)[0].header;
     assert_eq!(hdr.name.range.source_text(&result.source), "Parameters");
     assert_eq!(hdr.underline.value, "----------");
 }
@@ -615,10 +623,10 @@ x : int
 
     assert_eq!(result.summary.range.source_text(src), "Summary line.");
     assert_eq!(
-        result.sections[0].header.name.range.source_text(src),
+        sections(&result)[0].header.name.range.source_text(src),
         "Parameters"
     );
-    let underline = &result.sections[0].header.underline.value;
+    let underline = &sections(&result)[0].header.underline.value;
     assert!(underline.chars().all(|c| c == '-'));
 
     let p = &parameters(&result)[0];

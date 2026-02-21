@@ -119,6 +119,24 @@ impl fmt::Display for NumPySectionKind {
     }
 }
 
+/// A single item in the body of a NumPy-style docstring (after the summary
+/// and optional extended summary).
+///
+/// Preserving both sections and stray lines in a single ordered `Vec` ensures
+/// the original source order is never lost, which matters for linters that
+/// want to report diagnostics in document order.
+#[derive(Debug, Clone, PartialEq)]
+pub enum NumPyDocstringItem {
+    /// A recognised (or unknown-name) section with header + underline + body.
+    Section(NumPySection),
+    /// A non-blank line that appeared between sections but was neither blank
+    /// nor recognised as a section header (i.e. not followed by an underline).
+    ///
+    /// Typical causes include misplaced prose, a section name whose underline
+    /// was accidentally omitted, or text that belongs to a previous section.
+    StrayLine(Spanned<String>),
+}
+
 /// A single NumPy-style section, combining header and body.
 ///
 /// ```text
@@ -213,8 +231,8 @@ pub struct NumPyDocstring {
     /// Extended summary (multiple sentences before any section header).
     /// Clarifies functionality, may reference parameters.
     pub extended_summary: Option<Spanned<String>>,
-    /// All sections in order of appearance.
-    pub sections: Vec<NumPySection>,
+    /// All items (sections and stray lines) in order of appearance.
+    pub items: Vec<NumPyDocstringItem>,
 }
 
 /// NumPy-style deprecation notice.
@@ -344,7 +362,7 @@ impl NumPyDocstring {
             summary: Spanned::empty_string(),
             deprecation: None,
             extended_summary: None,
-            sections: Vec::new(),
+            items: Vec::new(),
         }
     }
 }

@@ -22,8 +22,8 @@
 use crate::ast::Spanned;
 use crate::cursor::{Cursor, indent_len};
 use crate::styles::numpy::ast::{
-    NumPyDeprecation, NumPyDocstring, NumPyException, NumPyParameter, NumPyReturns, NumPySection,
-    NumPySectionBody, NumPySectionHeader, NumPySectionKind,
+    NumPyDeprecation, NumPyDocstring, NumPyDocstringItem, NumPyException, NumPyParameter,
+    NumPyReturns, NumPySection, NumPySectionBody, NumPySectionHeader, NumPySectionKind,
 };
 
 // =============================================================================
@@ -284,6 +284,18 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
             || cursor.line + 1 >= cursor.total_lines()
             || !is_underline(cursor.line_text(cursor.line + 1).trim())
         {
+            // Non-blank lines that are not section headers are stray lines.
+            if !header_trimmed.is_empty() {
+                let col = cursor.current_indent();
+                let spanned = cursor.make_spanned(
+                    header_trimmed.to_string(),
+                    cursor.line,
+                    col,
+                    cursor.line,
+                    col + header_trimmed.len(),
+                );
+                docstring.items.push(NumPyDocstringItem::StrayLine(spanned));
+            }
             cursor.advance();
             continue;
         }
@@ -435,11 +447,18 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
             indent_len(end_line_text) + end_line_text.trim().len()
         };
 
-        docstring.sections.push(NumPySection {
-            range: cursor.make_range(section_start, header_col, section_end_line, section_end_col),
-            header,
-            body,
-        });
+        docstring
+            .items
+            .push(NumPyDocstringItem::Section(NumPySection {
+                range: cursor.make_range(
+                    section_start,
+                    header_col,
+                    section_end_line,
+                    section_end_col,
+                ),
+                header,
+                body,
+            }));
     }
 
     // Docstring span

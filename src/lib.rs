@@ -53,7 +53,7 @@ pub use styles::google::{
     GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning,
 };
 pub use styles::numpy::{
-    self, NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod,
-    NumPyParameter, NumPyReference, NumPyReturns, NumPySection, NumPySectionBody,
+    self, NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyDocstringItem, NumPyException,
+    NumPyMethod, NumPyParameter, NumPyReference, NumPyReturns, NumPySection, NumPySectionBody,
     NumPySectionHeader, NumPySectionKind, NumPyWarning, SeeAlsoItem,
 };

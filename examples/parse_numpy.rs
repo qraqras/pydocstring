@@ -45,7 +45,14 @@ Examples
             .unwrap_or_default()
     );
 
-    for section in &doc.sections {
+    for item in &doc.items {
+        let section = match item {
+            pydocstring::NumPyDocstringItem::Section(s) => s,
+            pydocstring::NumPyDocstringItem::StrayLine(line) => {
+                println!("\nStray line: {}", line.value);
+                continue;
+            }
+        };
         match &section.body {
             NumPySectionBody::Parameters(params) => {
                 println!("\nParameters:");
