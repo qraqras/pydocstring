@@ -341,6 +341,66 @@ fn test_args_no_type() {
     assert_eq!(a[0].description.value, "The value.");
 }
 
+/// Colon with no space after it: `name:description`
+#[test]
+fn test_args_no_space_after_colon() {
+    let docstring = "Summary.\n\nArgs:\n    x:The value.";
+    let result = parse_google(docstring);
+    let a = args(&result);
+    assert_eq!(a[0].name.value, "x");
+    assert_eq!(a[0].description.value, "The value.");
+}
+
+/// Colon with extra spaces: `name:   description`
+#[test]
+fn test_args_extra_spaces_after_colon() {
+    let docstring = "Summary.\n\nArgs:\n    x:   The value.";
+    let result = parse_google(docstring);
+    let a = args(&result);
+    assert_eq!(a[0].name.value, "x");
+    assert_eq!(a[0].description.value, "The value.");
+}
+
+/// Returns entry with no space after colon.
+#[test]
+fn test_returns_no_space_after_colon() {
+    let docstring = "Summary.\n\nReturns:\n    int:The result.";
+    let result = parse_google(docstring);
+    let r = returns(&result);
+    assert_eq!(r[0].return_type.as_ref().unwrap().value, "int");
+    assert_eq!(r[0].description.value, "The result.");
+}
+
+/// Returns entry with extra spaces after colon.
+#[test]
+fn test_returns_extra_spaces_after_colon() {
+    let docstring = "Summary.\n\nReturns:\n    int:   The result.";
+    let result = parse_google(docstring);
+    let r = returns(&result);
+    assert_eq!(r[0].return_type.as_ref().unwrap().value, "int");
+    assert_eq!(r[0].description.value, "The result.");
+}
+
+/// Raises entry with no space after colon.
+#[test]
+fn test_raises_no_space_after_colon() {
+    let docstring = "Summary.\n\nRaises:\n    ValueError:If invalid.";
+    let result = parse_google(docstring);
+    let r = raises(&result);
+    assert_eq!(r[0].r#type.value, "ValueError");
+    assert_eq!(r[0].description.value, "If invalid.");
+}
+
+/// Raises entry with extra spaces after colon.
+#[test]
+fn test_raises_extra_spaces_after_colon() {
+    let docstring = "Summary.\n\nRaises:\n    ValueError:   If invalid.";
+    let result = parse_google(docstring);
+    let r = raises(&result);
+    assert_eq!(r[0].r#type.value, "ValueError");
+    assert_eq!(r[0].description.value, "If invalid.");
+}
+
 #[test]
 fn test_args_optional() {
     let docstring = "Summary.\n\nArgs:\n    x (int, optional): The value.";
@@ -1568,6 +1628,21 @@ fn test_raises_no_colon() {
     let r = raises(doc);
     assert_eq!(r.len(), 1);
     assert_eq!(r[0].r#type.value, "ValueError");
+}
+
+/// Multiline type annotation spanning multiple lines in Args section.
+#[test]
+fn test_args_multiline_type() {
+    let docstring = "Summary.\n\nArgs:\n    x (Dict[str,\n            int]): The value.";
+    let result = parse_google(docstring);
+    let a = args(&result);
+    assert_eq!(a.len(), 1);
+    assert_eq!(a[0].name.value, "x");
+    assert_eq!(
+        a[0].r#type.as_ref().unwrap().value,
+        "Dict[str,\n            int]"
+    );
+    assert_eq!(a[0].description.value, "The value.");
 }
 
 /// Unknown names without colon should NOT be treated as headers.

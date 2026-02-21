@@ -75,33 +75,88 @@ fn is_section_header(line: &str, base_indent: usize) -> bool {
 }
 
 // =============================================================================
+// Entry colon detection
+// =============================================================================
+
+/// Find the byte offset of the first entry-separating colon in `text`.
+///
+/// Skips colons that appear inside balanced brackets (`()`, `[]`) so that
+/// type annotations such as `Dict[str, int]` never trigger a false split.
+fn find_entry_colon(text: &str) -> Option<usize> {
+    let mut depth: u32 = 0;
+    for (i, b) in text.bytes().enumerate() {
+        match b {
+            b'(' | b'[' => depth += 1,
+            b')' | b']' => depth = depth.saturating_sub(1),
+            b':' if depth == 0 => return Some(i),
+            _ => {}
+        }
+    }
+    None
+}
+
+// =============================================================================
+// Comma splitting
+// =============================================================================
+
+/// Split `text` by top-level commas (respecting `()` and `[]` depth).
+///
+/// Returns a `Vec` of `(byte_offset, segment)` pairs where
+/// `byte_offset` is the start position of each segment within `text`.
+fn split_comma_parts(text: &str) -> Vec<(usize, &str)> {
+    let mut parts = Vec::new();
+    let mut depth: u32 = 0;
+    let mut start = 0;
+
+    for (i, b) in text.bytes().enumerate() {
+        match b {
+            b'(' | b'[' => depth += 1,
+            b')' | b']' => depth = depth.saturating_sub(1),
+            b',' if depth == 0 => {
+                parts.push((start, &text[start..i]));
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push((start, &text[start..]));
+    parts
+}
+
+// =============================================================================
 // Optional helpers
 // =============================================================================
 
 /// Strip a trailing `optional` marker from a type annotation.
 ///
-/// Finds the last `,` and checks whether everything after it (ignoring
-/// whitespace) is `optional`.  Works regardless of how many spaces
-/// appear between the comma and the word.
+/// Uses bracket-aware comma splitting so that commas inside type
+/// annotations like `Dict[str, int]` are never mistaken for the
+/// separator before `optional`.
 ///
 /// Returns `(clean_type, optional_byte_offset)` where the offset is
 /// relative to the start of `type_content` and points to the `o` in
 /// `optional`.
 fn strip_optional(type_content: &str) -> (&str, Option<usize>) {
-    if let Some(comma_pos) = type_content.rfind(',') {
-        let after_comma = &type_content[comma_pos + 1..];
-        if after_comma.trim() == "optional" {
-            let ws_len = after_comma.len() - after_comma.trim_start().len();
-            return (
-                type_content[..comma_pos].trim(),
-                Some(comma_pos + 1 + ws_len),
-            );
+    let parts = split_comma_parts(type_content);
+    let mut optional_offset = None;
+    let mut type_end = 0;
+
+    for &(seg_offset, seg_raw) in &parts {
+        let seg = seg_raw.trim();
+        if seg == "optional" {
+            let ws_lead = seg_raw.len() - seg_raw.trim_start().len();
+            optional_offset = Some(seg_offset + ws_lead);
+        } else if !seg.is_empty() {
+            type_end = seg_offset + seg_raw.trim_end().len();
         }
     }
-    if type_content.trim() == "optional" {
-        return ("", Some(type_content.find("optional").unwrap_or(0)));
+
+    if let Some(opt) = optional_offset {
+        let clean = type_content[..type_end].trim_end_matches(',').trim_end();
+        (clean, Some(opt))
+    } else {
+        (type_content, None)
     }
-    (type_content, None)
 }
 
 // =============================================================================
@@ -312,27 +367,18 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
         }
     }
 
-    // --- Pattern 2: `name: description` (no type) ---
-    if let Some(colon_rel) = trimmed.find(": ") {
+    // --- Pattern 2: `name: desc` / `name:desc` / `name:` (no type) ---
+    if let Some(colon_rel) = find_entry_colon(trimmed) {
         let name = &trimmed[..colon_rel];
+        let after_colon = &trimmed[colon_rel + 1..];
+        let desc = after_colon.trim_start();
+        let ws_after = after_colon.len() - desc.len();
         return EntryHeader {
             name,
             name_start: entry_start,
             type_info: None,
-            desc_text: &trimmed[colon_rel + 2..],
-            desc_start: entry_start + colon_rel + 2,
-            end_line: cursor.line,
-        };
-    }
-
-    // --- Pattern 3: `name:` with description on the next line ---
-    if let Some(name) = trimmed.strip_suffix(':') {
-        return EntryHeader {
-            name,
-            name_start: entry_start,
-            type_info: None,
-            desc_text: "",
-            desc_start: entry_start + trimmed.len(),
+            desc_text: desc,
+            desc_start: entry_start + colon_rel + 1 + ws_after,
             end_line: cursor.line,
         };
     }
@@ -845,34 +891,26 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleR
             let col = indent;
             let entry_start = cursor.line;
 
-            // Try `type: description` pattern
-            let (return_type, first_desc, desc_col) = if let Some(colon_pos) = trimmed.find(": ") {
-                let type_str = &trimmed[..colon_pos];
-                let desc_str = &trimmed[colon_pos + 2..];
-                let type_col = col;
-                let rt = Some(cursor.make_spanned(
-                    type_str.to_string(),
-                    cursor.line,
-                    type_col,
-                    cursor.line,
-                    type_col + type_str.len(),
-                ));
-                (rt, desc_str, col + colon_pos + 2)
-            } else if let Some(type_str) = trimmed.strip_suffix(':') {
-                // Type only, description on next line
-                let type_col = col;
-                let rt = Some(cursor.make_spanned(
-                    type_str.to_string(),
-                    cursor.line,
-                    type_col,
-                    cursor.line,
-                    type_col + type_str.len(),
-                ));
-                (rt, "", col + trimmed.len())
-            } else {
-                // No type — just description
-                (None, trimmed, col)
-            };
+            // Try `type: description` / `type:description` / `type:` pattern
+            let (return_type, first_desc, desc_col) =
+                if let Some(colon_pos) = find_entry_colon(trimmed) {
+                    let type_str = &trimmed[..colon_pos];
+                    let after_colon = &trimmed[colon_pos + 1..];
+                    let desc_str = after_colon.trim_start();
+                    let ws_after = after_colon.len() - desc_str.len();
+                    let type_col = col;
+                    let rt = Some(cursor.make_spanned(
+                        type_str.to_string(),
+                        cursor.line,
+                        type_col,
+                        cursor.line,
+                        type_col + type_str.len(),
+                    ));
+                    (rt, desc_str, col + colon_pos + 1 + ws_after)
+                } else {
+                    // No type — just description
+                    (None, trimmed, col)
+                };
 
             cursor.advance();
             let cont_desc = collect_description(cursor, ei, base_indent);
@@ -935,15 +973,16 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
             let col = indent;
             let entry_start = cursor.line;
 
-            let (exc_type_str, first_desc, desc_col) = if let Some(colon_pos) = trimmed.find(": ") {
-                let et = &trimmed[..colon_pos];
-                let desc = &trimmed[colon_pos + 2..];
-                (et, desc, col + colon_pos + 2)
-            } else if let Some(prefix) = trimmed.strip_suffix(':') {
-                (prefix, "", col + trimmed.len())
-            } else {
-                (trimmed, "", col + trimmed.len())
-            };
+            let (exc_type_str, first_desc, desc_col) =
+                if let Some(colon_pos) = find_entry_colon(trimmed) {
+                    let et = &trimmed[..colon_pos];
+                    let after_colon = &trimmed[colon_pos + 1..];
+                    let desc = after_colon.trim_start();
+                    let ws_after = after_colon.len() - desc.len();
+                    (et, desc, col + colon_pos + 1 + ws_after)
+                } else {
+                    (trimmed, "", col + trimmed.len())
+                };
 
             let exc_type = cursor.make_spanned(
                 exc_type_str.to_string(),
@@ -1078,16 +1117,17 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
             let col = indent;
             let entry_start = cursor.line;
 
-            // Split on ` : ` or `: ` for description
-            let (names_part, first_desc, desc_col) = if let Some(colon_pos) = trimmed.find(": ") {
-                let n = &trimmed[..colon_pos];
-                let desc = &trimmed[colon_pos + 2..];
-                (n, desc, col + colon_pos + 2)
-            } else if let Some(prefix) = trimmed.strip_suffix(':') {
-                (prefix, "", col + trimmed.len())
-            } else {
-                (trimmed, "", col + trimmed.len())
-            };
+            // Split on first colon for description (tolerant of any whitespace)
+            let (names_part, first_desc, desc_col) =
+                if let Some(colon_pos) = find_entry_colon(trimmed) {
+                    let n = &trimmed[..colon_pos];
+                    let after_colon = &trimmed[colon_pos + 1..];
+                    let desc = after_colon.trim_start();
+                    let ws_after = after_colon.len() - desc.len();
+                    (n, desc, col + colon_pos + 1 + ws_after)
+                } else {
+                    (trimmed, "", col + trimmed.len())
+                };
 
             // Parse comma-separated names
             let mut names = Vec::new();
@@ -1146,51 +1186,7 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
 mod tests {
     use super::*;
 
-    // -- test-local helpers --
-
-    fn args(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
-        doc.items
-            .iter()
-            .filter_map(|item| match item {
-                GoogleDocstringItem::Section(s) => match &s.body {
-                    GoogleSectionBody::Args(v) => Some(v.iter()),
-                    _ => None,
-                },
-                _ => None,
-            })
-            .flatten()
-            .collect()
-    }
-
-    fn returns(doc: &GoogleDocstring) -> Vec<&GoogleReturns> {
-        doc.items
-            .iter()
-            .filter_map(|item| match item {
-                GoogleDocstringItem::Section(s) => match &s.body {
-                    GoogleSectionBody::Returns(v) => Some(v.iter()),
-                    _ => None,
-                },
-                _ => None,
-            })
-            .flatten()
-            .collect()
-    }
-
-    fn raises(doc: &GoogleDocstring) -> Vec<&GoogleException> {
-        doc.items
-            .iter()
-            .filter_map(|item| match item {
-                GoogleDocstringItem::Section(s) => match &s.body {
-                    GoogleSectionBody::Raises(v) => Some(v.iter()),
-                    _ => None,
-                },
-                _ => None,
-            })
-            .flatten()
-            .collect()
-    }
-
-    // -- helpers --
+    // -- section detection --
 
     #[test]
     fn test_is_section_header() {
@@ -1229,6 +1225,25 @@ mod tests {
         // Unknown names without colon are NOT headers
         assert!(!is_section_header("NotASection", 0));
         assert!(!is_section_header("SomeWord", 0));
+    }
+
+    // -- entry colon detection --
+
+    #[test]
+    fn test_find_entry_colon() {
+        // Basic colon
+        assert_eq!(find_entry_colon("name: desc"), Some(4));
+        assert_eq!(find_entry_colon("name:desc"), Some(4));
+        assert_eq!(find_entry_colon("name:"), Some(4));
+        // No colon
+        assert_eq!(find_entry_colon("name"), None);
+        // Colon inside brackets is skipped
+        assert_eq!(find_entry_colon("Dict[str, int]: desc"), Some(14));
+        assert_eq!(find_entry_colon("Tuple(a, b): desc"), Some(11));
+        // Nested brackets
+        assert_eq!(find_entry_colon("Dict[str, List[int]]: desc"), Some(20));
+        // Only colon inside brackets — no match
+        assert_eq!(find_entry_colon("Dict[k: v]"), None);
     }
 
     // -- entry header parsing --
@@ -1307,6 +1322,22 @@ mod tests {
         assert_eq!(header.end_line, 1);
     }
 
+    #[test]
+    fn test_parse_entry_header_no_space_after_colon() {
+        let header = header_from("name:Description");
+        assert_eq!(header.name, "name");
+        assert!(header.type_info.is_none());
+        assert_eq!(header.desc_text, "Description");
+    }
+
+    #[test]
+    fn test_parse_entry_header_extra_spaces_after_colon() {
+        let header = header_from("name:   Description");
+        assert_eq!(header.name, "name");
+        assert!(header.type_info.is_none());
+        assert_eq!(header.desc_text, "Description");
+    }
+
     // -- strip_optional --
 
     #[test]
@@ -1324,109 +1355,26 @@ mod tests {
         assert_eq!(strip_optional("int, optional  "), ("int", Some(5)));
     }
 
-    // -- full parser --
+    // -- split_comma_parts --
 
     #[test]
-    fn test_parse_simple_summary() {
-        let result = parse_google("Brief description.");
-        assert_eq!(result.summary.value, "Brief description.");
-    }
+    fn test_split_comma_parts() {
+        let parts: Vec<_> = split_comma_parts("int, optional")
+            .iter()
+            .map(|(_, s)| s.trim())
+            .collect();
+        assert_eq!(parts, vec!["int", "optional"]);
 
-    #[test]
-    fn test_parse_empty() {
-        let result = parse_google("");
-        assert_eq!(result.summary.value, "");
-    }
+        // Brackets respected
+        let parts: Vec<_> = split_comma_parts("Dict[str, int], optional")
+            .iter()
+            .map(|(_, s)| s.trim())
+            .collect();
+        assert_eq!(parts, vec!["Dict[str, int]", "optional"]);
 
-    #[test]
-    fn test_parse_whitespace_only() {
-        let result = parse_google("   \n   \n");
-        assert_eq!(result.summary.value, "");
-    }
-
-    #[test]
-    fn test_parse_summary_with_description() {
-        let input = "Brief summary.\n\nExtended description.\nMore text.";
-        let result = parse_google(input);
-        assert_eq!(result.summary.value, "Brief summary.");
-        assert_eq!(
-            result.extended_summary.as_ref().unwrap().value,
-            "Extended description.\nMore text."
-        );
-    }
-
-    #[test]
-    fn test_parse_args() {
-        let input = "Summary.\n\nArgs:\n    x (int): The value.\n    y (str): The name.";
-        let result = parse_google(input);
-        let a = args(&result);
-        assert_eq!(a.len(), 2);
-        assert_eq!(a[0].name.value, "x");
-        assert_eq!(a[0].r#type.as_ref().unwrap().value, "int");
-        assert_eq!(a[0].description.value, "The value.");
-        assert_eq!(a[1].name.value, "y");
-    }
-
-    #[test]
-    fn test_parse_args_multiline_desc() {
-        let input = "Summary.\n\nArgs:\n    x (int): First line.\n        Second line.";
-        let result = parse_google(input);
-        assert_eq!(
-            args(&result)[0].description.value,
-            "First line.\nSecond line."
-        );
-    }
-
-    #[test]
-    fn test_parse_args_multiline_type() {
-        let input = "Summary.\n\nArgs:\n    x (Dict[str,\n            int]): The value.";
-        let result = parse_google(input);
-        let a = args(&result);
-        assert_eq!(a.len(), 1);
-        assert_eq!(a[0].name.value, "x");
-        assert_eq!(
-            a[0].r#type.as_ref().unwrap().value,
-            "Dict[str,\n            int]"
-        );
-        assert_eq!(a[0].description.value, "The value.");
-    }
-
-    #[test]
-    fn test_parse_returns() {
-        let input = "Summary.\n\nReturns:\n    int: The result.";
-        let result = parse_google(input);
-        let r = returns(&result);
-        assert_eq!(r.len(), 1);
-        assert_eq!(r[0].return_type.as_ref().unwrap().value, "int");
-        assert_eq!(r[0].description.value, "The result.");
-    }
-
-    #[test]
-    fn test_parse_returns_multiple() {
-        let input = "Summary.\n\nReturns:\n    int: The count.\n    str: The message.";
-        let result = parse_google(input);
-        assert_eq!(returns(&result).len(), 2);
-    }
-
-    #[test]
-    fn test_parse_raises() {
-        let input = "Summary.\n\nRaises:\n    ValueError: If invalid.";
-        let result = parse_google(input);
-        let r = raises(&result);
-        assert_eq!(r.len(), 1);
-        assert_eq!(r[0].r#type.value, "ValueError");
-        assert_eq!(r[0].description.value, "If invalid.");
-    }
-
-    #[test]
-    fn test_parse_span_accuracy() {
-        let input = "Summary line.";
-        let result = parse_google(input);
-        assert_eq!(result.summary.range.start().raw(), 0);
-        assert_eq!(result.summary.range.end().raw(), 13);
-        assert_eq!(
-            result.summary.range.source_text(&result.source),
-            "Summary line."
-        );
+        // Offsets
+        let parts = split_comma_parts("int, optional");
+        assert_eq!(parts[0].0, 0);
+        assert_eq!(parts[1].0, 4);
     }
 }

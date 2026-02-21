@@ -296,6 +296,62 @@ y : str, optional
     );
 }
 
+/// Parameters with no space before colon: `x: int`
+#[test]
+fn test_parameters_no_space_before_colon() {
+    let docstring = "Summary.\n\nParameters\n----------\nx: int\n    The value.\n";
+    let result = parse_numpy(docstring);
+    let p = parameters(&result);
+    assert_eq!(p.len(), 1);
+    assert_eq!(p[0].names[0].value, "x");
+    assert_eq!(p[0].r#type.as_ref().unwrap().value, "int");
+    assert_eq!(p[0].description.value, "The value.");
+}
+
+/// Parameters with no space after colon: `x :int`
+#[test]
+fn test_parameters_no_space_after_colon() {
+    let docstring = "Summary.\n\nParameters\n----------\nx :int\n    The value.\n";
+    let result = parse_numpy(docstring);
+    let p = parameters(&result);
+    assert_eq!(p.len(), 1);
+    assert_eq!(p[0].names[0].value, "x");
+    assert_eq!(p[0].r#type.as_ref().unwrap().value, "int");
+}
+
+/// Parameters with no spaces around colon: `x:int`
+#[test]
+fn test_parameters_no_spaces_around_colon() {
+    let docstring = "Summary.\n\nParameters\n----------\nx:int\n    The value.\n";
+    let result = parse_numpy(docstring);
+    let p = parameters(&result);
+    assert_eq!(p.len(), 1);
+    assert_eq!(p[0].names[0].value, "x");
+    assert_eq!(p[0].r#type.as_ref().unwrap().value, "int");
+}
+
+/// Returns with no spaces around colon (named): `result:int`
+#[test]
+fn test_returns_no_spaces_around_colon() {
+    let docstring = "Summary.\n\nReturns\n-------\nresult:int\n    The result.\n";
+    let result = parse_numpy(docstring);
+    let r = returns(&result);
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0].name.as_ref().unwrap().value, "result");
+    assert_eq!(r[0].return_type.as_ref().unwrap().value, "int");
+}
+
+/// See Also with no space before colon.
+#[test]
+fn test_see_also_no_space_before_colon() {
+    let docstring = "Summary.\n\nSee Also\n--------\nfunc_a: Description of func_a.\n";
+    let result = parse_numpy(docstring);
+    let sa = see_also(&result);
+    assert_eq!(sa.len(), 1);
+    assert_eq!(sa[0].names[0].value, "func_a");
+    assert!(sa[0].description.as_ref().unwrap().value.contains("Description"));
+}
+
 #[test]
 fn test_multiple_parameter_names() {
     let docstring = r#"Summary.
