@@ -275,8 +275,12 @@ struct EntryHeader<'a> {
     name: &'a str,
     /// Absolute byte offset of name in source.
     name_start: usize,
+    /// Opening bracket character and its absolute byte offset, if present.
+    open_bracket: Option<(usize, &'static str)>,
     /// Type annotation info.
     type_info: Option<TypeInfo<'a>>,
+    /// Closing bracket character and its absolute byte offset, if present.
+    close_bracket: Option<(usize, &'static str)>,
     /// First-line description text.
     desc_text: &'a str,
     /// Absolute byte offset of description text in source.
@@ -305,19 +309,36 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
     let trimmed = line.trim();
     let entry_start = cursor.substr_offset(trimmed);
 
-    // --- Pattern 1: `name (type): desc` ---
-    // Find the first `(` preceded by whitespace.
-    if let Some(rel_paren) = trimmed
-        .find('(')
-        .filter(|&p| p > 0 && trimmed.as_bytes()[p - 1].is_ascii_whitespace())
-    {
+    // --- Pattern 1: `name (type): desc` / `name [type]: desc` / `name {type}: desc` / `name <type>: desc` ---
+    // Find the first opening bracket (`(`, `[`, `{`, or `<`) preceded by whitespace.
+    let bracket_pos = trimmed.bytes().enumerate().find_map(|(i, b)| {
+        if (b == b'(' || b == b'[' || b == b'{' || b == b'<')
+            && i > 0
+            && trimmed.as_bytes()[i - 1].is_ascii_whitespace()
+        {
+            Some(i)
+        } else {
+            None
+        }
+    });
+
+    if let Some(rel_paren) = bracket_pos {
         let abs_paren = entry_start + rel_paren;
+        let open_ch = trimmed.as_bytes()[rel_paren];
+        let (open_str, close_str): (&'static str, &'static str) = match open_ch {
+            b'(' => ("(", ")"),
+            b'[' => ("[", "]"),
+            b'{' => ("{", "}"),
+            b'<' => ("<", ">"),
+            _ => unreachable!(),
+        };
+
         // find_matching_close on full source — crosses line boundaries
         if let Some(abs_close) = cursor.find_matching_close(abs_paren) {
             let name = trimmed[..rel_paren].trim_end();
             let name_start = entry_start;
 
-            // Type content between the parentheses (may span multiple lines)
+            // Type content between the brackets (may span multiple lines)
             let type_raw = &cursor.source()[abs_paren + 1..abs_close];
             let type_trimmed = type_raw.trim();
             let type_start = if !type_trimmed.is_empty() {
@@ -331,7 +352,7 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
             let opt_start = opt_rel.map(|r| type_start + r);
 
             let type_info = if clean_type.is_empty() && opt_start.is_some() {
-                // Only `optional` inside parens — no type, but we still record optional
+                // Only `optional` inside brackets — no type, but we still record optional
                 Some(TypeInfo {
                     clean_type: "",
                     type_start,
@@ -347,10 +368,10 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
                 None
             };
 
-            // Find which line the close paren is on
+            // Find which line the close bracket is on
             let close_line = cursor.offset_to_line_col(abs_close).0;
 
-            // Description after `)` on the same line as the close paren
+            // Description after closing bracket on the same line
             let close_line_str = cursor.line_text(close_line);
             let close_line_end = cursor.substr_offset(close_line_str) + close_line_str.len();
             let after_close = &cursor.source()[abs_close + 1..close_line_end];
@@ -359,7 +380,9 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
             return EntryHeader {
                 name,
                 name_start,
+                open_bracket: Some((abs_paren, open_str)),
                 type_info,
+                close_bracket: Some((abs_close, close_str)),
                 desc_text,
                 desc_start,
                 end_line: close_line,
@@ -376,7 +399,9 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
         return EntryHeader {
             name,
             name_start: entry_start,
+            open_bracket: None,
             type_info: None,
+            close_bracket: None,
             desc_text: desc,
             desc_start: entry_start + colon_rel + 1 + ws_after,
             end_line: cursor.line,
@@ -387,7 +412,9 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
     EntryHeader {
         name: trimmed,
         name_start: entry_start,
+        open_bracket: None,
         type_info: None,
+        close_bracket: None,
         desc_text: "",
         desc_start: entry_start + trimmed.len(),
         end_line: cursor.line,
@@ -612,7 +639,9 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                         .map(|a| GoogleAttribute {
                             range: a.range,
                             name: a.name,
+                            open_bracket: a.open_bracket,
                             r#type: a.r#type,
+                            close_bracket: a.close_bracket,
                             description: a.description,
                         })
                         .collect();
@@ -835,10 +864,32 @@ fn parse_args(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleArg> {
                 cursor.offset_to_line_col(full_desc.range.end().raw() as usize)
             };
 
+            // Bracket spans
+            let open_bracket = header.open_bracket.map(|(pos, ch)| {
+                Spanned::new(
+                    ch.to_string(),
+                    TextRange::new(
+                        TextSize::new(pos as u32),
+                        TextSize::new((pos + ch.len()) as u32),
+                    ),
+                )
+            });
+            let close_bracket = header.close_bracket.map(|(pos, ch)| {
+                Spanned::new(
+                    ch.to_string(),
+                    TextRange::new(
+                        TextSize::new(pos as u32),
+                        TextSize::new((pos + ch.len()) as u32),
+                    ),
+                )
+            });
+
             args.push(GoogleArg {
                 range: cursor.make_range(entry_start_line, col, end_line, end_col),
                 name: name_spanned,
+                open_bracket,
                 r#type: arg_type,
+                close_bracket,
                 description: full_desc,
                 optional,
             });

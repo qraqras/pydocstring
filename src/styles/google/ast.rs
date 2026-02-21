@@ -316,8 +316,12 @@ pub struct GoogleArg {
     pub range: TextRange,
     /// Argument name with its span.
     pub name: Spanned<String>,
-    /// Argument type (inside parentheses) with its span.
+    /// Opening bracket (`(`, `[`, `{`, or `<`) enclosing the type, with its span.
+    pub open_bracket: Option<Spanned<String>>,
+    /// Argument type (inside brackets) with its span.
     pub r#type: Option<Spanned<String>>,
+    /// Closing bracket (`)`, `]`, `}`, or `>`) enclosing the type, with its span.
+    pub close_bracket: Option<Spanned<String>>,
     /// Argument description with its span.
     pub description: Spanned<String>,
     /// The `optional` marker, if present.
@@ -386,8 +390,12 @@ pub struct GoogleAttribute {
     pub range: TextRange,
     /// Attribute name with its span.
     pub name: Spanned<String>,
-    /// Attribute type (inside parentheses) with its span.
+    /// Opening bracket (`(`, `[`, `{`, or `<`) enclosing the type, with its span.
+    pub open_bracket: Option<Spanned<String>>,
+    /// Attribute type (inside brackets) with its span.
     pub r#type: Option<Spanned<String>>,
+    /// Closing bracket (`)`, `]`, `}`, or `>`) enclosing the type, with its span.
+    pub close_bracket: Option<Spanned<String>>,
     /// Description with its span.
     pub description: Spanned<String>,
 }

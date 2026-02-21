@@ -176,8 +176,8 @@ impl<'a> Cursor<'a> {
         let mut depth = 0;
         for (i, c) in self.source[open_pos..].char_indices() {
             match c {
-                '(' | '[' | '{' => depth += 1,
-                ')' | ']' | '}' => {
+                '(' | '[' | '{' | '<' => depth += 1,
+                ')' | ']' | '}' | '>' => {
                     depth -= 1;
                     if depth == 0 {
                         return Some(open_pos + i);

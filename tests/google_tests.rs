@@ -522,6 +522,93 @@ fn test_args_optional_span() {
     assert_eq!(opt_span.range.source_text(&result.source), "optional");
 }
 
+#[test]
+fn test_args_square_bracket_type() {
+    let docstring = "Summary.\n\nArgs:\n    x [int]: The value.";
+    let result = parse_google(docstring);
+    let a = &args(&result)[0];
+    assert_eq!(a.name.value, "x");
+    assert_eq!(a.r#type.as_ref().unwrap().value, "int");
+    assert_eq!(a.open_bracket.as_ref().unwrap().value, "[");
+    assert_eq!(a.close_bracket.as_ref().unwrap().value, "]");
+    assert_eq!(a.description.value, "The value.");
+}
+
+#[test]
+fn test_args_curly_bracket_type() {
+    let docstring = "Summary.\n\nArgs:\n    x {int}: The value.";
+    let result = parse_google(docstring);
+    let a = &args(&result)[0];
+    assert_eq!(a.name.value, "x");
+    assert_eq!(a.r#type.as_ref().unwrap().value, "int");
+    assert_eq!(a.open_bracket.as_ref().unwrap().value, "{");
+    assert_eq!(a.close_bracket.as_ref().unwrap().value, "}");
+    assert_eq!(a.description.value, "The value.");
+}
+
+#[test]
+fn test_args_paren_bracket_spans() {
+    // Verify that the standard () brackets are also tracked.
+    let docstring = "Summary.\n\nArgs:\n    x (int): The value.";
+    let result = parse_google(docstring);
+    let a = &args(&result)[0];
+    assert_eq!(a.open_bracket.as_ref().unwrap().value, "(");
+    assert_eq!(
+        a.open_bracket.as_ref().unwrap().range.source_text(&result.source),
+        "("
+    );
+    assert_eq!(a.close_bracket.as_ref().unwrap().value, ")");
+    assert_eq!(
+        a.close_bracket.as_ref().unwrap().range.source_text(&result.source),
+        ")"
+    );
+}
+
+#[test]
+fn test_args_no_bracket_fields_when_no_type() {
+    let docstring = "Summary.\n\nArgs:\n    x: The value.";
+    let result = parse_google(docstring);
+    let a = &args(&result)[0];
+    assert!(a.open_bracket.is_none());
+    assert!(a.close_bracket.is_none());
+    assert!(a.r#type.is_none());
+}
+
+#[test]
+fn test_args_square_bracket_optional() {
+    let docstring = "Summary.\n\nArgs:\n    x [int, optional]: The value.";
+    let result = parse_google(docstring);
+    let a = &args(&result)[0];
+    assert_eq!(a.name.value, "x");
+    assert_eq!(a.r#type.as_ref().unwrap().value, "int");
+    assert_eq!(a.open_bracket.as_ref().unwrap().value, "[");
+    assert_eq!(a.close_bracket.as_ref().unwrap().value, "]");
+    assert!(a.optional.is_some());
+}
+
+#[test]
+fn test_args_square_bracket_complex_type() {
+    let docstring = "Summary.\n\nArgs:\n    items [List[int]]: The items.";
+    let result = parse_google(docstring);
+    let a = &args(&result)[0];
+    assert_eq!(a.name.value, "items");
+    assert_eq!(a.r#type.as_ref().unwrap().value, "List[int]");
+    assert_eq!(a.open_bracket.as_ref().unwrap().value, "[");
+    assert_eq!(a.close_bracket.as_ref().unwrap().value, "]");
+}
+
+#[test]
+fn test_args_angle_bracket_type() {
+    let docstring = "Summary.\n\nArgs:\n    x <int>: The value.";
+    let result = parse_google(docstring);
+    let a = &args(&result)[0];
+    assert_eq!(a.name.value, "x");
+    assert_eq!(a.r#type.as_ref().unwrap().value, "int");
+    assert_eq!(a.open_bracket.as_ref().unwrap().value, "<");
+    assert_eq!(a.close_bracket.as_ref().unwrap().value, ">");
+    assert_eq!(a.description.value, "The value.");
+}
+
 // =============================================================================
 // Returns section
 // =============================================================================

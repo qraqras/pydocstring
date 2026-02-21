@@ -483,11 +483,13 @@ fn parse_parameters(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec
         let line = cursor.current_line_text();
         let trimmed = line.trim();
 
-        // A parameter header is a non-empty line at entry indentation containing a colon
-        if !trimmed.is_empty() && indent_len(line) <= entry_indent && is_param_header(trimmed) {
+        // A parameter header is a non-empty line at or below entry indentation.
+        // Lines with a colon are split into name/type; lines without a colon
+        // are parsed best-effort as a bare name (colon = None).
+        if !trimmed.is_empty() && indent_len(line) <= entry_indent {
             let col = cursor.current_indent();
             let entry_start = cursor.line;
-            let (names, param_type, optional, default_val) =
+            let (names, colon, param_type, optional, default_val) =
                 parse_name_and_type(trimmed, cursor.line, col, cursor);
 
             cursor.advance();
@@ -502,6 +504,7 @@ fn parse_parameters(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec
             parameters.push(NumPyParameter {
                 range: cursor.make_range(entry_start, col, entry_end_line, entry_end_col),
                 names,
+                colon,
                 r#type: param_type,
                 description: desc,
                 optional,
@@ -516,17 +519,10 @@ fn parse_parameters(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec
     parameters
 }
 
-/// Check whether `trimmed` looks like a parameter header line.
-///
-/// A parameter header contains a colon (not inside brackets) that
-/// separates the name(s) from the type annotation.
-fn is_param_header(trimmed: &str) -> bool {
-    find_entry_colon(trimmed).is_some()
-}
-
-/// Result of parsing a parameter header: (names, type, optional span, default value).
+/// Result of parsing a parameter header: (names, colon, type, optional span, default value).
 type ParamHeaderParts = (
     Vec<Spanned<String>>,
+    Option<Spanned<String>>,
     Option<Spanned<String>>,
     Option<Spanned<String>>,
     Option<Spanned<String>>,
@@ -545,32 +541,41 @@ fn parse_name_and_type(
     cursor: &Cursor,
 ) -> ParamHeaderParts {
     // Find the first colon not inside brackets
-    let (name_str, type_str, sep_pos) = if let Some(colon_pos) = find_entry_colon(text) {
-        let before = text[..colon_pos].trim_end();
-        let after = &text[colon_pos + 1..];
-        let after_trimmed = after.trim();
-        if after_trimmed.is_empty() {
-            (before, None, colon_pos)
+    let (name_str, type_str, colon_span, colon_rel) =
+        if let Some(colon_pos) = find_entry_colon(text) {
+            let before = text[..colon_pos].trim_end();
+            let after = &text[colon_pos + 1..];
+            let after_trimmed = after.trim();
+            let colon_col = col_base + colon_pos;
+            let colon = Some(cursor.make_spanned(
+                ":".to_string(),
+                line_idx,
+                colon_col,
+                line_idx,
+                colon_col + 1,
+            ));
+            if after_trimmed.is_empty() {
+                (before, None, colon, colon_pos)
+            } else {
+                (before, Some(after_trimmed), colon, colon_pos)
+            }
         } else {
-            (before, Some(after_trimmed), colon_pos)
-        }
-    } else {
-        // No separator — whole text is the name
-        let names = parse_name_list(text, line_idx, col_base, cursor);
-        return (names, None, None, None);
-    };
+            // No separator — whole text is the name
+            let names = parse_name_list(text, line_idx, col_base, cursor);
+            return (names, None, None, None, None);
+        };
 
     let names = parse_name_list(name_str, line_idx, col_base, cursor);
 
     let type_str = match type_str {
         Some(t) if !t.is_empty() => t,
-        _ => return (names, None, None, None),
+        _ => return (names, colon_span, None, None, None),
     };
 
-    // Column where the type part starts in the line
-    let after_colon = &text[sep_pos + 1..];
+    // Column where the type part starts in the line.
+    let after_colon = &text[colon_rel + 1..];
     let ws_after = after_colon.len() - after_colon.trim_start().len();
-    let type_col = col_base + sep_pos + 1 + ws_after;
+    let type_col = col_base + colon_rel + 1 + ws_after;
 
     // Split the type annotation into bracket-aware, comma-separated segments
     // and classify each one.
@@ -633,7 +638,7 @@ fn parse_name_and_type(
         Some(cursor.make_spanned(clean.to_string(), line_idx, tc, line_idx, tc + clean.len()))
     };
 
-    (names, param_type, optional, default_val)
+    (names, colon_span, param_type, optional, default_val)
 }
 
 /// Parse a comma-separated name list like `"x1, x2"` into spanned names.
@@ -1088,6 +1093,11 @@ mod tests {
 
     // -- param header detection --
 
+    /// Check whether `trimmed` looks like a parameter header line.\n    /// A parameter header contains a colon (not inside brackets).
+    fn is_param_header(trimmed: &str) -> bool {
+        find_entry_colon(trimmed).is_some()
+    }
+
     #[test]
     fn test_is_param_header() {
         assert!(is_param_header("x : int"));
@@ -1130,8 +1140,9 @@ mod tests {
     #[test]
     fn test_parse_name_and_type_basic() {
         let cursor = Cursor::new("x : int");
-        let (names, ptype, opt, def) = parse_name_and_type("x : int", 0, 0, &cursor);
+        let (names, colon, ptype, opt, def) = parse_name_and_type("x : int", 0, 0, &cursor);
         assert_eq!(names[0].value, "x");
+        assert!(colon.is_some());
         assert_eq!(ptype.unwrap().value, "int");
         assert!(opt.is_none());
         assert!(def.is_none());
@@ -1140,8 +1151,9 @@ mod tests {
     #[test]
     fn test_parse_name_and_type_optional() {
         let cursor = Cursor::new("x : int, optional");
-        let (names, ptype, opt, _) = parse_name_and_type("x : int, optional", 0, 0, &cursor);
+        let (names, colon, ptype, opt, _) = parse_name_and_type("x : int, optional", 0, 0, &cursor);
         assert_eq!(names[0].value, "x");
+        assert!(colon.is_some());
         assert_eq!(ptype.unwrap().value, "int");
         assert!(opt.is_some());
     }
@@ -1149,7 +1161,8 @@ mod tests {
     #[test]
     fn test_parse_name_and_type_optional_no_space() {
         let cursor = Cursor::new("x : int,optional");
-        let (_, ptype, opt, _) = parse_name_and_type("x : int,optional", 0, 0, &cursor);
+        let (_, colon, ptype, opt, _) = parse_name_and_type("x : int,optional", 0, 0, &cursor);
+        assert!(colon.is_some());
         assert_eq!(ptype.unwrap().value, "int");
         assert!(opt.is_some());
     }
@@ -1157,7 +1170,8 @@ mod tests {
     #[test]
     fn test_parse_name_and_type_default() {
         let cursor = Cursor::new("x : int, default True");
-        let (_, ptype, _, def) = parse_name_and_type("x : int, default True", 0, 0, &cursor);
+        let (_, colon, ptype, _, def) = parse_name_and_type("x : int, default True", 0, 0, &cursor);
+        assert!(colon.is_some());
         assert_eq!(ptype.unwrap().value, "int");
         assert_eq!(def.unwrap().value, "True");
     }
@@ -1165,8 +1179,21 @@ mod tests {
     #[test]
     fn test_parse_name_and_type_complex() {
         let cursor = Cursor::new("x : Dict[str, int], optional");
-        let (_, ptype, opt, _) = parse_name_and_type("x : Dict[str, int], optional", 0, 0, &cursor);
+        let (_, colon, ptype, opt, _) =
+            parse_name_and_type("x : Dict[str, int], optional", 0, 0, &cursor);
+        assert!(colon.is_some());
         assert_eq!(ptype.unwrap().value, "Dict[str, int]");
         assert!(opt.is_some());
+    }
+
+    #[test]
+    fn test_parse_name_and_type_no_colon() {
+        let cursor = Cursor::new("x");
+        let (names, colon, ptype, opt, def) = parse_name_and_type("x", 0, 0, &cursor);
+        assert_eq!(names[0].value, "x");
+        assert!(colon.is_none());
+        assert!(ptype.is_none());
+        assert!(opt.is_none());
+        assert!(def.is_none());
     }
 }

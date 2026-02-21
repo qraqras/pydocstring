@@ -256,6 +256,11 @@ pub struct NumPyParameter {
     pub range: TextRange,
     /// Parameter names (supports multiple names like `x1, x2`), each with its own span.
     pub names: Vec<Spanned<String>>,
+    /// The colon separator (`:`) between name(s) and type, if present.
+    ///
+    /// `None` when the colon is missing (best-effort parse of a bare name).
+    /// A linter can use this to report a missing colon.
+    pub colon: Option<Spanned<String>>,
     /// Parameter type (e.g., "int", "str", "array_like") with its span.
     /// Type is optional for parameters but required for returns.
     pub r#type: Option<Spanned<String>>,
