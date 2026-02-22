@@ -396,7 +396,7 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
 
     // --- Pattern 2: `name: desc` / `name:desc` / `name:` (no type) ---
     if let Some(colon_rel) = find_entry_colon(trimmed) {
-        let name = &trimmed[..colon_rel];
+        let name = trimmed[..colon_rel].trim_end();
         let after_colon = &trimmed[colon_rel + 1..];
         let desc = after_colon.trim_start();
         let ws_after = after_colon.len() - desc.len();
@@ -988,7 +988,7 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
     // only on the first content line.
     let (return_type, colon, first_desc, desc_col) =
         if let Some(colon_pos) = find_entry_colon(trimmed) {
-            let type_str = &trimmed[..colon_pos];
+            let type_str = trimmed[..colon_pos].trim_end();
             let after_colon = &trimmed[colon_pos + 1..];
             let desc_str = after_colon.trim_start();
             let ws_after = after_colon.len() - desc_str.len();
@@ -1072,7 +1072,7 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
 
             let (exc_type_str, first_desc, desc_col, colon_offset) =
                 if let Some(colon_pos) = find_entry_colon(trimmed) {
-                    let et = &trimmed[..colon_pos];
+                    let et = trimmed[..colon_pos].trim_end();
                     let after_colon = &trimmed[colon_pos + 1..];
                     let desc = after_colon.trim_start();
                     let ws_after = after_colon.len() - desc.len();
@@ -1233,7 +1233,7 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
             // Split on first colon for description (tolerant of any whitespace)
             let (names_part, first_desc, desc_col, colon_offset) =
                 if let Some(colon_pos) = find_entry_colon(trimmed) {
-                    let n = &trimmed[..colon_pos];
+                    let n = trimmed[..colon_pos].trim_end();
                     let after_colon = &trimmed[colon_pos + 1..];
                     let desc = after_colon.trim_start();
                     let ws_after = after_colon.len() - desc.len();
