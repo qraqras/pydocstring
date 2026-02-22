@@ -240,6 +240,12 @@ pub struct NumPyDocstring {
 pub struct NumPyDeprecation {
     /// Source span.
     pub range: TextRange,
+    /// The `..` RST directive marker, with its span.
+    pub directive_marker: Option<Spanned<String>>,
+    /// The `deprecated` keyword, with its span.
+    pub keyword: Option<Spanned<String>>,
+    /// The `::` double-colon separator, with its span.
+    pub double_colon: Option<Spanned<String>>,
     /// Version when deprecated (e.g., "1.6.0") with its span.
     pub version: Spanned<String>,
     /// Reason for deprecation and recommendation (free text body), with its span.
@@ -334,12 +340,22 @@ pub struct SeeAlsoItem {
 }
 
 /// Numbered reference (from References section).
+///
+/// Represents an RST citation reference like `.. [1] Author, Title`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumPyReference {
     /// Source span.
     pub range: TextRange,
+    /// The RST directive marker (`..`) with its span, if present.
+    ///
+    /// `None` for non-RST (plain text) references.
+    pub directive_marker: Option<Spanned<String>>,
+    /// Opening bracket (`[`) enclosing the reference number, with its span, if present.
+    pub open_bracket: Option<Spanned<String>>,
     /// Reference number (e.g., "1", "2", "3") with its span.
     pub number: Spanned<String>,
+    /// Closing bracket (`]`) enclosing the reference number, with its span, if present.
+    pub close_bracket: Option<Spanned<String>>,
     /// Reference content (author, title, etc) with its span.
     pub content: Spanned<String>,
 }

@@ -207,6 +207,28 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
             let version_str = after_prefix.trim();
             let version_col = col + prefix.len() + ws_len;
 
+            // `..` at col..col+2
+            let directive_marker =
+                Some(cursor.make_spanned("..".to_string(), cursor.line, col, cursor.line, col + 2));
+            // `deprecated` at col+3..col+13
+            let kw_col = col + 3;
+            let keyword = Some(cursor.make_spanned(
+                "deprecated".to_string(),
+                cursor.line,
+                kw_col,
+                cursor.line,
+                kw_col + 10,
+            ));
+            // `::` at col+13..col+15
+            let dc_col = col + 13;
+            let double_colon = Some(cursor.make_spanned(
+                "::".to_string(),
+                cursor.line,
+                dc_col,
+                cursor.line,
+                dc_col + 2,
+            ));
+
             let version_spanned = cursor.make_spanned(
                 version_str.to_string(),
                 cursor.line,
@@ -230,6 +252,9 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
 
             docstring.deprecation = Some(NumPyDeprecation {
                 range: cursor.make_range(dep_start_line, col, dep_end_line, dep_end_col),
+                directive_marker,
+                keyword,
+                double_colon,
                 version: version_spanned,
                 description: desc_spanned,
             });
@@ -1040,6 +1065,9 @@ fn parse_references(
 
     let mut refs = Vec::new();
     let mut current_number: Spanned<String> = Spanned::dummy(String::new());
+    let mut current_directive_marker: Option<Spanned<String>> = None;
+    let mut current_open_bracket: Option<Spanned<String>> = None;
+    let mut current_close_bracket: Option<Spanned<String>> = None;
     let mut current_content_lines: Vec<&str> = Vec::new();
     let mut current_start_line: Option<usize> = None;
     let mut current_col = 0usize;
@@ -1048,8 +1076,10 @@ fn parse_references(
         let line = cursor.current_line_text();
         let trimmed = line.trim();
 
-        // Check for `.. [N]` pattern
-        if trimmed.starts_with(".. [") {
+        // Check for `.. [N]` pattern — tolerate extra whitespace between `..` and `[`
+        let is_directive_ref =
+            trimmed.starts_with("..") && trimmed[2..].trim_start().starts_with('[');
+        if is_directive_ref {
             // Flush previous reference
             if let Some(start_l) = current_start_line {
                 let content = current_content_lines.join("\n");
@@ -1061,23 +1091,54 @@ fn parse_references(
                 let end_col = current_col + content.lines().last().unwrap_or("").len();
                 refs.push(crate::styles::numpy::ast::NumPyReference {
                     range: cursor.make_range(start_l, current_col, end_l, end_col),
+                    directive_marker: current_directive_marker.clone(),
+                    open_bracket: current_open_bracket.clone(),
                     number: current_number.clone(),
+                    close_bracket: current_close_bracket.clone(),
                     content: cursor.make_spanned(content, start_l, current_col, end_l, end_col),
                 });
             }
 
             let col = cursor.current_indent();
-            // Parse `.. [N] content`
-            if let Some(bracket_end) = trimmed.find(']') {
-                let num_str = &trimmed[4..bracket_end];
-                // Span covers the number inside brackets: `[N]`
-                // In the line: `.. [N] ...`, the `[` is at col + 3, number starts at col + 4
-                let num_col = col + 4;
+            // Find actual positions of `[` and `]` within `trimmed`
+            let rel_open = trimmed.find('[').unwrap();
+            if let Some(rel_close) = trimmed.find(']') {
+                // `..` directive marker
+                current_directive_marker = Some(cursor.make_spanned(
+                    "..".to_string(),
+                    cursor.line,
+                    col,
+                    cursor.line,
+                    col + 2,
+                ));
+                // `[`
+                let open_col = col + rel_open;
+                current_open_bracket = Some(cursor.make_spanned(
+                    "[".to_string(),
+                    cursor.line,
+                    open_col,
+                    cursor.line,
+                    open_col + 1,
+                ));
+                // `]`
+                let close_col = col + rel_close;
+                current_close_bracket = Some(cursor.make_spanned(
+                    "]".to_string(),
+                    cursor.line,
+                    close_col,
+                    cursor.line,
+                    close_col + 1,
+                ));
+                // Number inside brackets, trimmed of whitespace
+                let num_raw = &trimmed[rel_open + 1..rel_close];
+                let num_str = num_raw.trim();
+                let num_ws_lead = num_raw.len() - num_raw.trim_start().len();
+                let num_col = col + rel_open + 1 + num_ws_lead;
                 current_number = Spanned::new(
                     num_str.to_string(),
                     cursor.make_range(cursor.line, num_col, cursor.line, num_col + num_str.len()),
                 );
-                let after_bracket = trimmed[bracket_end + 1..].trim();
+                let after_bracket = trimmed[rel_close + 1..].trim();
                 current_content_lines = vec![after_bracket];
                 current_start_line = Some(cursor.line);
                 current_col = col;
@@ -1095,10 +1156,16 @@ fn parse_references(
                 let end_col = current_col + content.lines().last().unwrap_or("").len();
                 refs.push(crate::styles::numpy::ast::NumPyReference {
                     range: cursor.make_range(start_l, current_col, end_l, end_col),
+                    directive_marker: current_directive_marker.clone(),
+                    open_bracket: current_open_bracket.clone(),
                     number: current_number.clone(),
+                    close_bracket: current_close_bracket.clone(),
                     content: cursor.make_spanned(content, start_l, current_col, end_l, end_col),
                 });
                 current_content_lines.clear();
+                current_directive_marker = None;
+                current_open_bracket = None;
+                current_close_bracket = None;
             }
             cursor.advance();
         } else if current_start_line.is_some() {
@@ -1117,6 +1184,9 @@ fn parse_references(
                     cursor.make_range(cursor.line, num_col, cursor.line, num_col),
                 );
                 current_col = num_col;
+                current_directive_marker = None;
+                current_open_bracket = None;
+                current_close_bracket = None;
             }
             cursor.advance();
         }
@@ -1133,7 +1203,10 @@ fn parse_references(
         let end_col = current_col + content.lines().last().unwrap_or("").len();
         refs.push(crate::styles::numpy::ast::NumPyReference {
             range: cursor.make_range(start_l, current_col, end_l, end_col),
+            directive_marker: current_directive_marker,
+            open_bracket: current_open_bracket,
             number: current_number,
+            close_bracket: current_close_bracket,
             content: cursor.make_spanned(content, start_l, current_col, end_l, end_col),
         });
     }

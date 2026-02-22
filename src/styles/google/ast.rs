@@ -419,6 +419,12 @@ pub struct GoogleMethod {
     pub range: TextRange,
     /// Method name with its span.
     pub name: Spanned<String>,
+    /// Opening bracket (`(`, `[`, `{`, or `<`) enclosing the signature/type, with its span.
+    pub open_bracket: Option<Spanned<String>>,
+    /// Method signature or type (inside brackets) with its span.
+    pub r#type: Option<Spanned<String>>,
+    /// Closing bracket (`)`, `]`, `}`, or `>`) enclosing the signature/type, with its span.
+    pub close_bracket: Option<Spanned<String>>,
     /// The colon (`:`) separating name from description, with its span, if present.
     pub colon: Option<Spanned<String>>,
     /// Brief description with its span.

@@ -667,6 +667,9 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                         .map(|a| GoogleMethod {
                             range: a.range,
                             name: a.name,
+                            open_bracket: a.open_bracket,
+                            r#type: a.r#type,
+                            close_bracket: a.close_bracket,
                             colon: a.colon,
                             description: a.description,
                         })
