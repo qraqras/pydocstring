@@ -286,6 +286,8 @@ pub struct NumPyReturns {
     pub range: TextRange,
     /// Return value name (optional in NumPy style) with its span.
     pub name: Option<Spanned<String>>,
+    /// The colon (`:`) separating name from type, with its span, if present.
+    pub colon: Option<Spanned<String>>,
     /// Return type with its span.
     pub return_type: Option<Spanned<String>>,
     /// Description with its span.
@@ -325,6 +327,8 @@ pub struct SeeAlsoItem {
     pub range: TextRange,
     /// Reference names (can be multiple like `func_b, func_c`), each with its own span.
     pub names: Vec<Spanned<String>>,
+    /// The colon (`:`) separating names from description, with its span, if present.
+    pub colon: Option<Spanned<String>>,
     /// Optional description with its span.
     pub description: Option<Spanned<String>>,
 }
@@ -347,6 +351,8 @@ pub struct NumPyAttribute {
     pub range: TextRange,
     /// Attribute name with its span.
     pub name: Spanned<String>,
+    /// The colon (`:`) separating name from type, with its span, if present.
+    pub colon: Option<Spanned<String>>,
     /// Attribute type with its span.
     pub r#type: Option<Spanned<String>>,
     /// Description with its span.
@@ -360,6 +366,8 @@ pub struct NumPyMethod {
     pub range: TextRange,
     /// Method name with its span.
     pub name: Spanned<String>,
+    /// The colon (`:`) separating name from description, with its span, if present.
+    pub colon: Option<Spanned<String>>,
     /// Brief description with its span.
     pub description: Spanned<String>,
 }

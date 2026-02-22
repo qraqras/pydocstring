@@ -50,26 +50,20 @@ Raises:
         );
     }
 
-    let returns: Vec<_> = doc
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => match &s.body {
-                GoogleSectionBody::Returns(v) => Some(v.iter()),
-                _ => None,
-            },
+    let ret = doc.items.iter().find_map(|item| match item {
+        GoogleDocstringItem::Section(s) => match &s.body {
+            GoogleSectionBody::Returns(r) => Some(r),
             _ => None,
-        })
-        .flatten()
-        .collect();
-    println!("\nReturns ({}):", returns.len());
-    for ret in &returns {
+        },
+        _ => None,
+    });
+    if let Some(ret) = ret {
         let type_str = ret
             .return_type
             .as_ref()
             .map(|t| t.value.as_str())
             .unwrap_or("?");
-        println!("  {}: {}", type_str, ret.description.value);
+        println!("\nReturns: {}: {}", type_str, ret.description.value);
     }
 
     let raises: Vec<_> = doc

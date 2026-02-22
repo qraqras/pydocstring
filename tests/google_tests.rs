@@ -36,32 +36,24 @@ fn args(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
         .collect()
 }
 
-fn returns(doc: &GoogleDocstring) -> Vec<&GoogleReturns> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => match &s.body {
-                GoogleSectionBody::Returns(v) => Some(v.iter()),
-                _ => None,
-            },
+fn returns(doc: &GoogleDocstring) -> Option<&GoogleReturns> {
+    doc.items.iter().find_map(|item| match item {
+        GoogleDocstringItem::Section(s) => match &s.body {
+            GoogleSectionBody::Returns(r) => Some(r),
             _ => None,
-        })
-        .flatten()
-        .collect()
+        },
+        _ => None,
+    })
 }
 
-fn yields(doc: &GoogleDocstring) -> Vec<&GoogleReturns> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => match &s.body {
-                GoogleSectionBody::Yields(v) => Some(v.iter()),
-                _ => None,
-            },
+fn yields(doc: &GoogleDocstring) -> Option<&GoogleReturns> {
+    doc.items.iter().find_map(|item| match item {
+        GoogleDocstringItem::Section(s) => match &s.body {
+            GoogleSectionBody::Yields(r) => Some(r),
             _ => None,
-        })
-        .flatten()
-        .collect()
+        },
+        _ => None,
+    })
 }
 
 fn raises(doc: &GoogleDocstring) -> Vec<&GoogleException> {
@@ -366,9 +358,9 @@ fn test_args_extra_spaces_after_colon() {
 fn test_returns_no_space_after_colon() {
     let docstring = "Summary.\n\nReturns:\n    int:The result.";
     let result = parse_google(docstring);
-    let r = returns(&result);
-    assert_eq!(r[0].return_type.as_ref().unwrap().value, "int");
-    assert_eq!(r[0].description.value, "The result.");
+    let r = returns(&result).unwrap();
+    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
+    assert_eq!(r.description.value, "The result.");
 }
 
 /// Returns entry with extra spaces after colon.
@@ -376,9 +368,9 @@ fn test_returns_no_space_after_colon() {
 fn test_returns_extra_spaces_after_colon() {
     let docstring = "Summary.\n\nReturns:\n    int:   The result.";
     let result = parse_google(docstring);
-    let r = returns(&result);
-    assert_eq!(r[0].return_type.as_ref().unwrap().value, "int");
-    assert_eq!(r[0].description.value, "The result.");
+    let r = returns(&result).unwrap();
+    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
+    assert_eq!(r.description.value, "The result.");
 }
 
 /// Raises entry with no space after colon.
@@ -554,12 +546,20 @@ fn test_args_paren_bracket_spans() {
     let a = &args(&result)[0];
     assert_eq!(a.open_bracket.as_ref().unwrap().value, "(");
     assert_eq!(
-        a.open_bracket.as_ref().unwrap().range.source_text(&result.source),
+        a.open_bracket
+            .as_ref()
+            .unwrap()
+            .range
+            .source_text(&result.source),
         "("
     );
     assert_eq!(a.close_bracket.as_ref().unwrap().value, ")");
     assert_eq!(
-        a.close_bracket.as_ref().unwrap().range.source_text(&result.source),
+        a.close_bracket
+            .as_ref()
+            .unwrap()
+            .range
+            .source_text(&result.source),
         ")"
     );
 }
@@ -617,30 +617,28 @@ fn test_args_angle_bracket_type() {
 fn test_returns_with_type() {
     let docstring = "Summary.\n\nReturns:\n    int: The result.";
     let result = parse_google(docstring);
-    let r = returns(&result);
-    assert_eq!(r.len(), 1);
-    assert_eq!(r[0].return_type.as_ref().unwrap().value, "int");
-    assert_eq!(r[0].description.value, "The result.");
+    let r = returns(&result).unwrap();
+    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
+    assert_eq!(r.description.value, "The result.");
 }
 
 #[test]
-fn test_returns_multiple() {
+fn test_returns_multiple_lines() {
     let docstring = "Summary.\n\nReturns:\n    int: The count.\n    str: The message.";
     let result = parse_google(docstring);
-    let r = returns(&result);
-    assert_eq!(r.len(), 2);
-    assert_eq!(r[0].return_type.as_ref().unwrap().value, "int");
-    assert_eq!(r[1].return_type.as_ref().unwrap().value, "str");
+    let r = returns(&result).unwrap();
+    // Only the first line is checked for type: the rest becomes description.
+    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
+    assert_eq!(r.description.value, "The count.\nstr: The message.");
 }
 
 #[test]
 fn test_returns_without_type() {
     let docstring = "Summary.\n\nReturns:\n    The computed result.";
     let result = parse_google(docstring);
-    let r = returns(&result);
-    assert_eq!(r.len(), 1);
-    assert!(r[0].return_type.is_none());
-    assert_eq!(r[0].description.value, "The computed result.");
+    let r = returns(&result).unwrap();
+    assert!(r.return_type.is_none());
+    assert_eq!(r.description.value, "The computed result.");
 }
 
 #[test]
@@ -648,7 +646,7 @@ fn test_returns_multiline_description() {
     let docstring = "Summary.\n\nReturns:\n    int: The result\n        of the computation.";
     let result = parse_google(docstring);
     assert_eq!(
-        returns(&result)[0].description.value,
+        returns(&result).unwrap().description.value,
         "The result\nof the computation."
     );
 }
@@ -657,7 +655,7 @@ fn test_returns_multiline_description() {
 fn test_return_alias() {
     let docstring = "Summary.\n\nReturn:\n    int: The value.";
     let result = parse_google(docstring);
-    assert_eq!(returns(&result).len(), 1);
+    assert!(returns(&result).is_some());
 }
 
 // =============================================================================
@@ -668,17 +666,16 @@ fn test_return_alias() {
 fn test_yields() {
     let docstring = "Summary.\n\nYields:\n    int: The next value.";
     let result = parse_google(docstring);
-    let y = yields(&result);
-    assert_eq!(y.len(), 1);
-    assert_eq!(y[0].return_type.as_ref().unwrap().value, "int");
-    assert_eq!(y[0].description.value, "The next value.");
+    let y = yields(&result).unwrap();
+    assert_eq!(y.return_type.as_ref().unwrap().value, "int");
+    assert_eq!(y.description.value, "The next value.");
 }
 
 #[test]
 fn test_yield_alias() {
     let docstring = "Summary.\n\nYield:\n    str: Next string.";
     let result = parse_google(docstring);
-    assert_eq!(yields(&result).len(), 1);
+    assert!(yields(&result).is_some());
 }
 
 // =============================================================================
@@ -863,7 +860,7 @@ Note:
     assert_eq!(result.summary.value, "Calculate the sum.");
     assert!(result.extended_summary.is_some());
     assert_eq!(args(&result).len(), 2);
-    assert_eq!(returns(&result).len(), 1);
+    assert!(returns(&result).is_some());
     assert_eq!(raises(&result).len(), 1);
     assert!(examples(&result).is_some());
     assert!(notes(&result).is_some());
@@ -874,7 +871,7 @@ fn test_sections_with_blank_lines() {
     let docstring = "Summary.\n\nArgs:\n    x (int): Value.\n\n    y (str): Name.\n\nReturns:\n    bool: Success.";
     let result = parse_google(docstring);
     assert_eq!(args(&result).len(), 2);
-    assert_eq!(returns(&result).len(), 1);
+    assert!(returns(&result).is_some());
 }
 
 // =============================================================================
@@ -943,7 +940,7 @@ fn test_unknown_section_with_known() {
     assert_eq!(sections[2].header.name.value, "Returns");
     // Known sections still accessible via helpers
     assert_eq!(args(&result).len(), 1);
-    assert_eq!(returns(&result).len(), 1);
+    assert!(returns(&result).is_some());
 }
 
 #[test]
@@ -1006,9 +1003,8 @@ fn test_docstring_like_parameters() {
 fn test_docstring_like_returns() {
     let docstring = "Summary.\n\nReturns:\n    int: The result.";
     let result = parse_google(docstring);
-    let r = returns(&result);
-    assert_eq!(r.len(), 1);
-    assert_eq!(r[0].return_type.as_ref().unwrap().value, "int");
+    let r = returns(&result).unwrap();
+    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
 }
 
 #[test]
@@ -1048,7 +1044,8 @@ fn test_span_source_text_round_trip() {
 
     // Return type
     assert_eq!(
-        returns(&result)[0]
+        returns(&result)
+            .unwrap()
             .return_type
             .as_ref()
             .unwrap()
@@ -1605,7 +1602,7 @@ Example:
     assert!(result.extended_summary.is_some());
     assert_eq!(args(&result).len(), 1);
     assert_eq!(keyword_args(&result).len(), 1);
-    assert_eq!(returns(&result).len(), 1);
+    assert!(returns(&result).is_some());
     assert_eq!(raises(&result).len(), 1);
     assert_eq!(warns(&result).len(), 1);
     assert_eq!(see_also(&result).len(), 1);
@@ -1656,9 +1653,8 @@ fn test_returns_space_before_colon() {
     let input = "Summary.\n\nReturns :\n    int: The result.";
     let result = parse_google(input);
     let doc = &result;
-    let r = returns(doc);
-    assert_eq!(r.len(), 1);
-    assert_eq!(r[0].return_type.as_ref().unwrap().value, "int");
+    let r = returns(doc).unwrap();
+    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
 }
 
 /// Colonless `Args` should be parsed as Args section.
@@ -1701,9 +1697,8 @@ fn test_returns_no_colon() {
     let input = "Summary.\n\nReturns\n    int: The result.";
     let result = parse_google(input);
     let doc = &result;
-    let r = returns(doc);
-    assert_eq!(r.len(), 1);
-    assert_eq!(r[0].return_type.as_ref().unwrap().value, "int");
+    let r = returns(doc).unwrap();
+    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
 }
 
 /// Colonless `Raises` should be parsed as Raises section.
@@ -1752,6 +1747,6 @@ fn test_mixed_colon_styles() {
     let result = parse_google(input);
     let doc = &result;
     assert_eq!(args(doc).len(), 1);
-    assert_eq!(returns(doc).len(), 1);
+    assert!(returns(doc).is_some());
     assert_eq!(raises(doc).len(), 1);
 }

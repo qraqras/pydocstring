@@ -235,9 +235,9 @@ pub enum GoogleSectionBody {
 
     // ----- Return-like sections -----
     /// Returns / Return section.
-    Returns(Vec<GoogleReturns>),
+    Returns(GoogleReturns),
     /// Yields / Yield section.
-    Yields(Vec<GoogleReturns>),
+    Yields(GoogleReturns),
 
     // ----- Exception / warning-like sections -----
     /// Raises / Raise section.
@@ -322,6 +322,8 @@ pub struct GoogleArg {
     pub r#type: Option<Spanned<String>>,
     /// Closing bracket (`)`, `]`, `}`, or `>`) enclosing the type, with its span.
     pub close_bracket: Option<Spanned<String>>,
+    /// The colon (`:`) separating name/type from description, with its span, if present.
+    pub colon: Option<Spanned<String>>,
     /// Argument description with its span.
     pub description: Spanned<String>,
     /// The `optional` marker, if present.
@@ -336,6 +338,8 @@ pub struct GoogleReturns {
     pub range: TextRange,
     /// Return type with its span.
     pub return_type: Option<Spanned<String>>,
+    /// The colon (`:`) separating type and description, with its span, if present.
+    pub colon: Option<Spanned<String>>,
     /// Description with its span.
     pub description: Spanned<String>,
 }
@@ -347,6 +351,8 @@ pub struct GoogleException {
     pub range: TextRange,
     /// Exception type with its span.
     pub r#type: Spanned<String>,
+    /// The colon (`:`) separating type from description, with its span, if present.
+    pub colon: Option<Spanned<String>>,
     /// Description with its span.
     pub description: Spanned<String>,
 }
@@ -360,6 +366,8 @@ pub struct GoogleWarning {
     pub range: TextRange,
     /// Warning type (e.g., "DeprecationWarning") with its span.
     pub warning_type: Spanned<String>,
+    /// The colon (`:`) separating type from description, with its span, if present.
+    pub colon: Option<Spanned<String>>,
     /// Description of when the warning is issued, with its span.
     pub description: Spanned<String>,
 }
@@ -379,6 +387,8 @@ pub struct GoogleSeeAlsoItem {
     pub range: TextRange,
     /// Reference names (can be multiple like `func_b, func_c`), each with its own span.
     pub names: Vec<Spanned<String>>,
+    /// The colon (`:`) separating names from description, with its span, if present.
+    pub colon: Option<Spanned<String>>,
     /// Optional description with its span.
     pub description: Option<Spanned<String>>,
 }
@@ -396,6 +406,8 @@ pub struct GoogleAttribute {
     pub r#type: Option<Spanned<String>>,
     /// Closing bracket (`)`, `]`, `}`, or `>`) enclosing the type, with its span.
     pub close_bracket: Option<Spanned<String>>,
+    /// The colon (`:`) separating name/type from description, with its span, if present.
+    pub colon: Option<Spanned<String>>,
     /// Description with its span.
     pub description: Spanned<String>,
 }
@@ -407,6 +419,8 @@ pub struct GoogleMethod {
     pub range: TextRange,
     /// Method name with its span.
     pub name: Spanned<String>,
+    /// The colon (`:`) separating name from description, with its span, if present.
+    pub colon: Option<Spanned<String>>,
     /// Brief description with its span.
     pub description: Spanned<String>,
 }

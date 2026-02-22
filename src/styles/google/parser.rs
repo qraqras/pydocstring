@@ -281,6 +281,8 @@ struct EntryHeader<'a> {
     type_info: Option<TypeInfo<'a>>,
     /// Closing bracket character and its absolute byte offset, if present.
     close_bracket: Option<(usize, &'static str)>,
+    /// Absolute byte offset of the entry-separating colon (`:`) in the source, if present.
+    colon_offset: Option<usize>,
     /// First-line description text.
     desc_text: &'a str,
     /// Absolute byte offset of description text in source.
@@ -375,7 +377,8 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
             let close_line_str = cursor.line_text(close_line);
             let close_line_end = cursor.substr_offset(close_line_str) + close_line_str.len();
             let after_close = &cursor.source()[abs_close + 1..close_line_end];
-            let (desc_text, desc_start) = extract_desc_after_colon(after_close, abs_close + 1);
+            let (desc_text, desc_start, colon_offset) =
+                extract_desc_after_colon(after_close, abs_close + 1);
 
             return EntryHeader {
                 name,
@@ -383,6 +386,7 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
                 open_bracket: Some((abs_paren, open_str)),
                 type_info,
                 close_bracket: Some((abs_close, close_str)),
+                colon_offset,
                 desc_text,
                 desc_start,
                 end_line: close_line,
@@ -402,6 +406,7 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
             open_bracket: None,
             type_info: None,
             close_bracket: None,
+            colon_offset: Some(entry_start + colon_rel),
             desc_text: desc,
             desc_start: entry_start + colon_rel + 1 + ws_after,
             end_line: cursor.line,
@@ -415,6 +420,7 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
         open_bracket: None,
         type_info: None,
         close_bracket: None,
+        colon_offset: None,
         desc_text: "",
         desc_start: entry_start + trimmed.len(),
         end_line: cursor.line,
@@ -425,16 +431,21 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
 ///
 /// `after_paren` is the portion of text after `)`, and `base_offset` is its
 /// byte offset within the source.
-fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usize) {
+///
+/// Returns `(desc_text, desc_offset, colon_offset)` where `colon_offset`
+/// is the absolute byte offset of the `:` in the source (or `None` if
+/// no colon was found).
+fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usize, Option<usize>) {
     let stripped = after_paren.trim_start();
     if let Some(after_colon) = stripped.strip_prefix(':') {
         let desc = after_colon.trim_start();
         let leading_to_stripped = after_paren.len() - stripped.len();
         let leading_after_colon = after_colon.len() - desc.len();
-        let offset = base_offset + leading_to_stripped + 1 + leading_after_colon;
-        (desc, offset)
+        let colon_abs = base_offset + leading_to_stripped;
+        let offset = colon_abs + 1 + leading_after_colon;
+        (desc, offset, Some(colon_abs))
     } else {
-        ("", base_offset + after_paren.len())
+        ("", base_offset + after_paren.len(), None)
     }
 }
 
@@ -465,14 +476,14 @@ fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usi
 /// assert_eq!(args.len(), 1);
 /// assert_eq!(args[0].name.value, "x");
 ///
-/// let returns: Vec<_> = doc.items.iter().filter_map(|item| match item {
+/// let ret = doc.items.iter().find_map(|item| match item {
 ///     pydocstring::GoogleDocstringItem::Section(s) => match &s.body {
-///         GoogleSectionBody::Returns(v) => Some(v.iter()),
+///         GoogleSectionBody::Returns(r) => Some(r),
 ///         _ => None,
 ///     },
 ///     _ => None,
-/// }).flatten().collect();
-/// assert_eq!(returns.len(), 1);
+/// }).unwrap();
+/// assert_eq!(ret.return_type.as_ref().unwrap().value, "int");
 /// ```
 pub fn parse_google(input: &str) -> GoogleDocstring {
     let mut cursor = Cursor::new(input);
@@ -626,6 +637,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                         .map(|e| GoogleWarning {
                             range: e.range,
                             warning_type: e.r#type,
+                            colon: e.colon,
                             description: e.description,
                         })
                         .collect();
@@ -642,6 +654,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                             open_bracket: a.open_bracket,
                             r#type: a.r#type,
                             close_bracket: a.close_bracket,
+                            colon: a.colon,
                             description: a.description,
                         })
                         .collect();
@@ -654,6 +667,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                         .map(|a| GoogleMethod {
                             range: a.range,
                             name: a.name,
+                            colon: a.colon,
                             description: a.description,
                         })
                         .collect();
@@ -884,12 +898,21 @@ fn parse_args(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleArg> {
                 )
             });
 
+            // Colon span
+            let colon = header.colon_offset.map(|pos| {
+                Spanned::new(
+                    ":".to_string(),
+                    TextRange::new(TextSize::new(pos as u32), TextSize::new((pos + 1) as u32)),
+                )
+            });
+
             args.push(GoogleArg {
                 range: cursor.make_range(entry_start_line, col, end_line, end_col),
                 name: name_spanned,
                 open_bracket,
                 r#type: arg_type,
                 close_bracket,
+                colon,
                 description: full_desc,
                 optional,
             });
@@ -905,7 +928,12 @@ fn parse_args(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleArg> {
 // Returns / Yields parsing
 // =============================================================================
 
-/// Parse the Returns / Yields section body.
+/// Parse the Returns / Yields section body as a single entry.
+///
+/// Only the first content line is checked for a `type: description` pattern.
+/// All subsequent lines in the section are treated as continuation of the
+/// description, regardless of indentation level (as long as they remain
+/// within the section).
 ///
 /// Supports both typed and untyped entries:
 /// ```text
@@ -914,77 +942,95 @@ fn parse_args(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleArg> {
 /// ```
 ///
 /// On return, `cursor.line` points to the first line after the section.
-fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleReturns> {
-    let mut returns = Vec::new();
-    let mut entry_indent: Option<usize> = None;
-
+fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleReturns {
+    // Skip leading blank lines within the section
     while !cursor.is_eof() {
         let line = cursor.current_line_text();
         if is_section_header(line, base_indent) {
-            break;
-        }
-
-        let trimmed = line.trim();
-
-        if trimmed.is_empty() {
-            cursor.advance();
-            continue;
-        }
-
-        let indent = cursor.current_indent();
-        if indent <= base_indent {
-            break;
-        }
-
-        let ei = *entry_indent.get_or_insert(indent);
-
-        if indent <= ei {
-            let col = indent;
-            let entry_start = cursor.line;
-
-            // Try `type: description` / `type:description` / `type:` pattern
-            let (return_type, first_desc, desc_col) =
-                if let Some(colon_pos) = find_entry_colon(trimmed) {
-                    let type_str = &trimmed[..colon_pos];
-                    let after_colon = &trimmed[colon_pos + 1..];
-                    let desc_str = after_colon.trim_start();
-                    let ws_after = after_colon.len() - desc_str.len();
-                    let type_col = col;
-                    let rt = Some(cursor.make_spanned(
-                        type_str.to_string(),
-                        cursor.line,
-                        type_col,
-                        cursor.line,
-                        type_col + type_str.len(),
-                    ));
-                    (rt, desc_str, col + colon_pos + 1 + ws_after)
-                } else {
-                    // No type — just description
-                    (None, trimmed, col)
-                };
-
-            cursor.advance();
-            let cont_desc = collect_description(cursor, ei, base_indent);
-            let full_desc =
-                build_full_description(first_desc, desc_col, entry_start, &cont_desc, cursor);
-
-            let (end_line, end_col) = if full_desc.value.is_empty() {
-                (entry_start, col + trimmed.len())
-            } else {
-                cursor.offset_to_line_col(full_desc.range.end().raw() as usize)
+            return GoogleReturns {
+                range: TextRange::empty(),
+                return_type: None,
+                colon: None,
+                description: Spanned::empty_string(),
             };
-
-            returns.push(GoogleReturns {
-                range: cursor.make_range(entry_start, col, end_line, end_col),
-                return_type,
-                description: full_desc,
-            });
-        } else {
-            cursor.advance();
         }
+        let trimmed = line.trim();
+        if !trimmed.is_empty() {
+            let indent = cursor.current_indent();
+            if indent <= base_indent {
+                return GoogleReturns {
+                    range: TextRange::empty(),
+                    return_type: None,
+                    colon: None,
+                    description: Spanned::empty_string(),
+                };
+            }
+            break;
+        }
+        cursor.advance();
     }
 
-    returns
+    if cursor.is_eof() {
+        return GoogleReturns {
+            range: TextRange::empty(),
+            return_type: None,
+            colon: None,
+            description: Spanned::empty_string(),
+        };
+    }
+
+    let line = cursor.current_line_text();
+    let trimmed = line.trim();
+    let col = cursor.current_indent();
+    let entry_start = cursor.line;
+
+    // Try `type: description` / `type:description` / `type:` pattern
+    // only on the first content line.
+    let (return_type, colon, first_desc, desc_col) =
+        if let Some(colon_pos) = find_entry_colon(trimmed) {
+            let type_str = &trimmed[..colon_pos];
+            let after_colon = &trimmed[colon_pos + 1..];
+            let desc_str = after_colon.trim_start();
+            let ws_after = after_colon.len() - desc_str.len();
+            let type_col = col;
+            let rt = Some(cursor.make_spanned(
+                type_str.to_string(),
+                cursor.line,
+                type_col,
+                cursor.line,
+                type_col + type_str.len(),
+            ));
+            let colon_spanned = Some(cursor.make_spanned(
+                ":".to_string(),
+                cursor.line,
+                col + colon_pos,
+                cursor.line,
+                col + colon_pos + 1,
+            ));
+            (rt, colon_spanned, desc_str, col + colon_pos + 1 + ws_after)
+        } else {
+            // No type — just description
+            (None, None, trimmed, col)
+        };
+
+    cursor.advance();
+
+    // Collect all remaining indented lines as continuation description.
+    let cont_desc = parse_section_content(cursor, base_indent);
+    let full_desc = build_full_description(first_desc, desc_col, entry_start, &cont_desc, cursor);
+
+    let (end_line, end_col) = if full_desc.value.is_empty() {
+        (entry_start, col + trimmed.len())
+    } else {
+        cursor.offset_to_line_col(full_desc.range.end().raw() as usize)
+    };
+
+    GoogleReturns {
+        range: cursor.make_range(entry_start, col, end_line, end_col),
+        return_type,
+        colon,
+        description: full_desc,
+    }
 }
 
 // =============================================================================
@@ -1024,15 +1070,20 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
             let col = indent;
             let entry_start = cursor.line;
 
-            let (exc_type_str, first_desc, desc_col) =
+            let (exc_type_str, first_desc, desc_col, colon_offset) =
                 if let Some(colon_pos) = find_entry_colon(trimmed) {
                     let et = &trimmed[..colon_pos];
                     let after_colon = &trimmed[colon_pos + 1..];
                     let desc = after_colon.trim_start();
                     let ws_after = after_colon.len() - desc.len();
-                    (et, desc, col + colon_pos + 1 + ws_after)
+                    (
+                        et,
+                        desc,
+                        col + colon_pos + 1 + ws_after,
+                        Some(col + colon_pos),
+                    )
                 } else {
-                    (trimmed, "", col + trimmed.len())
+                    (trimmed, "", col + trimmed.len(), None)
                 };
 
             let exc_type = cursor.make_spanned(
@@ -1054,9 +1105,20 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
                 cursor.offset_to_line_col(full_desc.range.end().raw() as usize)
             };
 
+            let colon = colon_offset.map(|colon_col| {
+                cursor.make_spanned(
+                    ":".to_string(),
+                    entry_start,
+                    colon_col,
+                    entry_start,
+                    colon_col + 1,
+                )
+            });
+
             raises.push(GoogleException {
                 range: cursor.make_range(entry_start, col, end_line, end_col),
                 r#type: exc_type,
+                colon,
                 description: full_desc,
             });
         } else {
@@ -1169,15 +1231,20 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
             let entry_start = cursor.line;
 
             // Split on first colon for description (tolerant of any whitespace)
-            let (names_part, first_desc, desc_col) =
+            let (names_part, first_desc, desc_col, colon_offset) =
                 if let Some(colon_pos) = find_entry_colon(trimmed) {
                     let n = &trimmed[..colon_pos];
                     let after_colon = &trimmed[colon_pos + 1..];
                     let desc = after_colon.trim_start();
                     let ws_after = after_colon.len() - desc.len();
-                    (n, desc, col + colon_pos + 1 + ws_after)
+                    (
+                        n,
+                        desc,
+                        col + colon_pos + 1 + ws_after,
+                        Some(col + colon_pos),
+                    )
                 } else {
-                    (trimmed, "", col + trimmed.len())
+                    (trimmed, "", col + trimmed.len(), None)
                 };
 
             // Parse comma-separated names
@@ -1216,9 +1283,20 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
                 (entry_start, col + trimmed.len())
             };
 
+            let colon = colon_offset.map(|colon_col| {
+                cursor.make_spanned(
+                    ":".to_string(),
+                    entry_start,
+                    colon_col,
+                    entry_start,
+                    colon_col + 1,
+                )
+            });
+
             items.push(GoogleSeeAlsoItem {
                 range: cursor.make_range(entry_start, col, end_line, end_col),
                 names,
+                colon,
                 description,
             });
         } else {

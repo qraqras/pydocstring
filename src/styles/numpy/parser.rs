@@ -403,6 +403,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                             .into_iter()
                             .next()
                             .unwrap_or_else(Spanned::empty_string),
+                        colon: p.colon,
                         r#type: p.r#type,
                         description: p.description,
                     })
@@ -420,6 +421,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                             .into_iter()
                             .next()
                             .unwrap_or_else(Spanned::empty_string),
+                        colon: p.colon,
                         description: p.description,
                     })
                     .collect();
@@ -780,7 +782,7 @@ fn parse_returns(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Nu
             let col = cursor.current_indent();
             let entry_start = cursor.line;
 
-            let (name, return_type) = if let Some(colon_pos) = find_entry_colon(trimmed) {
+            let (name, colon, return_type) = if let Some(colon_pos) = find_entry_colon(trimmed) {
                 // Named return: "name : type" (tolerant of whitespace)
                 let n = trimmed[..colon_pos].trim_end();
                 let after_colon = &trimmed[colon_pos + 1..];
@@ -788,6 +790,7 @@ fn parse_returns(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Nu
                 let name_col = col;
                 let ws_after = after_colon.len() - after_colon.trim_start().len();
                 let type_col = col + colon_pos + 1 + ws_after;
+                let colon_col = col + colon_pos;
                 (
                     Some(cursor.make_spanned(
                         n.to_string(),
@@ -795,6 +798,13 @@ fn parse_returns(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Nu
                         name_col,
                         cursor.line,
                         name_col + n.len(),
+                    )),
+                    Some(cursor.make_spanned(
+                        ":".to_string(),
+                        cursor.line,
+                        colon_col,
+                        cursor.line,
+                        colon_col + 1,
                     )),
                     Some(cursor.make_spanned(
                         t.to_string(),
@@ -807,6 +817,7 @@ fn parse_returns(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Nu
             } else {
                 // Unnamed: type only
                 (
+                    None,
                     None,
                     Some(cursor.make_spanned(
                         trimmed.to_string(),
@@ -830,6 +841,7 @@ fn parse_returns(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Nu
             returns.push(NumPyReturns {
                 range: cursor.make_range(entry_start, col, entry_end_line, entry_end_col),
                 name,
+                colon,
                 return_type,
                 description: desc,
             });
@@ -968,13 +980,21 @@ fn parse_see_also(cursor: &mut Cursor, end: usize) -> Vec<crate::styles::numpy::
         let entry_start = cursor.line;
 
         // Split on first colon for description (tolerant of whitespace)
-        let (names_str, description) = if let Some(colon_pos) = find_entry_colon(trimmed) {
+        let (names_str, colon, description) = if let Some(colon_pos) = find_entry_colon(trimmed) {
             let after_colon = &trimmed[colon_pos + 1..];
             let desc_text = after_colon.trim();
             let ws_after = after_colon.len() - after_colon.trim_start().len();
             let desc_col = col + colon_pos + 1 + ws_after;
+            let colon_col = col + colon_pos;
             (
                 trimmed[..colon_pos].trim_end(),
+                Some(cursor.make_spanned(
+                    ":".to_string(),
+                    cursor.line,
+                    colon_col,
+                    cursor.line,
+                    colon_col + 1,
+                )),
                 Some(cursor.make_spanned(
                     desc_text.to_string(),
                     cursor.line,
@@ -984,7 +1004,7 @@ fn parse_see_also(cursor: &mut Cursor, end: usize) -> Vec<crate::styles::numpy::
                 )),
             )
         } else {
-            (trimmed, None)
+            (trimmed, None, None)
         };
 
         let names = parse_name_list(names_str, cursor.line, col, cursor);
@@ -993,6 +1013,7 @@ fn parse_see_also(cursor: &mut Cursor, end: usize) -> Vec<crate::styles::numpy::
         items.push(crate::styles::numpy::ast::SeeAlsoItem {
             range: cursor.make_range(entry_start, col, entry_start, entry_end_col),
             names,
+            colon,
             description,
         });
 
