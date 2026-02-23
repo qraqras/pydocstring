@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::ast::{Spanned, TextRange};
+use crate::ast::TextRange;
 
 // =============================================================================
 // NumPy Style Types
@@ -138,7 +138,7 @@ pub enum NumPyDocstringItem {
     ///
     /// Typical causes include misplaced prose, a section name whose underline
     /// was accidentally omitted, or text that belongs to a previous section.
-    StrayLine(Spanned<String>),
+    StrayLine(TextRange),
 }
 
 /// A single NumPy-style section, combining header and body.
@@ -173,9 +173,9 @@ pub struct NumPySectionHeader {
     /// Resolved section kind.
     pub kind: NumPySectionKind,
     /// Section name as written in source (e.g., "Parameters", "Params") with its span.
-    pub name: Spanned<String>,
+    pub name: TextRange,
     /// Underline (dashes) line with its span.
-    pub underline: Spanned<String>,
+    pub underline: TextRange,
 }
 
 /// Body content of a NumPy-style section.
@@ -198,21 +198,21 @@ pub enum NumPySectionBody {
     /// Warns section.
     Warns(Vec<NumPyWarning>),
     /// Warnings section (free text).
-    Warnings(Spanned<String>),
+    Warnings(TextRange),
     /// See Also section.
     SeeAlso(Vec<SeeAlsoItem>),
     /// Notes section (free text).
-    Notes(Spanned<String>),
+    Notes(TextRange),
     /// References section.
     References(Vec<NumPyReference>),
     /// Examples section (free text, doctest format).
-    Examples(Spanned<String>),
+    Examples(TextRange),
     /// Attributes section.
     Attributes(Vec<NumPyAttribute>),
     /// Methods section.
     Methods(Vec<NumPyMethod>),
     /// Unknown / unrecognized section (free text).
-    Unknown(Spanned<String>),
+    Unknown(TextRange),
 }
 
 /// NumPy-style docstring.
@@ -231,12 +231,12 @@ pub struct NumPyDocstring {
     /// Source span of the entire docstring.
     pub range: TextRange,
     /// Brief summary (first line).
-    pub summary: Spanned<String>,
+    pub summary: TextRange,
     /// Deprecation warning (if applicable).
     pub deprecation: Option<NumPyDeprecation>,
     /// Extended summary (multiple sentences before any section header).
     /// Clarifies functionality, may reference parameters.
-    pub extended_summary: Option<Spanned<String>>,
+    pub extended_summary: Option<TextRange>,
     /// All items (sections and stray lines) in order of appearance.
     pub items: Vec<NumPyDocstringItem>,
 }
@@ -247,15 +247,15 @@ pub struct NumPyDeprecation {
     /// Source span.
     pub range: TextRange,
     /// The `..` RST directive marker, with its span.
-    pub directive_marker: Option<Spanned<String>>,
+    pub directive_marker: Option<TextRange>,
     /// The `deprecated` keyword, with its span.
-    pub keyword: Option<Spanned<String>>,
+    pub keyword: Option<TextRange>,
     /// The `::` double-colon separator, with its span.
-    pub double_colon: Option<Spanned<String>>,
+    pub double_colon: Option<TextRange>,
     /// Version when deprecated (e.g., "1.6.0") with its span.
-    pub version: Spanned<String>,
+    pub version: TextRange,
     /// Reason for deprecation and recommendation (free text body), with its span.
-    pub description: Spanned<String>,
+    pub description: TextRange,
 }
 
 /// NumPy-style parameter.
@@ -267,28 +267,28 @@ pub struct NumPyParameter {
     /// Source span of this parameter definition.
     pub range: TextRange,
     /// Parameter names (supports multiple names like `x1, x2`), each with its own span.
-    pub names: Vec<Spanned<String>>,
+    pub names: Vec<TextRange>,
     /// The colon separator (`:`) between name(s) and type, if present.
     ///
     /// `None` when the colon is missing (best-effort parse of a bare name).
     /// A linter can use this to report a missing colon.
-    pub colon: Option<Spanned<String>>,
+    pub colon: Option<TextRange>,
     /// Parameter type (e.g., "int", "str", "array_like") with its span.
     /// Type is optional for parameters but required for returns.
-    pub r#type: Option<Spanned<String>>,
+    pub r#type: Option<TextRange>,
     /// Parameter description with its span.
-    pub description: Spanned<String>,
+    pub description: TextRange,
     /// The `optional` marker, if present.
     /// `None` means not marked as optional.
-    pub optional: Option<Spanned<String>>,
+    pub optional: Option<TextRange>,
     /// The `default` keyword, if present (e.g., `"default"`).
-    pub default_keyword: Option<Spanned<String>>,
+    pub default_keyword: Option<TextRange>,
     /// The separator after `default` (`=` or `:`), if present.
     /// `None` when the value follows after whitespace only (e.g., `default True`).
-    pub default_separator: Option<Spanned<String>>,
+    pub default_separator: Option<TextRange>,
     /// Default value (e.g., "True", "-1", "None") with its span.
     /// `None` when `default` appears alone without a value.
-    pub default_value: Option<Spanned<String>>,
+    pub default_value: Option<TextRange>,
 }
 
 /// NumPy-style return or yield value.
@@ -297,13 +297,13 @@ pub struct NumPyReturns {
     /// Source span.
     pub range: TextRange,
     /// Return value name (optional in NumPy style) with its span.
-    pub name: Option<Spanned<String>>,
+    pub name: Option<TextRange>,
     /// The colon (`:`) separating name from type, with its span, if present.
-    pub colon: Option<Spanned<String>>,
+    pub colon: Option<TextRange>,
     /// Return type with its span.
-    pub return_type: Option<Spanned<String>>,
+    pub return_type: Option<TextRange>,
     /// Description with its span.
-    pub description: Spanned<String>,
+    pub description: TextRange,
 }
 
 /// NumPy-style exception.
@@ -312,9 +312,9 @@ pub struct NumPyException {
     /// Source span.
     pub range: TextRange,
     /// Exception type with its span.
-    pub r#type: Spanned<String>,
+    pub r#type: TextRange,
     /// Description of when raised, with its span.
-    pub description: Spanned<String>,
+    pub description: TextRange,
 }
 
 /// NumPy-style warning (from Warns section).
@@ -323,9 +323,9 @@ pub struct NumPyWarning {
     /// Source span.
     pub range: TextRange,
     /// Warning type (e.g., "DeprecationWarning") with its span.
-    pub r#type: Spanned<String>,
+    pub r#type: TextRange,
     /// When the warning is issued, with its span.
-    pub description: Spanned<String>,
+    pub description: TextRange,
 }
 
 /// See Also item.
@@ -338,11 +338,11 @@ pub struct SeeAlsoItem {
     /// Source span.
     pub range: TextRange,
     /// Reference names (can be multiple like `func_b, func_c`), each with its own span.
-    pub names: Vec<Spanned<String>>,
+    pub names: Vec<TextRange>,
     /// The colon (`:`) separating names from description, with its span, if present.
-    pub colon: Option<Spanned<String>>,
+    pub colon: Option<TextRange>,
     /// Optional description with its span.
-    pub description: Option<Spanned<String>>,
+    pub description: Option<TextRange>,
 }
 
 /// Numbered reference (from References section).
@@ -355,15 +355,15 @@ pub struct NumPyReference {
     /// The RST directive marker (`..`) with its span, if present.
     ///
     /// `None` for non-RST (plain text) references.
-    pub directive_marker: Option<Spanned<String>>,
+    pub directive_marker: Option<TextRange>,
     /// Opening bracket (`[`) enclosing the reference number, with its span, if present.
-    pub open_bracket: Option<Spanned<String>>,
+    pub open_bracket: Option<TextRange>,
     /// Reference number (e.g., "1", "2", "3") with its span.
-    pub number: Spanned<String>,
+    pub number: TextRange,
     /// Closing bracket (`]`) enclosing the reference number, with its span, if present.
-    pub close_bracket: Option<Spanned<String>>,
+    pub close_bracket: Option<TextRange>,
     /// Reference content (author, title, etc) with its span.
-    pub content: Spanned<String>,
+    pub content: TextRange,
 }
 
 /// NumPy-style attribute.
@@ -372,13 +372,13 @@ pub struct NumPyAttribute {
     /// Source span.
     pub range: TextRange,
     /// Attribute name with its span.
-    pub name: Spanned<String>,
+    pub name: TextRange,
     /// The colon (`:`) separating name from type, with its span, if present.
-    pub colon: Option<Spanned<String>>,
+    pub colon: Option<TextRange>,
     /// Attribute type with its span.
-    pub r#type: Option<Spanned<String>>,
+    pub r#type: Option<TextRange>,
     /// Description with its span.
-    pub description: Spanned<String>,
+    pub description: TextRange,
 }
 
 /// NumPy-style method (for classes).
@@ -387,11 +387,11 @@ pub struct NumPyMethod {
     /// Source span.
     pub range: TextRange,
     /// Method name with its span.
-    pub name: Spanned<String>,
+    pub name: TextRange,
     /// The colon (`:`) separating name from description, with its span, if present.
-    pub colon: Option<Spanned<String>>,
+    pub colon: Option<TextRange>,
     /// Brief description with its span.
-    pub description: Spanned<String>,
+    pub description: TextRange,
 }
 
 impl NumPyDocstring {
@@ -400,7 +400,7 @@ impl NumPyDocstring {
         Self {
             source: String::new(),
             range: TextRange::empty(),
-            summary: Spanned::empty_string(),
+            summary: TextRange::empty(),
             deprecation: None,
             extended_summary: None,
             items: Vec::new(),
@@ -416,6 +416,10 @@ impl Default for NumPyDocstring {
 
 impl fmt::Display for NumPyDocstring {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "NumPyDocstring(summary: {})", self.summary.value)
+        write!(
+            f,
+            "NumPyDocstring(summary: {})",
+            self.summary.source_text(&self.source)
+        )
     }
 }

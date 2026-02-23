@@ -4,7 +4,7 @@
 //! line position into a single struct, eliminating the need to thread
 //! `(source, &offsets, total_lines)` through every helper function.
 
-use crate::ast::{Spanned, TextRange, TextSize};
+use crate::ast::{TextRange, TextSize};
 
 // =============================================================================
 // Cursor
@@ -132,21 +132,6 @@ impl<'a> Cursor<'a> {
         TextRange::new(
             TextSize::new((self.offsets[start_line] + start_col) as u32),
             TextSize::new((self.offsets[end_line] + end_col) as u32),
-        )
-    }
-
-    /// Build a [`Spanned<String>`] from (line, col) pairs.
-    pub fn make_spanned(
-        &self,
-        value: String,
-        start_line: usize,
-        start_col: usize,
-        end_line: usize,
-        end_col: usize,
-    ) -> Spanned<String> {
-        Spanned::new(
-            value,
-            self.make_range(start_line, start_col, end_line, end_col),
         )
     }
 

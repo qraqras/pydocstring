@@ -17,7 +17,7 @@
 //!     ValueError: If the input is invalid.
 //! ```
 
-use crate::ast::{Spanned, TextRange, TextSize};
+use crate::ast::{TextRange, TextSize};
 use crate::cursor::{Cursor, indent_len};
 use crate::styles::google::ast::{
     GoogleArg, GoogleAttribute, GoogleDocstring, GoogleDocstringItem, GoogleException,
@@ -175,7 +175,7 @@ fn collect_description(
     cursor: &mut Cursor,
     entry_indent: usize,
     base_indent: usize,
-) -> Spanned<String> {
+) -> TextRange {
     let mut desc_parts: Vec<&str> = Vec::new();
     let mut first_content_line: Option<usize> = None;
     let mut last_content_line = cursor.line;
@@ -211,7 +211,6 @@ fn collect_description(
         desc_parts.remove(0);
     }
 
-    let text = desc_parts.join("\n");
 
     if let Some(first) = first_content_line {
         let first_line = cursor.line_text(first);
@@ -219,38 +218,35 @@ fn collect_description(
         let last_line = cursor.line_text(last_content_line);
         let last_trimmed = last_line.trim();
         let last_col = indent_len(last_line) + last_trimmed.len();
-        cursor.make_spanned(text, first, first_col, last_content_line, last_col)
+        cursor.make_range(first, first_col, last_content_line, last_col)
     } else {
-        Spanned::empty_string()
+        TextRange::empty()
     }
 }
 
-/// Merge a first-line description fragment with a continuation `Spanned<String>`.
+/// Merge a first-line description fragment with a continuation `TextRange`.
 fn build_full_description(
     first_line: &str,
     first_col: usize,
     first_line_idx: usize,
-    cont: &Spanned<String>,
+    cont: &TextRange,
     cursor: &Cursor,
-) -> Spanned<String> {
+) -> TextRange {
     if first_line.is_empty() {
-        if cont.value.is_empty() {
-            return Spanned::empty_string();
+        if cont.is_empty() {
+            return TextRange::empty();
         }
         return cont.clone();
     }
-    if cont.value.is_empty() {
-        return cursor.make_spanned(
-            first_line.to_string(),
-            first_line_idx,
+    if cont.is_empty() {
+        return cursor.make_range(first_line_idx,
             first_col,
             first_line_idx,
             first_col + first_line.len(),
         );
     }
-    let combined = format!("{}\n{}", first_line, cont.value);
-    let (end_line, end_col) = cursor.offset_to_line_col(cont.range.end().raw() as usize);
-    cursor.make_spanned(combined, first_line_idx, first_col, end_line, end_col)
+    let (end_line, end_col) = cursor.offset_to_line_col(cont.end().raw() as usize);
+    cursor.make_range(first_line_idx, first_col, end_line, end_col)
 }
 
 // =============================================================================
@@ -464,7 +460,7 @@ fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usi
 /// let input = "Summary.\n\nArgs:\n    x (int): The value.\n\nReturns:\n    int: The result.";
 /// let doc = &parse_google(input);
 ///
-/// assert_eq!(doc.summary.value, "Summary.");
+/// assert_eq!(doc.summary.source_text(&doc.source), "Summary.");
 ///
 /// let args: Vec<_> = doc.items.iter().filter_map(|item| match item {
 ///     pydocstring::GoogleDocstringItem::Section(s) => match &s.body {
@@ -474,7 +470,7 @@ fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usi
 ///     _ => None,
 /// }).flatten().collect();
 /// assert_eq!(args.len(), 1);
-/// assert_eq!(args[0].name.value, "x");
+/// assert_eq!(args[0].name.source_text(&doc.source), "x");
 ///
 /// let ret = doc.items.iter().find_map(|item| match item {
 ///     pydocstring::GoogleDocstringItem::Section(s) => match &s.body {
@@ -483,7 +479,7 @@ fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usi
 ///     },
 ///     _ => None,
 /// }).unwrap();
-/// assert_eq!(ret.return_type.as_ref().unwrap().value, "int");
+/// assert_eq!(ret.return_type.as_ref().unwrap().source_text(&doc.source), "int");
 /// ```
 pub fn parse_google(input: &str) -> GoogleDocstring {
     let mut cursor = Cursor::new(input);
@@ -508,9 +504,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
         let trimmed = cursor.current_trimmed();
         if !trimmed.is_empty() {
             let col = cursor.current_indent();
-            docstring.summary = cursor.make_spanned(
-                trimmed.to_string(),
-                cursor.line,
+            docstring.summary = cursor.make_range(cursor.line,
                 col,
                 cursor.line,
                 col + trimmed.len(),
@@ -548,7 +542,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
             let last_trimmed = last_line.trim();
             let last_col = indent_len(last_line) + last_trimmed.len();
             docstring.extended_summary =
-                Some(cursor.make_spanned(joined, start_line, first_col, last_non_empty, last_col));
+                Some(cursor.make_range(start_line, first_col, last_non_empty, last_col));
         }
     }
 
@@ -573,9 +567,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
             let colon = if has_colon {
                 // Colon is always the last character of the trimmed line
                 let colon_col = header_col + header_trimmed.len() - 1;
-                Some(cursor.make_spanned(
-                    ":".to_string(),
-                    cursor.line,
+                Some(cursor.make_range(cursor.line,
                     colon_col,
                     cursor.line,
                     colon_col + 1,
@@ -595,9 +587,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                     header_col + header_trimmed.len(),
                 ),
                 kind: section_kind,
-                name: cursor.make_spanned(
-                    header_name.to_string(),
-                    cursor.line,
+                name: cursor.make_range(cursor.line,
                     header_col,
                     cursor.line,
                     header_col + header_name.len(),
@@ -757,9 +747,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
             let trimmed = line.trim();
             if !trimmed.is_empty() {
                 let col = cursor.current_indent();
-                let spanned = cursor.make_spanned(
-                    trimmed.to_string(),
-                    cursor.line,
+                let spanned = cursor.make_range(cursor.line,
                     col,
                     cursor.line,
                     col + trimmed.len(),
@@ -819,36 +807,27 @@ fn parse_args(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleArg> {
             let header = parse_entry_header(cursor);
 
             // Name
-            let name_spanned = Spanned::new(
-                header.name.to_string(),
-                TextRange::new(
+            let name_spanned = TextRange::new(
                     TextSize::new(header.name_start as u32),
                     TextSize::new((header.name_start + header.name.len()) as u32),
-                ),
-            );
+                );
 
             // Type and optional
             let (arg_type, optional) = match &header.type_info {
                 Some(ti) => {
                     let arg_t = if !ti.clean_type.is_empty() {
-                        Some(Spanned::new(
-                            ti.clean_type.to_string(),
-                            TextRange::new(
+                        Some(TextRange::new(
                                 TextSize::new(ti.type_start as u32),
                                 TextSize::new((ti.type_start + ti.clean_type.len()) as u32),
-                            ),
-                        ))
+                            ))
                     } else {
                         None
                     };
                     let opt = ti.optional_start.map(|os| {
-                        Spanned::new(
-                            "optional".to_string(),
-                            TextRange::new(
+                        TextRange::new(
                                 TextSize::new(os as u32),
                                 TextSize::new((os + "optional".len()) as u32),
-                            ),
-                        )
+                            )
                     });
                     (arg_t, opt)
                 }
@@ -874,42 +853,33 @@ fn parse_args(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleArg> {
                 cursor,
             );
 
-            let (end_line, end_col) = if full_desc.value.is_empty() {
+            let (end_line, end_col) = if full_desc.is_empty() {
                 let last_header_line = cursor.line_text(header.end_line);
                 (
                     header.end_line,
                     indent_len(last_header_line) + last_header_line.trim().len(),
                 )
             } else {
-                cursor.offset_to_line_col(full_desc.range.end().raw() as usize)
+                cursor.offset_to_line_col(full_desc.end().raw() as usize)
             };
 
             // Bracket spans
             let open_bracket = header.open_bracket.map(|(pos, ch)| {
-                Spanned::new(
-                    ch.to_string(),
-                    TextRange::new(
+                TextRange::new(
                         TextSize::new(pos as u32),
                         TextSize::new((pos + ch.len()) as u32),
-                    ),
-                )
+                    )
             });
             let close_bracket = header.close_bracket.map(|(pos, ch)| {
-                Spanned::new(
-                    ch.to_string(),
-                    TextRange::new(
+                TextRange::new(
                         TextSize::new(pos as u32),
                         TextSize::new((pos + ch.len()) as u32),
-                    ),
-                )
+                    )
             });
 
             // Colon span
             let colon = header.colon_offset.map(|pos| {
-                Spanned::new(
-                    ":".to_string(),
-                    TextRange::new(TextSize::new(pos as u32), TextSize::new((pos + 1) as u32)),
-                )
+                TextRange::new(TextSize::new(pos as u32), TextSize::new((pos + 1) as u32))
             });
 
             args.push(GoogleArg {
@@ -957,7 +927,7 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
                 range: TextRange::empty(),
                 return_type: None,
                 colon: None,
-                description: Spanned::empty_string(),
+                description: TextRange::empty(),
             };
         }
         let trimmed = line.trim();
@@ -968,7 +938,7 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
                     range: TextRange::empty(),
                     return_type: None,
                     colon: None,
-                    description: Spanned::empty_string(),
+                    description: TextRange::empty(),
                 };
             }
             break;
@@ -981,7 +951,7 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
             range: TextRange::empty(),
             return_type: None,
             colon: None,
-            description: Spanned::empty_string(),
+            description: TextRange::empty(),
         };
     }
 
@@ -999,16 +969,12 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
             let desc_str = after_colon.trim_start();
             let ws_after = after_colon.len() - desc_str.len();
             let type_col = col;
-            let rt = Some(cursor.make_spanned(
-                type_str.to_string(),
-                cursor.line,
+            let rt = Some(cursor.make_range(cursor.line,
                 type_col,
                 cursor.line,
                 type_col + type_str.len(),
             ));
-            let colon_spanned = Some(cursor.make_spanned(
-                ":".to_string(),
-                cursor.line,
+            let colon_spanned = Some(cursor.make_range(cursor.line,
                 col + colon_pos,
                 cursor.line,
                 col + colon_pos + 1,
@@ -1025,10 +991,10 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
     let cont_desc = parse_section_content(cursor, base_indent);
     let full_desc = build_full_description(first_desc, desc_col, entry_start, &cont_desc, cursor);
 
-    let (end_line, end_col) = if full_desc.value.is_empty() {
+    let (end_line, end_col) = if full_desc.is_empty() {
         (entry_start, col + trimmed.len())
     } else {
-        cursor.offset_to_line_col(full_desc.range.end().raw() as usize)
+        cursor.offset_to_line_col(full_desc.end().raw() as usize)
     };
 
     GoogleReturns {
@@ -1092,9 +1058,7 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
                     (trimmed, "", col + trimmed.len(), None)
                 };
 
-            let exc_type = cursor.make_spanned(
-                exc_type_str.to_string(),
-                cursor.line,
+            let exc_type = cursor.make_range(cursor.line,
                 col,
                 cursor.line,
                 col + exc_type_str.len(),
@@ -1105,16 +1069,14 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
             let full_desc =
                 build_full_description(first_desc, desc_col, entry_start, &cont_desc, cursor);
 
-            let (end_line, end_col) = if full_desc.value.is_empty() {
+            let (end_line, end_col) = if full_desc.is_empty() {
                 (entry_start, col + trimmed.len())
             } else {
-                cursor.offset_to_line_col(full_desc.range.end().raw() as usize)
+                cursor.offset_to_line_col(full_desc.end().raw() as usize)
             };
 
             let colon = colon_offset.map(|colon_col| {
-                cursor.make_spanned(
-                    ":".to_string(),
-                    entry_start,
+                cursor.make_range(entry_start,
                     colon_col,
                     entry_start,
                     colon_col + 1,
@@ -1144,7 +1106,7 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
 /// Collects all indented lines until the next section header.
 ///
 /// On return, `cursor.line` points to the first line after the section.
-fn parse_section_content(cursor: &mut Cursor, base_indent: usize) -> Spanned<String> {
+fn parse_section_content(cursor: &mut Cursor, base_indent: usize) -> TextRange {
     let mut content_lines: Vec<&str> = Vec::new();
     let mut first_content_line: Option<usize> = None;
     let mut last_content_line = cursor.line;
@@ -1179,7 +1141,6 @@ fn parse_section_content(cursor: &mut Cursor, base_indent: usize) -> Spanned<Str
         content_lines.remove(0);
     }
 
-    let text = content_lines.join("\n");
 
     if let Some(first) = first_content_line {
         let first_line = cursor.line_text(first);
@@ -1187,9 +1148,9 @@ fn parse_section_content(cursor: &mut Cursor, base_indent: usize) -> Spanned<Str
         let last_line = cursor.line_text(last_content_line);
         let last_trimmed = last_line.trim();
         let last_col = indent_len(last_line) + last_trimmed.len();
-        cursor.make_spanned(text, first, first_col, last_content_line, last_col)
+        cursor.make_range(first, first_col, last_content_line, last_col)
     } else {
-        Spanned::empty_string()
+        TextRange::empty()
     }
 }
 
@@ -1261,9 +1222,7 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
                 if !name.is_empty() {
                     // Find the actual position of this name within the line
                     let name_start = name_offset + (part.len() - part.trim_start().len());
-                    names.push(cursor.make_spanned(
-                        name.to_string(),
-                        cursor.line,
+                    names.push(cursor.make_range(cursor.line,
                         name_start,
                         cursor.line,
                         name_start + name.len(),
@@ -1277,22 +1236,20 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
             let full_desc =
                 build_full_description(first_desc, desc_col, entry_start, &cont_desc, cursor);
 
-            let description = if full_desc.value.is_empty() {
+            let description = if full_desc.is_empty() {
                 None
             } else {
                 Some(full_desc)
             };
 
             let (end_line, end_col) = if let Some(ref d) = description {
-                cursor.offset_to_line_col(d.range.end().raw() as usize)
+                cursor.offset_to_line_col(d.end().raw() as usize)
             } else {
                 (entry_start, col + trimmed.len())
             };
 
             let colon = colon_offset.map(|colon_col| {
-                cursor.make_spanned(
-                    ":".to_string(),
-                    entry_start,
+                cursor.make_range(entry_start,
                     colon_col,
                     entry_start,
                     colon_col + 1,

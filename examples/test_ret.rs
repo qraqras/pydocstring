@@ -17,21 +17,21 @@ Returns:
   table (and require_all_keys must have been False).
 ";
     let doc = parse_google(input);
-    println!("Summary: {:?}", doc.summary.value);
+    println!("Summary: {:?}", doc.summary.source_text(&doc.source));
     println!("Items: {}", doc.items.len());
     for (idx, item) in doc.items.iter().enumerate() {
         match item {
             pydocstring::GoogleDocstringItem::Section(s) => {
-                println!("Item {}: Section {:?}", idx, s.header.name.value);
+                println!("Item {}: Section {:?}", idx, s.header.name.source_text(&doc.source));
                 if let GoogleSectionBody::Returns(ref ret) = s.body {
-                    let type_str = ret.return_type.as_ref().map(|t| &t.value);
-                    let d = &ret.description.value;
+                    let type_str = ret.return_type.as_ref().map(|t| t.source_text(&doc.source));
+                    let d = &ret.description.source_text(&doc.source);
                     println!("  type: {:?}", type_str);
                     println!("  desc: {:?}", if d.len() > 80 { &d[..80] } else { d });
                 }
             }
             pydocstring::GoogleDocstringItem::StrayLine(s) => {
-                println!("Item {}: StrayLine {:?}", idx, s.value);
+                println!("Item {}: StrayLine {:?}", idx, s.source_text(&doc.source));
             }
         }
     }

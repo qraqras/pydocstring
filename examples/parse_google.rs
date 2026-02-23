@@ -24,9 +24,9 @@ Raises:
     let result = parse_google(docstring);
     let doc = &result;
 
-    println!("Summary: {}", doc.summary.value);
+    println!("Summary: {}", doc.summary.source_text(&doc.source));
     if let Some(desc) = &doc.extended_summary {
-        println!("Description: {}", desc.value);
+        println!("Description: {}", desc.source_text(&doc.source));
     }
 
     let args: Vec<_> = doc
@@ -43,10 +43,10 @@ Raises:
         .collect();
     println!("\nArgs ({}):", args.len());
     for arg in &args {
-        let type_str = arg.r#type.as_ref().map(|t| t.value.as_str()).unwrap_or("?");
+        let type_str = arg.r#type.as_ref().map(|t| t.source_text(&doc.source)).unwrap_or("?");
         println!(
             "  {} ({}): {}",
-            arg.name.value, type_str, arg.description.value
+            arg.name.source_text(&doc.source), type_str, arg.description.source_text(&doc.source)
         );
     }
 
@@ -61,9 +61,9 @@ Raises:
         let type_str = ret
             .return_type
             .as_ref()
-            .map(|t| t.value.as_str())
+            .map(|t| t.source_text(&doc.source))
             .unwrap_or("?");
-        println!("\nReturns: {}: {}", type_str, ret.description.value);
+        println!("\nReturns: {}: {}", type_str, ret.description.source_text(&doc.source));
     }
 
     let raises: Vec<_> = doc
@@ -80,7 +80,7 @@ Raises:
         .collect();
     println!("\nRaises ({}):", raises.len());
     for exc in &raises {
-        println!("  {}: {}", exc.r#type.value, exc.description.value);
+        println!("  {}: {}", exc.r#type.source_text(&doc.source), exc.description.source_text(&doc.source));
     }
 
     let all_sections: Vec<_> = doc
@@ -95,7 +95,7 @@ Raises:
     for section in &all_sections {
         println!(
             "  {} (header: {:?})",
-            section.header.name.value, section.header.range
+            section.header.name.source_text(&doc.source), section.header.range
         );
     }
 }

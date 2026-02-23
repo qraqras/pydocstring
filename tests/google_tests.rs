@@ -168,7 +168,7 @@ fn methods(doc: &GoogleDocstring) -> Vec<&GoogleMethod> {
         .collect()
 }
 
-fn notes(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
+fn notes(doc: &GoogleDocstring) -> Option<&pydocstring::TextRange> {
     doc.items
         .iter()
         .filter_map(|item| match item {
@@ -181,7 +181,7 @@ fn notes(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
         })
 }
 
-fn examples(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
+fn examples(doc: &GoogleDocstring) -> Option<&pydocstring::TextRange> {
     doc.items
         .iter()
         .filter_map(|item| match item {
@@ -194,7 +194,7 @@ fn examples(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
         })
 }
 
-fn todo(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
+fn todo(doc: &GoogleDocstring) -> Option<&pydocstring::TextRange> {
     doc.items
         .iter()
         .filter_map(|item| match item {
@@ -207,7 +207,7 @@ fn todo(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
         })
 }
 
-fn references(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
+fn references(doc: &GoogleDocstring) -> Option<&pydocstring::TextRange> {
     doc.items
         .iter()
         .filter_map(|item| match item {
@@ -220,7 +220,7 @@ fn references(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
         })
 }
 
-fn warnings(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
+fn warnings(doc: &GoogleDocstring) -> Option<&pydocstring::TextRange> {
     doc.items
         .iter()
         .filter_map(|item| match item {
@@ -241,17 +241,17 @@ fn warnings(doc: &GoogleDocstring) -> Option<&pydocstring::Spanned<String>> {
 fn test_simple_summary() {
     let docstring = "This is a brief summary.";
     let result = parse_google(docstring);
-    assert_eq!(result.summary.value, "This is a brief summary.");
+    assert_eq!(result.summary.source_text(&result.source), "This is a brief summary.");
 }
 
 #[test]
 fn test_summary_span() {
     let docstring = "Brief description.";
     let result = parse_google(docstring);
-    assert_eq!(result.summary.range.start(), TextSize::new(0));
-    assert_eq!(result.summary.range.end(), TextSize::new(18));
+    assert_eq!(result.summary.start(), TextSize::new(0));
+    assert_eq!(result.summary.end(), TextSize::new(18));
     assert_eq!(
-        result.summary.range.source_text(&result.source),
+        result.summary.source_text(&result.source),
         "Brief description."
     );
 }
@@ -259,13 +259,13 @@ fn test_summary_span() {
 #[test]
 fn test_empty_docstring() {
     let result = parse_google("");
-    assert_eq!(result.summary.value, "");
+    assert_eq!(result.summary.source_text(&result.source), "");
 }
 
 #[test]
 fn test_whitespace_only_docstring() {
     let result = parse_google("   \n   \n");
-    assert_eq!(result.summary.value, "");
+    assert_eq!(result.summary.source_text(&result.source), "");
 }
 
 #[test]
@@ -274,10 +274,10 @@ fn test_summary_with_description() {
         "Brief summary.\n\nExtended description that provides\nmore details about the function.";
     let result = parse_google(docstring);
 
-    assert_eq!(result.summary.value, "Brief summary.");
+    assert_eq!(result.summary.source_text(&result.source), "Brief summary.");
     let desc = result.extended_summary.as_ref().unwrap();
     assert_eq!(
-        desc.value,
+        desc.source_text(&result.source),
         "Extended description that provides\nmore details about the function."
     );
 }
@@ -290,10 +290,10 @@ First paragraph of description.
 
 Second paragraph of description."#;
     let result = parse_google(docstring);
-    assert_eq!(result.summary.value, "Brief summary.");
+    assert_eq!(result.summary.source_text(&result.source), "Brief summary.");
     let desc = result.extended_summary.as_ref().unwrap();
-    assert!(desc.value.contains("First paragraph"));
-    assert!(desc.value.contains("Second paragraph"));
+    assert!(desc.source_text(&result.source).contains("First paragraph"));
+    assert!(desc.source_text(&result.source).contains("Second paragraph"));
 }
 
 // =============================================================================
@@ -306,9 +306,9 @@ fn test_args_basic() {
     let result = parse_google(docstring);
     let a = args(&result);
     assert_eq!(a.len(), 1);
-    assert_eq!(a[0].name.value, "x");
-    assert_eq!(a[0].r#type.as_ref().unwrap().value, "int");
-    assert_eq!(a[0].description.value, "The value.");
+    assert_eq!(a[0].name.source_text(&result.source), "x");
+    assert_eq!(a[0].r#type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(a[0].description.source_text(&result.source), "The value.");
 }
 
 #[test]
@@ -317,10 +317,10 @@ fn test_args_multiple() {
     let result = parse_google(docstring);
     let a = args(&result);
     assert_eq!(a.len(), 2);
-    assert_eq!(a[0].name.value, "x");
-    assert_eq!(a[0].r#type.as_ref().unwrap().value, "int");
-    assert_eq!(a[1].name.value, "y");
-    assert_eq!(a[1].r#type.as_ref().unwrap().value, "str");
+    assert_eq!(a[0].name.source_text(&result.source), "x");
+    assert_eq!(a[0].r#type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(a[1].name.source_text(&result.source), "y");
+    assert_eq!(a[1].r#type.as_ref().unwrap().source_text(&result.source), "str");
 }
 
 #[test]
@@ -328,9 +328,9 @@ fn test_args_no_type() {
     let docstring = "Summary.\n\nArgs:\n    x: The value.";
     let result = parse_google(docstring);
     let a = args(&result);
-    assert_eq!(a[0].name.value, "x");
+    assert_eq!(a[0].name.source_text(&result.source), "x");
     assert!(a[0].r#type.is_none());
-    assert_eq!(a[0].description.value, "The value.");
+    assert_eq!(a[0].description.source_text(&result.source), "The value.");
 }
 
 /// Colon with no space after it: `name:description`
@@ -339,8 +339,8 @@ fn test_args_no_space_after_colon() {
     let docstring = "Summary.\n\nArgs:\n    x:The value.";
     let result = parse_google(docstring);
     let a = args(&result);
-    assert_eq!(a[0].name.value, "x");
-    assert_eq!(a[0].description.value, "The value.");
+    assert_eq!(a[0].name.source_text(&result.source), "x");
+    assert_eq!(a[0].description.source_text(&result.source), "The value.");
 }
 
 /// Colon with extra spaces: `name:   description`
@@ -349,8 +349,8 @@ fn test_args_extra_spaces_after_colon() {
     let docstring = "Summary.\n\nArgs:\n    x:   The value.";
     let result = parse_google(docstring);
     let a = args(&result);
-    assert_eq!(a[0].name.value, "x");
-    assert_eq!(a[0].description.value, "The value.");
+    assert_eq!(a[0].name.source_text(&result.source), "x");
+    assert_eq!(a[0].description.source_text(&result.source), "The value.");
 }
 
 /// Returns entry with no space after colon.
@@ -359,8 +359,8 @@ fn test_returns_no_space_after_colon() {
     let docstring = "Summary.\n\nReturns:\n    int:The result.";
     let result = parse_google(docstring);
     let r = returns(&result).unwrap();
-    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
-    assert_eq!(r.description.value, "The result.");
+    assert_eq!(r.return_type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(r.description.source_text(&result.source), "The result.");
 }
 
 /// Returns entry with extra spaces after colon.
@@ -369,8 +369,8 @@ fn test_returns_extra_spaces_after_colon() {
     let docstring = "Summary.\n\nReturns:\n    int:   The result.";
     let result = parse_google(docstring);
     let r = returns(&result).unwrap();
-    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
-    assert_eq!(r.description.value, "The result.");
+    assert_eq!(r.return_type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(r.description.source_text(&result.source), "The result.");
 }
 
 /// Raises entry with no space after colon.
@@ -379,8 +379,8 @@ fn test_raises_no_space_after_colon() {
     let docstring = "Summary.\n\nRaises:\n    ValueError:If invalid.";
     let result = parse_google(docstring);
     let r = raises(&result);
-    assert_eq!(r[0].r#type.value, "ValueError");
-    assert_eq!(r[0].description.value, "If invalid.");
+    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
+    assert_eq!(r[0].description.source_text(&result.source), "If invalid.");
 }
 
 /// Raises entry with extra spaces after colon.
@@ -389,8 +389,8 @@ fn test_raises_extra_spaces_after_colon() {
     let docstring = "Summary.\n\nRaises:\n    ValueError:   If invalid.";
     let result = parse_google(docstring);
     let r = raises(&result);
-    assert_eq!(r[0].r#type.value, "ValueError");
-    assert_eq!(r[0].description.value, "If invalid.");
+    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
+    assert_eq!(r[0].description.source_text(&result.source), "If invalid.");
 }
 
 #[test]
@@ -398,8 +398,8 @@ fn test_args_optional() {
     let docstring = "Summary.\n\nArgs:\n    x (int, optional): The value.";
     let result = parse_google(docstring);
     let a = args(&result);
-    assert_eq!(a[0].name.value, "x");
-    assert_eq!(a[0].r#type.as_ref().unwrap().value, "int");
+    assert_eq!(a[0].name.source_text(&result.source), "x");
+    assert_eq!(a[0].r#type.as_ref().unwrap().source_text(&result.source), "int");
     assert!(a[0].optional.is_some());
 }
 
@@ -408,7 +408,7 @@ fn test_args_complex_type() {
     let docstring = "Summary.\n\nArgs:\n    data (Dict[str, List[int]]): The data.";
     let result = parse_google(docstring);
     assert_eq!(
-        args(&result)[0].r#type.as_ref().unwrap().value,
+        args(&result)[0].r#type.as_ref().unwrap().source_text(&result.source),
         "Dict[str, List[int]]"
     );
 }
@@ -418,7 +418,7 @@ fn test_args_tuple_type() {
     let docstring = "Summary.\n\nArgs:\n    pair (Tuple[int, str]): A pair of values.";
     let result = parse_google(docstring);
     assert_eq!(
-        args(&result)[0].r#type.as_ref().unwrap().value,
+        args(&result)[0].r#type.as_ref().unwrap().source_text(&result.source),
         "Tuple[int, str]"
     );
 }
@@ -429,8 +429,8 @@ fn test_args_multiline_description() {
         "Summary.\n\nArgs:\n    x (int): First line.\n        Second line.\n        Third line.";
     let result = parse_google(docstring);
     assert_eq!(
-        args(&result)[0].description.value,
-        "First line.\nSecond line.\nThird line."
+        args(&result)[0].description.source_text(&result.source),
+        "First line.\n        Second line.\n        Third line."
     );
 }
 
@@ -439,9 +439,9 @@ fn test_args_description_on_next_line() {
     let docstring = "Summary.\n\nArgs:\n    x (int):\n        The description.";
     let result = parse_google(docstring);
     let a = args(&result);
-    assert_eq!(a[0].name.value, "x");
-    assert_eq!(a[0].r#type.as_ref().unwrap().value, "int");
-    assert_eq!(a[0].description.value, "The description.");
+    assert_eq!(a[0].name.source_text(&result.source), "x");
+    assert_eq!(a[0].r#type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(a[0].description.source_text(&result.source), "The description.");
 }
 
 #[test]
@@ -450,10 +450,10 @@ fn test_args_varargs() {
     let result = parse_google(docstring);
     let a = args(&result);
     assert_eq!(a.len(), 2);
-    assert_eq!(a[0].name.value, "*args");
-    assert_eq!(a[0].description.value, "Positional args.");
-    assert_eq!(a[1].name.value, "**kwargs");
-    assert_eq!(a[1].description.value, "Keyword args.");
+    assert_eq!(a[0].name.source_text(&result.source), "*args");
+    assert_eq!(a[0].description.source_text(&result.source), "Positional args.");
+    assert_eq!(a[1].name.source_text(&result.source), "**kwargs");
+    assert_eq!(a[1].description.source_text(&result.source), "Keyword args.");
 }
 
 #[test]
@@ -461,8 +461,8 @@ fn test_args_kwargs_with_type() {
     let docstring = "Summary.\n\nArgs:\n    **kwargs (dict): Keyword arguments.";
     let result = parse_google(docstring);
     let a = args(&result);
-    assert_eq!(a[0].name.value, "**kwargs");
-    assert_eq!(a[0].r#type.as_ref().unwrap().value, "dict");
+    assert_eq!(a[0].name.source_text(&result.source), "**kwargs");
+    assert_eq!(a[0].r#type.as_ref().unwrap().source_text(&result.source), "dict");
 }
 
 #[test]
@@ -471,7 +471,7 @@ fn test_arguments_alias() {
     let result = parse_google(docstring);
     let a = args(&result);
     assert_eq!(a.len(), 1);
-    assert_eq!(a[0].name.value, "x");
+    assert_eq!(a[0].name.source_text(&result.source), "x");
 }
 
 // =============================================================================
@@ -484,14 +484,14 @@ fn test_args_name_span() {
     let result = parse_google(docstring);
     let arg = &args(&result)[0];
     let index = LineIndex::from_source(&result.source);
-    let (line, col) = index.line_col(arg.name.range.start());
+    let (line, col) = index.line_col(arg.name.start());
     assert_eq!(line, 3);
     assert_eq!(col, 4);
     assert_eq!(
-        arg.name.range.end(),
-        TextSize::new(arg.name.range.start().raw() + 1)
+        arg.name.end(),
+        TextSize::new(arg.name.start().raw() + 1)
     );
-    assert_eq!(arg.name.range.source_text(&result.source), "x");
+    assert_eq!(arg.name.source_text(&result.source), "x");
 }
 
 #[test]
@@ -501,9 +501,9 @@ fn test_args_type_span() {
     let arg = &args(&result)[0];
     let type_span = arg.r#type.as_ref().unwrap();
     let index = LineIndex::from_source(&result.source);
-    let (line, _col) = index.line_col(type_span.range.start());
+    let (line, _col) = index.line_col(type_span.start());
     assert_eq!(line, 3);
-    assert_eq!(type_span.range.source_text(&result.source), "int");
+    assert_eq!(type_span.source_text(&result.source), "int");
 }
 
 #[test]
@@ -511,7 +511,7 @@ fn test_args_optional_span() {
     let docstring = "Summary.\n\nArgs:\n    x (int, optional): Value.";
     let result = parse_google(docstring);
     let opt_span = args(&result)[0].optional.as_ref().unwrap();
-    assert_eq!(opt_span.range.source_text(&result.source), "optional");
+    assert_eq!(opt_span.source_text(&result.source), "optional");
 }
 
 #[test]
@@ -519,11 +519,11 @@ fn test_args_square_bracket_type() {
     let docstring = "Summary.\n\nArgs:\n    x [int]: The value.";
     let result = parse_google(docstring);
     let a = &args(&result)[0];
-    assert_eq!(a.name.value, "x");
-    assert_eq!(a.r#type.as_ref().unwrap().value, "int");
-    assert_eq!(a.open_bracket.as_ref().unwrap().value, "[");
-    assert_eq!(a.close_bracket.as_ref().unwrap().value, "]");
-    assert_eq!(a.description.value, "The value.");
+    assert_eq!(a.name.source_text(&result.source), "x");
+    assert_eq!(a.r#type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(a.open_bracket.as_ref().unwrap().source_text(&result.source), "[");
+    assert_eq!(a.close_bracket.as_ref().unwrap().source_text(&result.source), "]");
+    assert_eq!(a.description.source_text(&result.source), "The value.");
 }
 
 #[test]
@@ -531,11 +531,11 @@ fn test_args_curly_bracket_type() {
     let docstring = "Summary.\n\nArgs:\n    x {int}: The value.";
     let result = parse_google(docstring);
     let a = &args(&result)[0];
-    assert_eq!(a.name.value, "x");
-    assert_eq!(a.r#type.as_ref().unwrap().value, "int");
-    assert_eq!(a.open_bracket.as_ref().unwrap().value, "{");
-    assert_eq!(a.close_bracket.as_ref().unwrap().value, "}");
-    assert_eq!(a.description.value, "The value.");
+    assert_eq!(a.name.source_text(&result.source), "x");
+    assert_eq!(a.r#type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(a.open_bracket.as_ref().unwrap().source_text(&result.source), "{");
+    assert_eq!(a.close_bracket.as_ref().unwrap().source_text(&result.source), "}");
+    assert_eq!(a.description.source_text(&result.source), "The value.");
 }
 
 #[test]
@@ -544,21 +544,19 @@ fn test_args_paren_bracket_spans() {
     let docstring = "Summary.\n\nArgs:\n    x (int): The value.";
     let result = parse_google(docstring);
     let a = &args(&result)[0];
-    assert_eq!(a.open_bracket.as_ref().unwrap().value, "(");
+    assert_eq!(a.open_bracket.as_ref().unwrap().source_text(&result.source), "(");
     assert_eq!(
         a.open_bracket
             .as_ref()
             .unwrap()
-            .range
             .source_text(&result.source),
         "("
     );
-    assert_eq!(a.close_bracket.as_ref().unwrap().value, ")");
+    assert_eq!(a.close_bracket.as_ref().unwrap().source_text(&result.source), ")");
     assert_eq!(
         a.close_bracket
             .as_ref()
             .unwrap()
-            .range
             .source_text(&result.source),
         ")"
     );
@@ -579,10 +577,10 @@ fn test_args_square_bracket_optional() {
     let docstring = "Summary.\n\nArgs:\n    x [int, optional]: The value.";
     let result = parse_google(docstring);
     let a = &args(&result)[0];
-    assert_eq!(a.name.value, "x");
-    assert_eq!(a.r#type.as_ref().unwrap().value, "int");
-    assert_eq!(a.open_bracket.as_ref().unwrap().value, "[");
-    assert_eq!(a.close_bracket.as_ref().unwrap().value, "]");
+    assert_eq!(a.name.source_text(&result.source), "x");
+    assert_eq!(a.r#type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(a.open_bracket.as_ref().unwrap().source_text(&result.source), "[");
+    assert_eq!(a.close_bracket.as_ref().unwrap().source_text(&result.source), "]");
     assert!(a.optional.is_some());
 }
 
@@ -591,10 +589,10 @@ fn test_args_square_bracket_complex_type() {
     let docstring = "Summary.\n\nArgs:\n    items [List[int]]: The items.";
     let result = parse_google(docstring);
     let a = &args(&result)[0];
-    assert_eq!(a.name.value, "items");
-    assert_eq!(a.r#type.as_ref().unwrap().value, "List[int]");
-    assert_eq!(a.open_bracket.as_ref().unwrap().value, "[");
-    assert_eq!(a.close_bracket.as_ref().unwrap().value, "]");
+    assert_eq!(a.name.source_text(&result.source), "items");
+    assert_eq!(a.r#type.as_ref().unwrap().source_text(&result.source), "List[int]");
+    assert_eq!(a.open_bracket.as_ref().unwrap().source_text(&result.source), "[");
+    assert_eq!(a.close_bracket.as_ref().unwrap().source_text(&result.source), "]");
 }
 
 #[test]
@@ -602,11 +600,11 @@ fn test_args_angle_bracket_type() {
     let docstring = "Summary.\n\nArgs:\n    x <int>: The value.";
     let result = parse_google(docstring);
     let a = &args(&result)[0];
-    assert_eq!(a.name.value, "x");
-    assert_eq!(a.r#type.as_ref().unwrap().value, "int");
-    assert_eq!(a.open_bracket.as_ref().unwrap().value, "<");
-    assert_eq!(a.close_bracket.as_ref().unwrap().value, ">");
-    assert_eq!(a.description.value, "The value.");
+    assert_eq!(a.name.source_text(&result.source), "x");
+    assert_eq!(a.r#type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(a.open_bracket.as_ref().unwrap().source_text(&result.source), "<");
+    assert_eq!(a.close_bracket.as_ref().unwrap().source_text(&result.source), ">");
+    assert_eq!(a.description.source_text(&result.source), "The value.");
 }
 
 // =============================================================================
@@ -618,8 +616,8 @@ fn test_returns_with_type() {
     let docstring = "Summary.\n\nReturns:\n    int: The result.";
     let result = parse_google(docstring);
     let r = returns(&result).unwrap();
-    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
-    assert_eq!(r.description.value, "The result.");
+    assert_eq!(r.return_type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(r.description.source_text(&result.source), "The result.");
 }
 
 #[test]
@@ -628,8 +626,8 @@ fn test_returns_multiple_lines() {
     let result = parse_google(docstring);
     let r = returns(&result).unwrap();
     // Only the first line is checked for type: the rest becomes description.
-    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
-    assert_eq!(r.description.value, "The count.\nstr: The message.");
+    assert_eq!(r.return_type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(r.description.source_text(&result.source), "The count.\n    str: The message.");
 }
 
 #[test]
@@ -638,7 +636,7 @@ fn test_returns_without_type() {
     let result = parse_google(docstring);
     let r = returns(&result).unwrap();
     assert!(r.return_type.is_none());
-    assert_eq!(r.description.value, "The computed result.");
+    assert_eq!(r.description.source_text(&result.source), "The computed result.");
 }
 
 #[test]
@@ -646,8 +644,8 @@ fn test_returns_multiline_description() {
     let docstring = "Summary.\n\nReturns:\n    int: The result\n        of the computation.";
     let result = parse_google(docstring);
     assert_eq!(
-        returns(&result).unwrap().description.value,
-        "The result\nof the computation."
+        returns(&result).unwrap().description.source_text(&result.source),
+        "The result\n        of the computation."
     );
 }
 
@@ -667,8 +665,8 @@ fn test_yields() {
     let docstring = "Summary.\n\nYields:\n    int: The next value.";
     let result = parse_google(docstring);
     let y = yields(&result).unwrap();
-    assert_eq!(y.return_type.as_ref().unwrap().value, "int");
-    assert_eq!(y.description.value, "The next value.");
+    assert_eq!(y.return_type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(y.description.source_text(&result.source), "The next value.");
 }
 
 #[test]
@@ -688,8 +686,8 @@ fn test_raises_single() {
     let result = parse_google(docstring);
     let r = raises(&result);
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].r#type.value, "ValueError");
-    assert_eq!(r[0].description.value, "If the input is invalid.");
+    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
+    assert_eq!(r[0].description.source_text(&result.source), "If the input is invalid.");
 }
 
 #[test]
@@ -699,8 +697,8 @@ fn test_raises_multiple() {
     let result = parse_google(docstring);
     let r = raises(&result);
     assert_eq!(r.len(), 2);
-    assert_eq!(r[0].r#type.value, "ValueError");
-    assert_eq!(r[1].r#type.value, "TypeError");
+    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
+    assert_eq!(r[1].r#type.source_text(&result.source), "TypeError");
 }
 
 #[test]
@@ -708,8 +706,8 @@ fn test_raises_multiline_description() {
     let docstring = "Summary.\n\nRaises:\n    ValueError: If the\n        input is invalid.";
     let result = parse_google(docstring);
     assert_eq!(
-        raises(&result)[0].description.value,
-        "If the\ninput is invalid."
+        raises(&result)[0].description.source_text(&result.source),
+        "If the\n        input is invalid."
     );
 }
 
@@ -718,7 +716,7 @@ fn test_raises_exception_type_span() {
     let docstring = "Summary.\n\nRaises:\n    ValueError: If bad.";
     let result = parse_google(docstring);
     assert_eq!(
-        raises(&result)[0].r#type.range.source_text(&result.source),
+        raises(&result)[0].r#type.source_text(&result.source),
         "ValueError"
     );
 }
@@ -733,9 +731,9 @@ fn test_attributes() {
     let result = parse_google(docstring);
     let a = attributes(&result);
     assert_eq!(a.len(), 2);
-    assert_eq!(a[0].name.value, "name");
-    assert_eq!(a[0].r#type.as_ref().unwrap().value, "str");
-    assert_eq!(a[1].name.value, "age");
+    assert_eq!(a[0].name.source_text(&result.source), "name");
+    assert_eq!(a[0].r#type.as_ref().unwrap().source_text(&result.source), "str");
+    assert_eq!(a[1].name.source_text(&result.source), "age");
 }
 
 #[test]
@@ -743,7 +741,7 @@ fn test_attributes_no_type() {
     let docstring = "Summary.\n\nAttributes:\n    name: The name.";
     let result = parse_google(docstring);
     let a = attributes(&result);
-    assert_eq!(a[0].name.value, "name");
+    assert_eq!(a[0].name.source_text(&result.source), "name");
     assert!(a[0].r#type.is_none());
 }
 
@@ -755,21 +753,21 @@ fn test_attributes_no_type() {
 fn test_note_section() {
     let docstring = "Summary.\n\nNote:\n    This is a note.";
     let result = parse_google(docstring);
-    assert_eq!(notes(&result).unwrap().value, "This is a note.");
+    assert_eq!(notes(&result).unwrap().source_text(&result.source), "This is a note.");
 }
 
 #[test]
 fn test_notes_alias() {
     let docstring = "Summary.\n\nNotes:\n    This is also a note.";
     let result = parse_google(docstring);
-    assert_eq!(notes(&result).unwrap().value, "This is also a note.");
+    assert_eq!(notes(&result).unwrap().source_text(&result.source), "This is also a note.");
 }
 
 #[test]
 fn test_example_section() {
     let docstring = "Summary.\n\nExample:\n    >>> func(1)\n    1";
     let result = parse_google(docstring);
-    assert_eq!(examples(&result).unwrap().value, ">>> func(1)\n1");
+    assert_eq!(examples(&result).unwrap().source_text(&result.source), ">>> func(1)\n    1");
 }
 
 #[test]
@@ -791,7 +789,7 @@ fn test_warnings_section() {
     let docstring = "Summary.\n\nWarnings:\n    This function is deprecated.";
     let result = parse_google(docstring);
     assert_eq!(
-        warnings(&result).unwrap().value,
+        warnings(&result).unwrap().source_text(&result.source),
         "This function is deprecated."
     );
 }
@@ -805,8 +803,8 @@ fn test_todo_freetext() {
     let docstring = "Summary.\n\nTodo:\n    * Item one.\n    * Item two.";
     let result = parse_google(docstring);
     let t = todo(&result).unwrap();
-    assert!(t.value.contains("Item one."));
-    assert!(t.value.contains("Item two."));
+    assert!(t.source_text(&result.source).contains("Item one."));
+    assert!(t.source_text(&result.source).contains("Item two."));
 }
 
 #[test]
@@ -814,8 +812,8 @@ fn test_todo_without_bullets() {
     let docstring = "Summary.\n\nTodo:\n    Implement feature X.\n    Fix bug Y.";
     let result = parse_google(docstring);
     let t = todo(&result).unwrap();
-    assert!(t.value.contains("Implement feature X."));
-    assert!(t.value.contains("Fix bug Y."));
+    assert!(t.source_text(&result.source).contains("Implement feature X."));
+    assert!(t.source_text(&result.source).contains("Fix bug Y."));
 }
 
 #[test]
@@ -824,9 +822,9 @@ fn test_todo_multiline() {
         "Summary.\n\nTodo:\n    * Item one that\n        continues here.\n    * Item two.";
     let result = parse_google(docstring);
     let t = todo(&result).unwrap();
-    assert!(t.value.contains("Item one that"));
-    assert!(t.value.contains("continues here."));
-    assert!(t.value.contains("Item two."));
+    assert!(t.source_text(&result.source).contains("Item one that"));
+    assert!(t.source_text(&result.source).contains("continues here."));
+    assert!(t.source_text(&result.source).contains("Item two."));
 }
 
 // =============================================================================
@@ -857,7 +855,7 @@ Note:
     This is a simple function."#;
 
     let result = parse_google(docstring);
-    assert_eq!(result.summary.value, "Calculate the sum.");
+    assert_eq!(result.summary.source_text(&result.source), "Calculate the sum.");
     assert!(result.extended_summary.is_some());
     assert_eq!(args(&result).len(), 2);
     assert!(returns(&result).is_some());
@@ -884,8 +882,8 @@ fn test_section_order() {
     let result = parse_google(docstring);
     let sections: Vec<_> = all_sections(&result);
     assert_eq!(sections.len(), 2);
-    assert_eq!(sections[0].header.name.value, "Returns");
-    assert_eq!(sections[1].header.name.value, "Args");
+    assert_eq!(sections[0].header.name.source_text(&result.source), "Returns");
+    assert_eq!(sections[1].header.name.source_text(&result.source), "Args");
 }
 
 #[test]
@@ -893,8 +891,8 @@ fn test_section_header_span() {
     let docstring = "Summary.\n\nArgs:\n    x: Value.";
     let result = parse_google(docstring);
     let header = &all_sections(&result).into_iter().next().unwrap().header;
-    assert_eq!(header.name.value, "Args");
-    assert_eq!(header.name.range.source_text(&result.source), "Args");
+    assert_eq!(header.name.source_text(&result.source), "Args");
+    assert_eq!(header.name.source_text(&result.source), "Args");
     assert_eq!(header.range.source_text(&result.source), "Args:");
 }
 
@@ -919,10 +917,10 @@ fn test_unknown_section_preserved() {
     let result = parse_google(docstring);
     let sections: Vec<_> = all_sections(&result);
     assert_eq!(sections.len(), 1);
-    assert_eq!(sections[0].header.name.value, "Custom");
+    assert_eq!(sections[0].header.name.source_text(&result.source), "Custom");
     match &sections[0].body {
         GoogleSectionBody::Unknown(text) => {
-            assert_eq!(text.value, "Some custom content.");
+            assert_eq!(text.source_text(&result.source), "Some custom content.");
         }
         _ => panic!("Expected Unknown section body"),
     }
@@ -935,9 +933,9 @@ fn test_unknown_section_with_known() {
     let result = parse_google(docstring);
     let sections: Vec<_> = all_sections(&result);
     assert_eq!(sections.len(), 3);
-    assert_eq!(sections[0].header.name.value, "Args");
-    assert_eq!(sections[1].header.name.value, "Custom");
-    assert_eq!(sections[2].header.name.value, "Returns");
+    assert_eq!(sections[0].header.name.source_text(&result.source), "Args");
+    assert_eq!(sections[1].header.name.source_text(&result.source), "Custom");
+    assert_eq!(sections[2].header.name.source_text(&result.source), "Returns");
     // Known sections still accessible via helpers
     assert_eq!(args(&result).len(), 1);
     assert!(returns(&result).is_some());
@@ -949,8 +947,8 @@ fn test_multiple_unknown_sections() {
     let result = parse_google(docstring);
     let sections: Vec<_> = all_sections(&result);
     assert_eq!(sections.len(), 2);
-    assert_eq!(sections[0].header.name.value, "Custom One");
-    assert_eq!(sections[1].header.name.value, "Custom Two");
+    assert_eq!(sections[0].header.name.source_text(&result.source), "Custom One");
+    assert_eq!(sections[1].header.name.source_text(&result.source), "Custom Two");
 }
 
 // =============================================================================
@@ -961,20 +959,20 @@ fn test_multiple_unknown_sections() {
 fn test_indented_docstring() {
     let docstring = "    Summary.\n\n    Args:\n        x (int): Value.";
     let result = parse_google(docstring);
-    assert_eq!(result.summary.value, "Summary.");
+    assert_eq!(result.summary.source_text(&result.source), "Summary.");
     let a = args(&result);
     assert_eq!(a.len(), 1);
-    assert_eq!(a[0].name.value, "x");
-    assert_eq!(a[0].r#type.as_ref().unwrap().value, "int");
+    assert_eq!(a[0].name.source_text(&result.source), "x");
+    assert_eq!(a[0].r#type.as_ref().unwrap().source_text(&result.source), "int");
 }
 
 #[test]
 fn test_indented_summary_span() {
     let docstring = "    Summary.";
     let result = parse_google(docstring);
-    assert_eq!(result.summary.range.start(), TextSize::new(4));
-    assert_eq!(result.summary.range.end(), TextSize::new(12));
-    assert_eq!(result.summary.range.source_text(&result.source), "Summary.");
+    assert_eq!(result.summary.start(), TextSize::new(4));
+    assert_eq!(result.summary.end(), TextSize::new(12));
+    assert_eq!(result.summary.source_text(&result.source), "Summary.");
 }
 
 // =============================================================================
@@ -985,7 +983,7 @@ fn test_indented_summary_span() {
 fn test_docstring_like_summary() {
     let docstring = "Summary.";
     let result = parse_google(docstring);
-    assert_eq!(result.summary.value, "Summary.");
+    assert_eq!(result.summary.source_text(&result.source), "Summary.");
 }
 
 #[test]
@@ -994,9 +992,9 @@ fn test_docstring_like_parameters() {
     let result = parse_google(docstring);
     let params = args(&result);
     assert_eq!(params.len(), 2);
-    assert_eq!(params[0].name.value, "x");
-    assert_eq!(params[0].r#type.as_ref().unwrap().value, "int");
-    assert_eq!(params[1].name.value, "y");
+    assert_eq!(params[0].name.source_text(&result.source), "x");
+    assert_eq!(params[0].r#type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(params[1].name.source_text(&result.source), "y");
 }
 
 #[test]
@@ -1004,7 +1002,7 @@ fn test_docstring_like_returns() {
     let docstring = "Summary.\n\nReturns:\n    int: The result.";
     let result = parse_google(docstring);
     let r = returns(&result).unwrap();
-    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
+    assert_eq!(r.return_type.as_ref().unwrap().source_text(&result.source), "int");
 }
 
 #[test]
@@ -1013,7 +1011,7 @@ fn test_docstring_like_raises() {
     let result = parse_google(docstring);
     let r = raises(&result);
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].r#type.value, "ValueError");
+    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
 }
 
 // =============================================================================
@@ -1026,10 +1024,10 @@ fn test_span_source_text_round_trip() {
     let result = parse_google(docstring);
 
     // Summary
-    assert_eq!(result.summary.range.source_text(&result.source), "Summary.");
+    assert_eq!(result.summary.source_text(&result.source), "Summary.");
 
     // Arg name
-    assert_eq!(args(&result)[0].name.range.source_text(&result.source), "x");
+    assert_eq!(args(&result)[0].name.source_text(&result.source), "x");
 
     // Arg type
     assert_eq!(
@@ -1037,7 +1035,6 @@ fn test_span_source_text_round_trip() {
             .r#type
             .as_ref()
             .unwrap()
-            .range
             .source_text(&result.source),
         "int"
     );
@@ -1049,7 +1046,6 @@ fn test_span_source_text_round_trip() {
             .return_type
             .as_ref()
             .unwrap()
-            .range
             .source_text(&result.source),
         "bool"
     );
@@ -1071,7 +1067,7 @@ fn test_section_only_no_summary() {
 fn test_leading_blank_lines() {
     let docstring = "\n\n\nSummary.\n\nArgs:\n    x: Value.";
     let result = parse_google(docstring);
-    assert_eq!(result.summary.value, "Summary.");
+    assert_eq!(result.summary.source_text(&result.source), "Summary.");
     assert_eq!(args(&result).len(), 1);
 }
 
@@ -1080,7 +1076,7 @@ fn test_optional_only_in_parens() {
     let docstring = "Summary.\n\nArgs:\n    x (optional): Value.";
     let result = parse_google(docstring);
     let a = args(&result);
-    assert_eq!(a[0].name.value, "x");
+    assert_eq!(a[0].name.source_text(&result.source), "x");
     assert!(a[0].r#type.is_none());
     assert!(a[0].optional.is_some());
 }
@@ -1090,7 +1086,7 @@ fn test_complex_optional_type() {
     let docstring = "Summary.\n\nArgs:\n    x (List[int], optional): Values.";
     let result = parse_google(docstring);
     let a = args(&result);
-    assert_eq!(a[0].r#type.as_ref().unwrap().value, "List[int]");
+    assert_eq!(a[0].r#type.as_ref().unwrap().source_text(&result.source), "List[int]");
     assert!(a[0].optional.is_some());
 }
 
@@ -1103,7 +1099,7 @@ fn test_parameters_alias() {
     let docstring = "Summary.\n\nParameters:\n    x (int): The value.";
     let result = parse_google(docstring);
     assert_eq!(args(&result).len(), 1);
-    assert_eq!(args(&result)[0].name.value, "x");
+    assert_eq!(args(&result)[0].name.source_text(&result.source), "x");
     assert_eq!(
         all_sections(&result)
             .into_iter()
@@ -1111,7 +1107,7 @@ fn test_parameters_alias() {
             .unwrap()
             .header
             .name
-            .value,
+            .source_text(&result.source),
         "Parameters"
     );
 }
@@ -1128,7 +1124,7 @@ fn test_params_alias() {
             .unwrap()
             .header
             .name
-            .value,
+            .source_text(&result.source),
         "Params"
     );
 }
@@ -1143,9 +1139,9 @@ fn test_keyword_args_basic() {
     let result = parse_google(docstring);
     let ka = keyword_args(&result);
     assert_eq!(ka.len(), 2);
-    assert_eq!(ka[0].name.value, "timeout");
-    assert_eq!(ka[0].r#type.as_ref().unwrap().value, "int");
-    assert_eq!(ka[1].name.value, "retries");
+    assert_eq!(ka[0].name.source_text(&result.source), "timeout");
+    assert_eq!(ka[0].r#type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(ka[1].name.source_text(&result.source), "retries");
 }
 
 #[test]
@@ -1160,7 +1156,7 @@ fn test_keyword_arguments_alias() {
             .unwrap()
             .header
             .name
-            .value,
+            .source_text(&result.source),
         "Keyword Arguments"
     );
 }
@@ -1187,8 +1183,8 @@ fn test_other_parameters() {
     let result = parse_google(docstring);
     let op = other_parameters(&result);
     assert_eq!(op.len(), 2);
-    assert_eq!(op[0].name.value, "debug");
-    assert_eq!(op[1].name.value, "verbose");
+    assert_eq!(op[0].name.source_text(&result.source), "debug");
+    assert_eq!(op[1].name.source_text(&result.source), "verbose");
     assert!(op[1].optional.is_some());
 }
 
@@ -1214,8 +1210,8 @@ fn test_receives() {
     let result = parse_google(docstring);
     let r = receives(&result);
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].name.value, "data");
-    assert_eq!(r[0].r#type.as_ref().unwrap().value, "bytes");
+    assert_eq!(r[0].name.source_text(&result.source), "data");
+    assert_eq!(r[0].r#type.as_ref().unwrap().source_text(&result.source), "bytes");
 }
 
 #[test]
@@ -1230,7 +1226,7 @@ fn test_receive_alias() {
             .unwrap()
             .header
             .name
-            .value,
+            .source_text(&result.source),
         "Receive"
     );
 }
@@ -1245,7 +1241,7 @@ fn test_raise_alias() {
     let result = parse_google(docstring);
     let r = raises(&result);
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].r#type.value, "ValueError");
+    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
     assert_eq!(
         all_sections(&result)
             .into_iter()
@@ -1253,7 +1249,7 @@ fn test_raise_alias() {
             .unwrap()
             .header
             .name
-            .value,
+            .source_text(&result.source),
         "Raise"
     );
 }
@@ -1268,8 +1264,8 @@ fn test_warns_basic() {
     let result = parse_google(docstring);
     let w = warns(&result);
     assert_eq!(w.len(), 1);
-    assert_eq!(w[0].warning_type.value, "DeprecationWarning");
-    assert_eq!(w[0].description.value, "If using old API.");
+    assert_eq!(w[0].warning_type.source_text(&result.source), "DeprecationWarning");
+    assert_eq!(w[0].description.source_text(&result.source), "If using old API.");
 }
 
 #[test]
@@ -1279,8 +1275,8 @@ fn test_warns_multiple() {
     let result = parse_google(docstring);
     let w = warns(&result);
     assert_eq!(w.len(), 2);
-    assert_eq!(w[0].warning_type.value, "DeprecationWarning");
-    assert_eq!(w[1].warning_type.value, "UserWarning");
+    assert_eq!(w[0].warning_type.source_text(&result.source), "DeprecationWarning");
+    assert_eq!(w[1].warning_type.source_text(&result.source), "UserWarning");
 }
 
 #[test]
@@ -1295,7 +1291,7 @@ fn test_warn_alias() {
             .unwrap()
             .header
             .name
-            .value,
+            .source_text(&result.source),
         "Warn"
     );
 }
@@ -1305,8 +1301,8 @@ fn test_warns_multiline_description() {
     let docstring = "Summary.\n\nWarns:\n    UserWarning: First line.\n        Second line.";
     let result = parse_google(docstring);
     assert_eq!(
-        warns(&result)[0].description.value,
-        "First line.\nSecond line."
+        warns(&result)[0].description.source_text(&result.source),
+        "First line.\n        Second line."
     );
 }
 
@@ -1330,7 +1326,7 @@ fn test_warns_section_body_variant() {
 fn test_warning_singular_alias() {
     let docstring = "Summary.\n\nWarning:\n    This is deprecated.";
     let result = parse_google(docstring);
-    assert_eq!(warnings(&result).unwrap().value, "This is deprecated.");
+    assert_eq!(warnings(&result).unwrap().source_text(&result.source), "This is deprecated.");
     assert_eq!(
         all_sections(&result)
             .into_iter()
@@ -1338,7 +1334,7 @@ fn test_warning_singular_alias() {
             .unwrap()
             .header
             .name
-            .value,
+            .source_text(&result.source),
         "Warning"
     );
 }
@@ -1359,7 +1355,7 @@ fn test_attribute_singular_alias() {
             .unwrap()
             .header
             .name
-            .value,
+            .source_text(&result.source),
         "Attribute"
     );
 }
@@ -1374,9 +1370,9 @@ fn test_methods_basic() {
     let result = parse_google(docstring);
     let m = methods(&result);
     assert_eq!(m.len(), 2);
-    assert_eq!(m[0].name.value, "reset()");
-    assert_eq!(m[0].description.value, "Reset the state.");
-    assert_eq!(m[1].name.value, "update(data)");
+    assert_eq!(m[0].name.source_text(&result.source), "reset()");
+    assert_eq!(m[0].description.source_text(&result.source), "Reset the state.");
+    assert_eq!(m[1].name.source_text(&result.source), "update(data)");
 }
 
 #[test]
@@ -1385,8 +1381,8 @@ fn test_methods_without_parens() {
     let result = parse_google(docstring);
     let m = methods(&result);
     assert_eq!(m.len(), 1);
-    assert_eq!(m[0].name.value, "do_stuff");
-    assert_eq!(m[0].description.value, "Performs the operation.");
+    assert_eq!(m[0].name.source_text(&result.source), "do_stuff");
+    assert_eq!(m[0].description.source_text(&result.source), "Performs the operation.");
 }
 
 #[test]
@@ -1412,9 +1408,9 @@ fn test_see_also_basic() {
     let sa = see_also(&result);
     assert_eq!(sa.len(), 1);
     assert_eq!(sa[0].names.len(), 1);
-    assert_eq!(sa[0].names[0].value, "other_func");
+    assert_eq!(sa[0].names[0].source_text(&result.source), "other_func");
     assert_eq!(
-        sa[0].description.as_ref().unwrap().value,
+        sa[0].description.as_ref().unwrap().source_text(&result.source),
         "Does something else."
     );
 }
@@ -1426,9 +1422,9 @@ fn test_see_also_multiple_names() {
     let sa = see_also(&result);
     assert_eq!(sa.len(), 1);
     assert_eq!(sa[0].names.len(), 3);
-    assert_eq!(sa[0].names[0].value, "func_a");
-    assert_eq!(sa[0].names[1].value, "func_b");
-    assert_eq!(sa[0].names[2].value, "func_c");
+    assert_eq!(sa[0].names[0].source_text(&result.source), "func_a");
+    assert_eq!(sa[0].names[1].source_text(&result.source), "func_b");
+    assert_eq!(sa[0].names[2].source_text(&result.source), "func_c");
     assert!(sa[0].description.is_none());
 }
 
@@ -1438,7 +1434,7 @@ fn test_see_also_mixed() {
     let result = parse_google(docstring);
     let sa = see_also(&result);
     assert_eq!(sa.len(), 2);
-    assert_eq!(sa[0].names[0].value, "func_a");
+    assert_eq!(sa[0].names[0].source_text(&result.source), "func_a");
     assert!(sa[0].description.is_some());
     assert_eq!(sa[1].names.len(), 2);
     assert!(sa[1].description.is_none());
@@ -1466,7 +1462,7 @@ fn test_attention_section() {
     let result = parse_google(docstring);
     match &all_sections(&result).into_iter().next().unwrap().body {
         GoogleSectionBody::Attention(text) => {
-            assert_eq!(text.value, "This requires careful handling.");
+            assert_eq!(text.source_text(&result.source), "This requires careful handling.");
         }
         _ => panic!("Expected Attention section body"),
     }
@@ -1478,7 +1474,7 @@ fn test_caution_section() {
     let result = parse_google(docstring);
     match &all_sections(&result).into_iter().next().unwrap().body {
         GoogleSectionBody::Caution(text) => {
-            assert_eq!(text.value, "Use with care.");
+            assert_eq!(text.source_text(&result.source), "Use with care.");
         }
         _ => panic!("Expected Caution section body"),
     }
@@ -1490,7 +1486,7 @@ fn test_danger_section() {
     let result = parse_google(docstring);
     match &all_sections(&result).into_iter().next().unwrap().body {
         GoogleSectionBody::Danger(text) => {
-            assert_eq!(text.value, "May cause data loss.");
+            assert_eq!(text.source_text(&result.source), "May cause data loss.");
         }
         _ => panic!("Expected Danger section body"),
     }
@@ -1502,7 +1498,7 @@ fn test_error_section() {
     let result = parse_google(docstring);
     match &all_sections(&result).into_iter().next().unwrap().body {
         GoogleSectionBody::Error(text) => {
-            assert_eq!(text.value, "Known issue with large inputs.");
+            assert_eq!(text.source_text(&result.source), "Known issue with large inputs.");
         }
         _ => panic!("Expected Error section body"),
     }
@@ -1514,7 +1510,7 @@ fn test_hint_section() {
     let result = parse_google(docstring);
     match &all_sections(&result).into_iter().next().unwrap().body {
         GoogleSectionBody::Hint(text) => {
-            assert_eq!(text.value, "Try using a smaller batch size.");
+            assert_eq!(text.source_text(&result.source), "Try using a smaller batch size.");
         }
         _ => panic!("Expected Hint section body"),
     }
@@ -1526,7 +1522,7 @@ fn test_important_section() {
     let result = parse_google(docstring);
     match &all_sections(&result).into_iter().next().unwrap().body {
         GoogleSectionBody::Important(text) => {
-            assert_eq!(text.value, "Must be called before init().");
+            assert_eq!(text.source_text(&result.source), "Must be called before init().");
         }
         _ => panic!("Expected Important section body"),
     }
@@ -1538,7 +1534,7 @@ fn test_tip_section() {
     let result = parse_google(docstring);
     match &all_sections(&result).into_iter().next().unwrap().body {
         GoogleSectionBody::Tip(text) => {
-            assert_eq!(text.value, "Use vectorized operations for speed.");
+            assert_eq!(text.source_text(&result.source), "Use vectorized operations for speed.");
         }
         _ => panic!("Expected Tip section body"),
     }
@@ -1598,7 +1594,7 @@ Example:
     1"#;
 
     let result = parse_google(docstring);
-    assert_eq!(result.summary.value, "Calculate something.");
+    assert_eq!(result.summary.source_text(&result.source), "Calculate something.");
     assert!(result.extended_summary.is_some());
     assert_eq!(args(&result).len(), 1);
     assert_eq!(keyword_args(&result).len(), 1);
@@ -1622,7 +1618,7 @@ fn test_section_header_space_before_colon() {
     let doc = &result;
     let a = args(doc);
     assert_eq!(a.len(), 1, "expected 1 arg from 'Args :'");
-    assert_eq!(a[0].name.value, "x");
+    assert_eq!(a[0].name.source_text(&result.source), "x");
 
     // Header name should be "Args" (trimmed), not "Args "
     assert_eq!(
@@ -1632,7 +1628,7 @@ fn test_section_header_space_before_colon() {
             .unwrap()
             .header
             .name
-            .value,
+            .source_text(&result.source),
         "Args"
     );
     // Colon should still be present
@@ -1654,7 +1650,7 @@ fn test_returns_space_before_colon() {
     let result = parse_google(input);
     let doc = &result;
     let r = returns(doc).unwrap();
-    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
+    assert_eq!(r.return_type.as_ref().unwrap().source_text(&result.source), "int");
 }
 
 /// Colonless `Args` should be parsed as Args section.
@@ -1665,7 +1661,7 @@ fn test_section_header_no_colon() {
     let doc = &result;
     let a = args(doc);
     assert_eq!(a.len(), 1, "expected 1 arg from colonless 'Args'");
-    assert_eq!(a[0].name.value, "x");
+    assert_eq!(a[0].name.source_text(&result.source), "x");
 
     // Header name should be "Args"
     assert_eq!(
@@ -1675,7 +1671,7 @@ fn test_section_header_no_colon() {
             .unwrap()
             .header
             .name
-            .value,
+            .source_text(&result.source),
         "Args"
     );
     // Colon should be None
@@ -1698,7 +1694,7 @@ fn test_returns_no_colon() {
     let result = parse_google(input);
     let doc = &result;
     let r = returns(doc).unwrap();
-    assert_eq!(r.return_type.as_ref().unwrap().value, "int");
+    assert_eq!(r.return_type.as_ref().unwrap().source_text(&result.source), "int");
 }
 
 /// Colonless `Raises` should be parsed as Raises section.
@@ -1709,7 +1705,7 @@ fn test_raises_no_colon() {
     let doc = &result;
     let r = raises(doc);
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].r#type.value, "ValueError");
+    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
 }
 
 /// Multiline type annotation spanning multiple lines in Args section.
@@ -1719,12 +1715,12 @@ fn test_args_multiline_type() {
     let result = parse_google(docstring);
     let a = args(&result);
     assert_eq!(a.len(), 1);
-    assert_eq!(a[0].name.value, "x");
+    assert_eq!(a[0].name.source_text(&result.source), "x");
     assert_eq!(
-        a[0].r#type.as_ref().unwrap().value,
+        a[0].r#type.as_ref().unwrap().source_text(&result.source),
         "Dict[str,\n            int]"
     );
-    assert_eq!(a[0].description.value, "The value.");
+    assert_eq!(a[0].description.source_text(&result.source), "The value.");
 }
 
 /// Unknown names without colon should NOT be treated as headers.

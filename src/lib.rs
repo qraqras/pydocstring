@@ -18,7 +18,7 @@
 //! "#;
 //!
 //! let result = parse_numpy(docstring);
-//! assert_eq!(result.summary.value, "Brief description.");
+//! assert_eq!(result.summary.source_text(&result.source), "Brief description.");
 //! ```
 //!
 //! ## Style Auto-Detection
@@ -45,7 +45,7 @@ pub(crate) mod cursor;
 pub mod parser;
 pub mod styles;
 
-pub use ast::{LineIndex, Spanned, Style, TextRange, TextSize};
+pub use ast::{LineIndex, Style, TextRange, TextSize};
 pub use parser::detect_style;
 pub use styles::google::{
     self, GoogleArg, GoogleAttribute, GoogleDocstring, GoogleDocstringItem, GoogleException,

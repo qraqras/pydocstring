@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::ast::{Spanned, TextRange};
+use crate::ast::TextRange;
 
 // =============================================================================
 // Google Style Types
@@ -185,7 +185,7 @@ pub enum GoogleDocstringItem {
     ///
     /// Typical causes include misplaced prose, a section name whose colon was
     /// accidentally omitted, or an entry that was not indented correctly.
-    StrayLine(Spanned<String>),
+    StrayLine(TextRange),
 }
 
 /// A single Google-style section, combining header and body.
@@ -218,9 +218,9 @@ pub struct GoogleSectionHeader {
     pub kind: GoogleSectionKind,
     /// Section name as written in source (e.g., "Args", "Parameters") with its span.
     /// Stored without the trailing colon.
-    pub name: Spanned<String>,
+    pub name: TextRange,
     /// The trailing colon (`:`) with its span, if present.
-    pub colon: Option<Spanned<String>>,
+    pub colon: Option<TextRange>,
 }
 
 /// Body content of a Google-style section.
@@ -261,33 +261,33 @@ pub enum GoogleSectionBody {
 
     // ----- Free-text / admonition sections -----
     /// Note / Notes section (free text).
-    Notes(Spanned<String>),
+    Notes(TextRange),
     /// Example / Examples section (free text).
-    Examples(Spanned<String>),
+    Examples(TextRange),
     /// Todo section (free text, admonition in Napoleon).
-    Todo(Spanned<String>),
+    Todo(TextRange),
     /// References section (free text).
-    References(Spanned<String>),
+    References(TextRange),
     /// Warning / Warnings section (free text).
-    Warnings(Spanned<String>),
+    Warnings(TextRange),
     /// Attention admonition (free text).
-    Attention(Spanned<String>),
+    Attention(TextRange),
     /// Caution admonition (free text).
-    Caution(Spanned<String>),
+    Caution(TextRange),
     /// Danger admonition (free text).
-    Danger(Spanned<String>),
+    Danger(TextRange),
     /// Error admonition (free text).
-    Error(Spanned<String>),
+    Error(TextRange),
     /// Hint admonition (free text).
-    Hint(Spanned<String>),
+    Hint(TextRange),
     /// Important admonition (free text).
-    Important(Spanned<String>),
+    Important(TextRange),
     /// Tip admonition (free text).
-    Tip(Spanned<String>),
+    Tip(TextRange),
 
     // ----- Fallback -----
     /// Unknown / unrecognized section (free text).
-    Unknown(Spanned<String>),
+    Unknown(TextRange),
 }
 
 /// Google-style docstring.
@@ -304,9 +304,9 @@ pub struct GoogleDocstring {
     /// Source range of the entire docstring.
     pub range: TextRange,
     /// Brief summary (first line).
-    pub summary: Spanned<String>,
+    pub summary: TextRange,
     /// Extended summary (multiple paragraphs before any section header).
-    pub extended_summary: Option<Spanned<String>>,
+    pub extended_summary: Option<TextRange>,
     /// All sections and stray lines in document order.
     ///
     /// Use [`sections()`](Self::sections) to iterate only over
@@ -321,20 +321,20 @@ pub struct GoogleArg {
     /// Source range.
     pub range: TextRange,
     /// Argument name with its span.
-    pub name: Spanned<String>,
+    pub name: TextRange,
     /// Opening bracket (`(`, `[`, `{`, or `<`) enclosing the type, with its span.
-    pub open_bracket: Option<Spanned<String>>,
+    pub open_bracket: Option<TextRange>,
     /// Argument type (inside brackets) with its span.
-    pub r#type: Option<Spanned<String>>,
+    pub r#type: Option<TextRange>,
     /// Closing bracket (`)`, `]`, `}`, or `>`) enclosing the type, with its span.
-    pub close_bracket: Option<Spanned<String>>,
+    pub close_bracket: Option<TextRange>,
     /// The colon (`:`) separating name/type from description, with its span, if present.
-    pub colon: Option<Spanned<String>>,
+    pub colon: Option<TextRange>,
     /// Argument description with its span.
-    pub description: Spanned<String>,
+    pub description: TextRange,
     /// The `optional` marker, if present.
     /// `None` means not marked as optional.
-    pub optional: Option<Spanned<String>>,
+    pub optional: Option<TextRange>,
 }
 
 /// Google-style return or yield value.
@@ -343,11 +343,11 @@ pub struct GoogleReturns {
     /// Source range.
     pub range: TextRange,
     /// Return type with its span.
-    pub return_type: Option<Spanned<String>>,
+    pub return_type: Option<TextRange>,
     /// The colon (`:`) separating type and description, with its span, if present.
-    pub colon: Option<Spanned<String>>,
+    pub colon: Option<TextRange>,
     /// Description with its span.
-    pub description: Spanned<String>,
+    pub description: TextRange,
 }
 
 /// Google-style exception.
@@ -356,11 +356,11 @@ pub struct GoogleException {
     /// Source range.
     pub range: TextRange,
     /// Exception type with its span.
-    pub r#type: Spanned<String>,
+    pub r#type: TextRange,
     /// The colon (`:`) separating type from description, with its span, if present.
-    pub colon: Option<Spanned<String>>,
+    pub colon: Option<TextRange>,
     /// Description with its span.
-    pub description: Spanned<String>,
+    pub description: TextRange,
 }
 
 /// Google-style warning (from Warns section).
@@ -371,11 +371,11 @@ pub struct GoogleWarning {
     /// Source range.
     pub range: TextRange,
     /// Warning type (e.g., "DeprecationWarning") with its span.
-    pub warning_type: Spanned<String>,
+    pub warning_type: TextRange,
     /// The colon (`:`) separating type from description, with its span, if present.
-    pub colon: Option<Spanned<String>>,
+    pub colon: Option<TextRange>,
     /// Description of when the warning is issued, with its span.
-    pub description: Spanned<String>,
+    pub description: TextRange,
 }
 
 /// Google-style See Also item.
@@ -392,11 +392,11 @@ pub struct GoogleSeeAlsoItem {
     /// Source range.
     pub range: TextRange,
     /// Reference names (can be multiple like `func_b, func_c`), each with its own span.
-    pub names: Vec<Spanned<String>>,
+    pub names: Vec<TextRange>,
     /// The colon (`:`) separating names from description, with its span, if present.
-    pub colon: Option<Spanned<String>>,
+    pub colon: Option<TextRange>,
     /// Optional description with its span.
-    pub description: Option<Spanned<String>>,
+    pub description: Option<TextRange>,
 }
 
 /// Google-style attribute.
@@ -405,17 +405,17 @@ pub struct GoogleAttribute {
     /// Source range.
     pub range: TextRange,
     /// Attribute name with its span.
-    pub name: Spanned<String>,
+    pub name: TextRange,
     /// Opening bracket (`(`, `[`, `{`, or `<`) enclosing the type, with its span.
-    pub open_bracket: Option<Spanned<String>>,
+    pub open_bracket: Option<TextRange>,
     /// Attribute type (inside brackets) with its span.
-    pub r#type: Option<Spanned<String>>,
+    pub r#type: Option<TextRange>,
     /// Closing bracket (`)`, `]`, `}`, or `>`) enclosing the type, with its span.
-    pub close_bracket: Option<Spanned<String>>,
+    pub close_bracket: Option<TextRange>,
     /// The colon (`:`) separating name/type from description, with its span, if present.
-    pub colon: Option<Spanned<String>>,
+    pub colon: Option<TextRange>,
     /// Description with its span.
-    pub description: Spanned<String>,
+    pub description: TextRange,
 }
 
 /// Google-style method entry (from Methods section).
@@ -424,17 +424,17 @@ pub struct GoogleMethod {
     /// Source range.
     pub range: TextRange,
     /// Method name with its span.
-    pub name: Spanned<String>,
+    pub name: TextRange,
     /// Opening bracket (`(`, `[`, `{`, or `<`) enclosing the signature/type, with its span.
-    pub open_bracket: Option<Spanned<String>>,
+    pub open_bracket: Option<TextRange>,
     /// Method signature or type (inside brackets) with its span.
-    pub r#type: Option<Spanned<String>>,
+    pub r#type: Option<TextRange>,
     /// Closing bracket (`)`, `]`, `}`, or `>`) enclosing the signature/type, with its span.
-    pub close_bracket: Option<Spanned<String>>,
+    pub close_bracket: Option<TextRange>,
     /// The colon (`:`) separating name from description, with its span, if present.
-    pub colon: Option<Spanned<String>>,
+    pub colon: Option<TextRange>,
     /// Brief description with its span.
-    pub description: Spanned<String>,
+    pub description: TextRange,
 }
 
 impl GoogleDocstring {
@@ -443,7 +443,7 @@ impl GoogleDocstring {
         Self {
             source: String::new(),
             range: TextRange::empty(),
-            summary: Spanned::empty_string(),
+            summary: TextRange::empty(),
             extended_summary: None,
             items: Vec::new(),
         }
@@ -458,6 +458,6 @@ impl Default for GoogleDocstring {
 
 impl fmt::Display for GoogleDocstring {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "GoogleDocstring(summary: {})", self.summary.value)
+        write!(f, "GoogleDocstring(summary: {})", self.summary.source_text(&self.source))
     }
 }

@@ -54,12 +54,19 @@ ValueError
 "#;
 
 let result = parse_numpy(docstring);
-let doc = &result.value;
 
-println!("Summary: {}", doc.summary.value);
-for param in doc.parameters() {
-    let names: Vec<&str> = param.names.iter().map(|n| n.value.as_str()).collect();
-    println!("  {:?}: {:?}", names, param.param_type.as_ref().map(|t| &t.value));
+println!("Summary: {}", result.summary.source_text(&result.source));
+for item in &result.items {
+    if let pydocstring::NumPyDocstringItem::Section(s) = item {
+        if let pydocstring::NumPySectionBody::Parameters(params) = &s.body {
+            for param in params {
+                let names: Vec<&str> = param.names.iter()
+                    .map(|n| n.source_text(&result.source)).collect();
+                println!("  {:?}: {:?}", names,
+                    param.r#type.as_ref().map(|t| t.source_text(&result.source)));
+            }
+        }
+    }
 }
 ```
 
@@ -86,12 +93,18 @@ Raises:
 "#;
 
 let result = parse_google(docstring);
-let doc = &result.value;
 
-println!("Summary: {}", doc.summary.value);
-for arg in doc.args() {
-    println!("  {} ({:?}): {}", arg.name.value,
-        arg.arg_type.as_ref().map(|t| &t.value), arg.description.value);
+println!("Summary: {}", result.summary.source_text(&result.source));
+for item in &result.items {
+    if let pydocstring::GoogleDocstringItem::Section(s) = item {
+        if let pydocstring::GoogleSectionBody::Args(args) = &s.body {
+            for arg in args {
+                println!("  {} ({:?}): {}", arg.name.source_text(&result.source),
+                    arg.r#type.as_ref().map(|t| t.source_text(&result.source)),
+                    arg.description.source_text(&result.source));
+            }
+        }
+    }
 }
 ```
 
@@ -123,8 +136,7 @@ if result.has_errors() {
 }
 
 // The AST is still available
-let doc = &result.value;
-println!("Summary: {}", doc.summary.value);
+println!("Summary: {}", result.summary.source_text(&result.source));
 ```
 
 ## Source Locations
@@ -138,15 +150,22 @@ use pydocstring::LineIndex;
 let docstring = "Summary.\n\nParameters\n----------\nx : int\n    Desc.";
 let result = parse_numpy(docstring);
 
-let params = result.value.parameters();
-if let Some(param) = params.first() {
-    let range = param.names[0].range;
-    println!("Parameter '{}' at byte {}..{}", param.names[0].value, range.start(), range.end());
+for item in &result.items {
+    if let pydocstring::NumPyDocstringItem::Section(s) = item {
+        if let pydocstring::NumPySectionBody::Parameters(params) = &s.body {
+            if let Some(param) = params.first() {
+                let name_range = &param.names[0];
+                println!("Parameter '{}' at byte {}..{}",
+                    name_range.source_text(&result.source),
+                    name_range.start(), name_range.end());
 
-    // Convert to line/column if needed
-    let index = LineIndex::from_source(docstring);
-    let (line, col) = index.line_col(range.start());
-    println!("  line {}, col {}", line, col);
+                // Convert to line/column if needed
+                let index = LineIndex::from_source(docstring);
+                let (line, col) = index.line_col(name_range.start());
+                println!("  line {}, col {}", line, col);
+            }
+        }
+    }
 }
 ```
 
@@ -163,11 +182,11 @@ if let Some(param) = params.first() {
 | Receives | `receives()` | `Vec<&NumPyParameter>` |
 | Raises | `raises()` | `Vec<&NumPyException>` |
 | Warns | `warns()` | `Vec<&NumPyWarning>` |
-| Warnings | `warnings()` | `Option<&Spanned<String>>` |
+| Warnings | `warnings()` | `Option<&TextRange>` |
 | See Also | `see_also()` | `Vec<&SeeAlsoItem>` |
-| Notes | `notes()` | `Option<&Spanned<String>>` |
+| Notes | `notes()` | `Option<&TextRange>` |
 | References | `references()` | `Vec<&NumPyReference>` |
-| Examples | `examples()` | `Option<&Spanned<String>>` |
+| Examples | `examples()` | `Option<&TextRange>` |
 | Attributes | `attributes()` | `Vec<&NumPyAttribute>` |
 | Methods | `methods()` | `Vec<&NumPyMethod>` |
 
@@ -185,14 +204,14 @@ Additionally, `NumPyDocstring` has fields: `summary`, `deprecation`, `extended_s
 | Receives | `receives()` | `Vec<&GoogleArgument>` |
 | Raises | `raises()` | `Vec<&GoogleException>` |
 | Warns | `warns()` | `Vec<&GoogleWarning>` |
-| Warnings | `warnings()` | `Option<&Spanned<String>>` |
+| Warnings | `warnings()` | `Option<&TextRange>` |
 | See Also | `see_also()` | `Vec<&GoogleSeeAlsoItem>` |
-| Notes | `notes()` | `Option<&Spanned<String>>` |
-| References | `references()` | `Option<&Spanned<String>>` |
-| Examples | `examples()` | `Option<&Spanned<String>>` |
+| Notes | `notes()` | `Option<&TextRange>` |
+| References | `references()` | `Option<&TextRange>` |
+| Examples | `examples()` | `Option<&TextRange>` |
 | Attributes | `attributes()` | `Vec<&GoogleAttribute>` |
 | Methods | `methods()` | `Vec<&GoogleMethod>` |
-| Todo | `todo()` | `Option<&Spanned<String>>` |
+| Todo | `todo()` | `Option<&TextRange>` |
 
 Additionally, `GoogleDocstring` has fields: `summary`, `description`, and admonition sections (Attention, Caution, Danger, etc.).
 

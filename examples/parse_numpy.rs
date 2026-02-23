@@ -36,12 +36,12 @@ Examples
     let result = parse_numpy(docstring);
     let doc = &result;
 
-    println!("Summary: {}", doc.summary.value);
+    println!("Summary: {}", doc.summary.source_text(&doc.source));
     println!(
         "\nExtended Summary: {}",
         doc.extended_summary
             .as_ref()
-            .map(|s| s.value.as_str())
+            .map(|s| s.source_text(&doc.source))
             .unwrap_or_default()
     );
 
@@ -49,7 +49,7 @@ Examples
         let section = match item {
             pydocstring::NumPyDocstringItem::Section(s) => s,
             pydocstring::NumPyDocstringItem::StrayLine(line) => {
-                println!("\nStray line: {}", line.value);
+                println!("\nStray line: {}", line.source_text(&doc.source));
                 continue;
             }
         };
@@ -58,13 +58,13 @@ Examples
                 println!("\nParameters:");
                 for param in params {
                     let names: Vec<&str> =
-                        param.names.iter().map(|n| n.value.as_str()).collect();
+                        param.names.iter().map(|n| n.source_text(&doc.source)).collect();
                     println!(
                         "  - {:?}: {:?}",
                         names,
-                        param.r#type.as_ref().map(|t| t.value.as_str())
+                        param.r#type.as_ref().map(|t| t.source_text(&doc.source))
                     );
-                    println!("    {}", param.description.value);
+                    println!("    {}", param.description.source_text(&doc.source));
                 }
             }
             NumPySectionBody::Returns(rets) => {
@@ -72,24 +72,24 @@ Examples
                 for ret in rets {
                     println!(
                         "  Type: {:?}",
-                        ret.return_type.as_ref().map(|t| t.value.as_str())
+                        ret.return_type.as_ref().map(|t| t.source_text(&doc.source))
                     );
-                    println!("  {}", ret.description.value);
+                    println!("  {}", ret.description.source_text(&doc.source));
                 }
             }
             NumPySectionBody::Raises(excs) => {
                 println!("\nRaises:");
                 for exc in excs {
-                    println!("  - {}: {}", exc.r#type.value, exc.description.value);
+                    println!("  - {}: {}", exc.r#type.source_text(&doc.source), exc.description.source_text(&doc.source));
                 }
             }
             NumPySectionBody::Notes(text) => {
                 println!("\nNotes:");
-                println!("  {}", text.value);
+                println!("  {}", text.source_text(&doc.source));
             }
             NumPySectionBody::Examples(text) => {
                 println!("\nExamples:");
-                println!("{}", text.value);
+                println!("{}", text.source_text(&doc.source));
             }
             _ => {}
         }
