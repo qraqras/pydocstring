@@ -6,11 +6,12 @@ use crate::ast::{Spanned, TextRange};
 // Google Style Types
 // =============================================================================
 
-/// Known Google-style section kinds.
+/// Google-style section kinds.
 ///
-/// Each variant represents a recognised section name (or group of aliases).
+/// Each variant represents a recognised section name (or group of aliases),
+/// or [`Unknown`](Self::Unknown) for unrecognised names.
 /// Use [`GoogleSectionKind::from_name`] to convert a lowercased section name
-/// to a variant — unknown names return `None`.
+/// to a variant.
 ///
 /// Having an enum instead of a plain string list gives compile-time
 /// exhaustiveness checks: every variant must be handled when matching.
@@ -62,6 +63,8 @@ pub enum GoogleSectionKind {
     Important,
     /// `Tip`
     Tip,
+    /// Unrecognised section name.
+    Unknown,
 }
 
 impl GoogleSectionKind {
@@ -94,44 +97,44 @@ impl GoogleSectionKind {
 
     /// Convert a **lowercased** section name to a [`GoogleSectionKind`].
     ///
-    /// Returns `None` for unrecognised names (which are dispatched as
-    /// `GoogleSectionBody::Unknown` by the parser).
-    pub fn from_name(name: &str) -> Option<Self> {
+    /// Returns [`Unknown`](Self::Unknown) for unrecognised names (which are
+    /// dispatched as `GoogleSectionBody::Unknown` by the parser).
+    pub fn from_name(name: &str) -> Self {
         match name {
-            "args" | "arguments" | "params" | "parameters" => Some(Self::Args),
+            "args" | "arguments" | "params" | "parameters" => Self::Args,
             "keyword args" | "keyword arguments" | "keyword params" | "keyword parameters" => {
-                Some(Self::KeywordArgs)
+                Self::KeywordArgs
             }
             "other args" | "other arguments" | "other params" | "other parameters" => {
-                Some(Self::OtherParameters)
+                Self::OtherParameters
             }
-            "receives" | "receive" => Some(Self::Receives),
-            "returns" | "return" => Some(Self::Returns),
-            "yields" | "yield" => Some(Self::Yields),
-            "raises" | "raise" => Some(Self::Raises),
-            "warns" | "warn" => Some(Self::Warns),
-            "see also" => Some(Self::SeeAlso),
-            "attributes" | "attribute" => Some(Self::Attributes),
-            "methods" => Some(Self::Methods),
-            "notes" | "note" => Some(Self::Notes),
-            "examples" | "example" => Some(Self::Examples),
-            "todo" => Some(Self::Todo),
-            "references" => Some(Self::References),
-            "warnings" | "warning" => Some(Self::Warnings),
-            "attention" => Some(Self::Attention),
-            "caution" => Some(Self::Caution),
-            "danger" => Some(Self::Danger),
-            "error" => Some(Self::Error),
-            "hint" => Some(Self::Hint),
-            "important" => Some(Self::Important),
-            "tip" => Some(Self::Tip),
-            _ => None,
+            "receives" | "receive" => Self::Receives,
+            "returns" | "return" => Self::Returns,
+            "yields" | "yield" => Self::Yields,
+            "raises" | "raise" => Self::Raises,
+            "warns" | "warn" => Self::Warns,
+            "see also" => Self::SeeAlso,
+            "attributes" | "attribute" => Self::Attributes,
+            "methods" => Self::Methods,
+            "notes" | "note" => Self::Notes,
+            "examples" | "example" => Self::Examples,
+            "todo" => Self::Todo,
+            "references" => Self::References,
+            "warnings" | "warning" => Self::Warnings,
+            "attention" => Self::Attention,
+            "caution" => Self::Caution,
+            "danger" => Self::Danger,
+            "error" => Self::Error,
+            "hint" => Self::Hint,
+            "important" => Self::Important,
+            "tip" => Self::Tip,
+            _ => Self::Unknown,
         }
     }
 
-    /// Check if a lowercased name is a known section name.
+    /// Check if a lowercased name is a known (non-[`Unknown`](Self::Unknown)) section name.
     pub fn is_known(name: &str) -> bool {
-        Self::from_name(name).is_some()
+        !matches!(Self::from_name(name), Self::Unknown)
     }
 }
 
@@ -161,6 +164,7 @@ impl fmt::Display for GoogleSectionKind {
             Self::Hint => "Hint",
             Self::Important => "Important",
             Self::Tip => "Tip",
+            Self::Unknown => "Unknown",
         };
         write!(f, "{}", s)
     }
@@ -210,7 +214,9 @@ pub struct GoogleSection {
 pub struct GoogleSectionHeader {
     /// Source range of the header line.
     pub range: TextRange,
-    /// Section name (e.g., "Args", "Returns") with its span.
+    /// Resolved section kind.
+    pub kind: GoogleSectionKind,
+    /// Section name as written in source (e.g., "Args", "Parameters") with its span.
     /// Stored without the trailing colon.
     pub name: Spanned<String>,
     /// The trailing colon (`:`) with its span, if present.

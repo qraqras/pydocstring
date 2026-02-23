@@ -584,6 +584,9 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                 None
             };
 
+            let normalized = header_name.to_ascii_lowercase();
+            let section_kind = GoogleSectionKind::from_name(&normalized);
+
             let header = GoogleSectionHeader {
                 range: cursor.make_range(
                     cursor.line,
@@ -591,6 +594,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                     cursor.line,
                     header_col + header_trimmed.len(),
                 ),
+                kind: section_kind,
                 name: cursor.make_spanned(
                     header_name.to_string(),
                     cursor.line,
@@ -602,35 +606,32 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
             };
 
             cursor.advance(); // skip header line
-
-            let normalized = header_name.to_ascii_lowercase();
-            let section_kind = GoogleSectionKind::from_name(&normalized);
             let body = match section_kind {
                 // ----- Parameter-like sections -----
-                Some(GoogleSectionKind::Args) => {
+                GoogleSectionKind::Args => {
                     GoogleSectionBody::Args(parse_args(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::KeywordArgs) => {
+                GoogleSectionKind::KeywordArgs => {
                     GoogleSectionBody::KeywordArgs(parse_args(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::OtherParameters) => {
+                GoogleSectionKind::OtherParameters => {
                     GoogleSectionBody::OtherParameters(parse_args(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::Receives) => {
+                GoogleSectionKind::Receives => {
                     GoogleSectionBody::Receives(parse_args(&mut cursor, base_indent))
                 }
                 // ----- Return/yield sections -----
-                Some(GoogleSectionKind::Returns) => {
+                GoogleSectionKind::Returns => {
                     GoogleSectionBody::Returns(parse_returns_section(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::Yields) => {
+                GoogleSectionKind::Yields => {
                     GoogleSectionBody::Yields(parse_returns_section(&mut cursor, base_indent))
                 }
                 // ----- Exception/warning sections -----
-                Some(GoogleSectionKind::Raises) => {
+                GoogleSectionKind::Raises => {
                     GoogleSectionBody::Raises(parse_raises_section(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::Warns) => {
+                GoogleSectionKind::Warns => {
                     let raises = parse_raises_section(&mut cursor, base_indent);
                     let warns = raises
                         .into_iter()
@@ -644,7 +645,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                     GoogleSectionBody::Warns(warns)
                 }
                 // ----- Structured sections -----
-                Some(GoogleSectionKind::Attributes) => {
+                GoogleSectionKind::Attributes => {
                     let args = parse_args(&mut cursor, base_indent);
                     let attrs = args
                         .into_iter()
@@ -660,7 +661,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                         .collect();
                     GoogleSectionBody::Attributes(attrs)
                 }
-                Some(GoogleSectionKind::Methods) => {
+                GoogleSectionKind::Methods => {
                     let args = parse_args(&mut cursor, base_indent);
                     let methods = args
                         .into_iter()
@@ -676,47 +677,49 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                         .collect();
                     GoogleSectionBody::Methods(methods)
                 }
-                Some(GoogleSectionKind::SeeAlso) => {
+                GoogleSectionKind::SeeAlso => {
                     GoogleSectionBody::SeeAlso(parse_see_also_section(&mut cursor, base_indent))
                 }
                 // ----- Free-text / admonition sections -----
-                Some(GoogleSectionKind::Notes) => {
+                GoogleSectionKind::Notes => {
                     GoogleSectionBody::Notes(parse_section_content(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::Examples) => {
+                GoogleSectionKind::Examples => {
                     GoogleSectionBody::Examples(parse_section_content(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::Todo) => {
+                GoogleSectionKind::Todo => {
                     GoogleSectionBody::Todo(parse_section_content(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::References) => {
+                GoogleSectionKind::References => {
                     GoogleSectionBody::References(parse_section_content(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::Warnings) => {
+                GoogleSectionKind::Warnings => {
                     GoogleSectionBody::Warnings(parse_section_content(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::Attention) => {
+                GoogleSectionKind::Attention => {
                     GoogleSectionBody::Attention(parse_section_content(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::Caution) => {
+                GoogleSectionKind::Caution => {
                     GoogleSectionBody::Caution(parse_section_content(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::Danger) => {
+                GoogleSectionKind::Danger => {
                     GoogleSectionBody::Danger(parse_section_content(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::Error) => {
+                GoogleSectionKind::Error => {
                     GoogleSectionBody::Error(parse_section_content(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::Hint) => {
+                GoogleSectionKind::Hint => {
                     GoogleSectionBody::Hint(parse_section_content(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::Important) => {
+                GoogleSectionKind::Important => {
                     GoogleSectionBody::Important(parse_section_content(&mut cursor, base_indent))
                 }
-                Some(GoogleSectionKind::Tip) => {
+                GoogleSectionKind::Tip => {
                     GoogleSectionBody::Tip(parse_section_content(&mut cursor, base_indent))
                 }
-                None => GoogleSectionBody::Unknown(parse_section_content(&mut cursor, base_indent)),
+                GoogleSectionKind::Unknown => {
+                    GoogleSectionBody::Unknown(parse_section_content(&mut cursor, base_indent))
+                }
             };
 
             // Compute section span

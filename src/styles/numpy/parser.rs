@@ -332,6 +332,9 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
         let underline_trimmed = underline_line.trim();
         let underline_col = indent_len(underline_line);
 
+        let normalized = header_trimmed.to_ascii_lowercase();
+        let section_kind = NumPySectionKind::from_name(&normalized);
+
         let header = NumPySectionHeader {
             range: cursor.make_range(
                 cursor.line,
@@ -339,6 +342,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                 cursor.line + 1,
                 underline_col + underline_trimmed.len(),
             ),
+            kind: section_kind,
             name: cursor.make_spanned(
                 header_trimmed.to_string(),
                 cursor.line,
@@ -358,34 +362,32 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
         cursor.line += 2; // skip header + underline
 
         let section_end = find_next_section_start(&cursor, cursor.line);
-        let normalized = header_trimmed.to_ascii_lowercase();
-        let section_kind = NumPySectionKind::from_name(&normalized);
         let body = match section_kind {
-            Some(NumPySectionKind::Parameters) => {
+            NumPySectionKind::Parameters => {
                 let params = parse_parameters(&mut cursor, section_end, header_col);
                 NumPySectionBody::Parameters(params)
             }
-            Some(NumPySectionKind::Returns) => {
+            NumPySectionKind::Returns => {
                 let rets = parse_returns(&mut cursor, section_end, header_col);
                 NumPySectionBody::Returns(rets)
             }
-            Some(NumPySectionKind::Raises) => {
+            NumPySectionKind::Raises => {
                 let raises = parse_raises(&mut cursor, section_end, header_col);
                 NumPySectionBody::Raises(raises)
             }
-            Some(NumPySectionKind::Yields) => {
+            NumPySectionKind::Yields => {
                 let yields = parse_returns(&mut cursor, section_end, header_col);
                 NumPySectionBody::Yields(yields)
             }
-            Some(NumPySectionKind::Receives) => {
+            NumPySectionKind::Receives => {
                 let receives = parse_parameters(&mut cursor, section_end, header_col);
                 NumPySectionBody::Receives(receives)
             }
-            Some(NumPySectionKind::OtherParameters) => {
+            NumPySectionKind::OtherParameters => {
                 let params = parse_parameters(&mut cursor, section_end, header_col);
                 NumPySectionBody::OtherParameters(params)
             }
-            Some(NumPySectionKind::Warns) => {
+            NumPySectionKind::Warns => {
                 let raises = parse_raises(&mut cursor, section_end, header_col);
                 let warns = raises
                     .into_iter()
@@ -397,27 +399,27 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                     .collect();
                 NumPySectionBody::Warns(warns)
             }
-            Some(NumPySectionKind::Notes) => {
+            NumPySectionKind::Notes => {
                 let content = parse_section_content(&mut cursor, section_end);
                 NumPySectionBody::Notes(content)
             }
-            Some(NumPySectionKind::Examples) => {
+            NumPySectionKind::Examples => {
                 let content = parse_section_content(&mut cursor, section_end);
                 NumPySectionBody::Examples(content)
             }
-            Some(NumPySectionKind::Warnings) => {
+            NumPySectionKind::Warnings => {
                 let content = parse_section_content(&mut cursor, section_end);
                 NumPySectionBody::Warnings(content)
             }
-            Some(NumPySectionKind::SeeAlso) => {
+            NumPySectionKind::SeeAlso => {
                 let items = parse_see_also(&mut cursor, section_end);
                 NumPySectionBody::SeeAlso(items)
             }
-            Some(NumPySectionKind::References) => {
+            NumPySectionKind::References => {
                 let refs = parse_references(&mut cursor, section_end);
                 NumPySectionBody::References(refs)
             }
-            Some(NumPySectionKind::Attributes) => {
+            NumPySectionKind::Attributes => {
                 let params = parse_parameters(&mut cursor, section_end, header_col);
                 let attrs = params
                     .into_iter()
@@ -435,7 +437,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                     .collect();
                 NumPySectionBody::Attributes(attrs)
             }
-            Some(NumPySectionKind::Methods) => {
+            NumPySectionKind::Methods => {
                 let params = parse_parameters(&mut cursor, section_end, header_col);
                 let methods = params
                     .into_iter()
@@ -452,7 +454,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                     .collect();
                 NumPySectionBody::Methods(methods)
             }
-            None => {
+            NumPySectionKind::Unknown => {
                 let content = parse_section_content(&mut cursor, section_end);
                 NumPySectionBody::Unknown(content)
             }

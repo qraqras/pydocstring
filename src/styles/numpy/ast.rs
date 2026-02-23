@@ -6,11 +6,12 @@ use crate::ast::{Spanned, TextRange};
 // NumPy Style Types
 // =============================================================================
 
-/// Known NumPy-style section kinds.
+/// NumPy-style section kinds.
 ///
-/// Each variant represents a recognised section name (or group of aliases).
+/// Each variant represents a recognised section name (or group of aliases),
+/// or [`Unknown`](Self::Unknown) for unrecognised names.
 /// Use [`NumPySectionKind::from_name`] to convert a lowercased section name
-/// to a variant — unknown names return `None`.
+/// to a variant.
 ///
 /// Having an enum instead of a plain string list gives compile-time
 /// exhaustiveness checks: every variant must be handled when matching.
@@ -44,6 +45,8 @@ pub enum NumPySectionKind {
     Attributes,
     /// `Methods`
     Methods,
+    /// Unrecognised section name.
+    Unknown,
 }
 
 impl NumPySectionKind {
@@ -67,33 +70,33 @@ impl NumPySectionKind {
 
     /// Convert a **lowercased** section name to a [`NumPySectionKind`].
     ///
-    /// Returns `None` for unrecognised names (which are dispatched as
-    /// `NumPySectionBody::Unknown` by the parser).
-    pub fn from_name(name: &str) -> Option<Self> {
+    /// Returns [`Unknown`](Self::Unknown) for unrecognised names (which are
+    /// dispatched as `NumPySectionBody::Unknown` by the parser).
+    pub fn from_name(name: &str) -> Self {
         match name {
-            "parameters" | "parameter" | "params" | "param" => Some(Self::Parameters),
-            "returns" | "return" => Some(Self::Returns),
-            "yields" | "yield" => Some(Self::Yields),
-            "receives" | "receive" => Some(Self::Receives),
+            "parameters" | "parameter" | "params" | "param" => Self::Parameters,
+            "returns" | "return" => Self::Returns,
+            "yields" | "yield" => Self::Yields,
+            "receives" | "receive" => Self::Receives,
             "other parameters" | "other parameter" | "other params" | "other param" => {
-                Some(Self::OtherParameters)
+                Self::OtherParameters
             }
-            "raises" | "raise" => Some(Self::Raises),
-            "warns" | "warn" => Some(Self::Warns),
-            "warnings" | "warning" => Some(Self::Warnings),
-            "see also" => Some(Self::SeeAlso),
-            "notes" | "note" => Some(Self::Notes),
-            "references" => Some(Self::References),
-            "examples" | "example" => Some(Self::Examples),
-            "attributes" => Some(Self::Attributes),
-            "methods" => Some(Self::Methods),
-            _ => None,
+            "raises" | "raise" => Self::Raises,
+            "warns" | "warn" => Self::Warns,
+            "warnings" | "warning" => Self::Warnings,
+            "see also" => Self::SeeAlso,
+            "notes" | "note" => Self::Notes,
+            "references" => Self::References,
+            "examples" | "example" => Self::Examples,
+            "attributes" => Self::Attributes,
+            "methods" => Self::Methods,
+            _ => Self::Unknown,
         }
     }
 
-    /// Check if a lowercased name is a known section name.
+    /// Check if a lowercased name is a known (non-[`Unknown`](Self::Unknown)) section name.
     pub fn is_known(name: &str) -> bool {
-        Self::from_name(name).is_some()
+        !matches!(Self::from_name(name), Self::Unknown)
     }
 }
 
@@ -114,6 +117,7 @@ impl fmt::Display for NumPySectionKind {
             Self::Examples => "Examples",
             Self::Attributes => "Attributes",
             Self::Methods => "Methods",
+            Self::Unknown => "Unknown",
         };
         write!(f, "{}", s)
     }
@@ -166,7 +170,9 @@ pub struct NumPySection {
 pub struct NumPySectionHeader {
     /// Source span of the entire header (name line + underline line).
     pub range: TextRange,
-    /// Section name (e.g., "Parameters", "Returns") with its span.
+    /// Resolved section kind.
+    pub kind: NumPySectionKind,
+    /// Section name as written in source (e.g., "Parameters", "Params") with its span.
     pub name: Spanned<String>,
     /// Underline (dashes) line with its span.
     pub underline: Spanned<String>,
