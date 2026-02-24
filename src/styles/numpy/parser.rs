@@ -21,13 +21,11 @@
 
 use crate::ast::TextRange;
 use crate::cursor::{Cursor, indent_len};
-use crate::styles::utils::{find_entry_colon, split_comma_parts};
 use crate::styles::numpy::ast::{
     NumPyDeprecation, NumPyDocstring, NumPyDocstringItem, NumPyException, NumPyParameter,
     NumPyReturns, NumPySection, NumPySectionBody, NumPySectionHeader, NumPySectionKind,
 };
-
-
+use crate::styles::utils::{find_entry_colon, split_comma_parts};
 
 // =============================================================================
 // Section detection
@@ -932,28 +930,29 @@ fn parse_references(
             }
 
             let col = cursor.current_indent();
-            // Find actual positions of `[` and `]` within `trimmed`
+            // Find actual positions of `[` and `]` — use bracket-aware matching
             let rel_open = trimmed.find('[').unwrap();
-            if let Some(rel_close) = trimmed.find(']') {
+            let abs_open = cursor.substr_offset(trimmed) + rel_open;
+            if let Some(abs_close) = cursor.find_matching_close(abs_open) {
                 // `..` directive marker
                 current_directive_marker =
                     Some(cursor.make_range(cursor.line, col, cursor.line, col + 2));
                 // `[`
-                let open_col = col + rel_open;
-                current_open_bracket =
-                    Some(cursor.make_range(cursor.line, open_col, cursor.line, open_col + 1));
+                current_open_bracket = Some(TextRange::from_offset_len(abs_open, 1));
                 // `]`
-                let close_col = col + rel_close;
-                current_close_bracket =
-                    Some(cursor.make_range(cursor.line, close_col, cursor.line, close_col + 1));
+                current_close_bracket = Some(TextRange::from_offset_len(abs_close, 1));
                 // Number inside brackets, trimmed of whitespace
-                let num_raw = &trimmed[rel_open + 1..rel_close];
+                let num_raw = &cursor.source()[abs_open + 1..abs_close];
                 let num_str = num_raw.trim();
-                let num_ws_lead = num_raw.len() - num_raw.trim_start().len();
-                let num_col = col + rel_open + 1 + num_ws_lead;
-                current_number =
-                    cursor.make_range(cursor.line, num_col, cursor.line, num_col + num_str.len());
-                let after_bracket = trimmed[rel_close + 1..].trim();
+                if !num_str.is_empty() {
+                    let num_abs = cursor.substr_offset(num_str);
+                    current_number = TextRange::from_offset_len(num_abs, num_str.len());
+                } else {
+                    current_number = TextRange::empty();
+                }
+                let close_line_text = cursor.line_text(cursor.offset_to_line_col(abs_close).0);
+                let close_line_end = cursor.substr_offset(close_line_text) + close_line_text.len();
+                let after_bracket = cursor.source()[abs_close + 1..close_line_end].trim();
                 current_content_lines = vec![after_bracket];
                 current_start_line = Some(cursor.line);
                 current_col = col;
