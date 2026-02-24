@@ -17,13 +17,14 @@
 //!     ValueError: If the input is invalid.
 //! ```
 
-use crate::ast::{TextRange, TextSize};
+use crate::ast::TextRange;
 use crate::cursor::{Cursor, indent_len};
 use crate::styles::google::ast::{
     GoogleArg, GoogleAttribute, GoogleDocstring, GoogleDocstringItem, GoogleException,
     GoogleMethod, GoogleReturns, GoogleSection, GoogleSectionBody, GoogleSectionHeader,
     GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning,
 };
+use crate::styles::utils::{find_entry_colon, split_comma_parts};
 
 // =============================================================================
 // Section detection
@@ -72,55 +73,6 @@ fn is_section_header(line: &str, base_indent: usize) -> bool {
         // Colonless form: only known names.
         GoogleSectionKind::is_known(&name.to_ascii_lowercase())
     }
-}
-
-// =============================================================================
-// Entry colon detection
-// =============================================================================
-
-/// Find the byte offset of the first entry-separating colon in `text`.
-///
-/// Skips colons that appear inside balanced brackets (`()`, `[]`, `{}`, `<>`)
-/// so that type annotations such as `Dict[str, int]` never trigger a false split.
-fn find_entry_colon(text: &str) -> Option<usize> {
-    let mut depth: u32 = 0;
-    for (i, b) in text.bytes().enumerate() {
-        match b {
-            b'(' | b'[' | b'{' | b'<' => depth += 1,
-            b')' | b']' | b'}' | b'>' => depth = depth.saturating_sub(1),
-            b':' if depth == 0 => return Some(i),
-            _ => {}
-        }
-    }
-    None
-}
-
-// =============================================================================
-// Comma splitting
-// =============================================================================
-
-/// Split `text` by top-level commas (respecting `()`, `[]`, `{}`, and `<>` depth).
-///
-/// Returns a `Vec` of `(byte_offset, segment)` pairs where
-/// `byte_offset` is the start position of each segment within `text`.
-fn split_comma_parts(text: &str) -> Vec<(usize, &str)> {
-    let mut parts = Vec::new();
-    let mut depth: u32 = 0;
-    let mut start = 0;
-
-    for (i, b) in text.bytes().enumerate() {
-        match b {
-            b'(' | b'[' | b'{' | b'<' => depth += 1,
-            b')' | b']' | b'}' | b'>' => depth = depth.saturating_sub(1),
-            b',' if depth == 0 => {
-                parts.push((start, &text[start..i]));
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    parts.push((start, &text[start..]));
-    parts
 }
 
 // =============================================================================
@@ -237,14 +189,6 @@ fn merge_descriptions(first: TextRange, cont: TextRange) -> TextRange {
 // Entry header parsing
 // =============================================================================
 
-/// Create a `TextRange` from an absolute byte offset and length.
-fn span(offset: usize, len: usize) -> TextRange {
-    TextRange::new(
-        TextSize::new(offset as u32),
-        TextSize::new((offset + len) as u32),
-    )
-}
-
 /// Type information from a parsed entry header.
 ///
 /// All fields are `TextRange` (byte-offset spans in the source).
@@ -314,9 +258,9 @@ fn parse_entry_header(cursor: &Cursor) -> EntryHeader {
         // find_matching_close on full source — crosses line boundaries
         if let Some(abs_close) = cursor.find_matching_close(abs_paren) {
             let name = trimmed[..rel_paren].trim_end();
-            let name_span = span(entry_start, name.len());
-            let open_bracket = span(abs_paren, 1); // single-byte ASCII bracket
-            let close_bracket = span(abs_close, 1); // single-byte ASCII bracket
+            let name_span = TextRange::from_offset_len(entry_start, name.len());
+            let open_bracket = TextRange::from_offset_len(abs_paren, 1); // single-byte ASCII bracket
+            let close_bracket = TextRange::from_offset_len(abs_close, 1); // single-byte ASCII bracket
 
             // Type content between the brackets (may span multiple lines)
             let type_raw = &cursor.source()[abs_paren + 1..abs_close];
@@ -329,11 +273,12 @@ fn parse_entry_header(cursor: &Cursor) -> EntryHeader {
 
             // Strip optional marker
             let (clean_type, opt_rel) = strip_optional(type_trimmed);
-            let opt_span = opt_rel.map(|r| span(type_start + r, "optional".len()));
+            let opt_span =
+                opt_rel.map(|r| TextRange::from_offset_len(type_start + r, "optional".len()));
 
             let type_span = if !clean_type.is_empty() {
                 let ts = cursor.substr_offset(clean_type);
-                Some(span(ts, clean_type.len()))
+                Some(TextRange::from_offset_len(ts, clean_type.len()))
             } else {
                 None
             };
@@ -379,20 +324,21 @@ fn parse_entry_header(cursor: &Cursor) -> EntryHeader {
         let desc = after_colon.trim_start();
         let ws_after = after_colon.len() - desc.len();
         let desc_start = entry_start + colon_rel + 1 + ws_after;
-        let colon_span = span(entry_start + colon_rel, 1);
+        let colon_span = TextRange::from_offset_len(entry_start + colon_rel, 1);
         let first_description = if desc.is_empty() {
             TextRange::empty()
         } else {
-            span(desc_start, desc.len())
+            TextRange::from_offset_len(desc_start, desc.len())
         };
         let range_end = if !first_description.is_empty() {
             first_description.end()
         } else {
             colon_span.end()
         };
+        let name_span = TextRange::from_offset_len(entry_start, name.len());
         return EntryHeader {
-            range: TextRange::new(TextSize::new(entry_start as u32), range_end),
-            name: span(entry_start, name.len()),
+            range: TextRange::new(name_span.start(), range_end),
+            name: name_span,
             type_info: None,
             colon: Some(colon_span),
             first_description,
@@ -400,7 +346,7 @@ fn parse_entry_header(cursor: &Cursor) -> EntryHeader {
     }
 
     // --- Fallback: bare name or plain text ---
-    let name_span = span(entry_start, trimmed.len());
+    let name_span = TextRange::from_offset_len(entry_start, trimmed.len());
     EntryHeader {
         range: name_span,
         name: name_span,
@@ -430,9 +376,9 @@ fn extract_desc_after_colon(
         let desc_range = if desc.is_empty() {
             TextRange::empty()
         } else {
-            span(desc_start, desc.len())
+            TextRange::from_offset_len(desc_start, desc.len())
         };
-        (desc_range, Some(span(colon_abs, 1)))
+        (desc_range, Some(TextRange::from_offset_len(colon_abs, 1)))
     } else {
         (TextRange::empty(), None)
     }
@@ -1269,25 +1215,6 @@ mod tests {
         assert!(!is_section_header("SomeWord", 0));
     }
 
-    // -- entry colon detection --
-
-    #[test]
-    fn test_find_entry_colon() {
-        // Basic colon
-        assert_eq!(find_entry_colon("name: desc"), Some(4));
-        assert_eq!(find_entry_colon("name:desc"), Some(4));
-        assert_eq!(find_entry_colon("name:"), Some(4));
-        // No colon
-        assert_eq!(find_entry_colon("name"), None);
-        // Colon inside brackets is skipped
-        assert_eq!(find_entry_colon("Dict[str, int]: desc"), Some(14));
-        assert_eq!(find_entry_colon("Tuple(a, b): desc"), Some(11));
-        // Nested brackets
-        assert_eq!(find_entry_colon("Dict[str, List[int]]: desc"), Some(20));
-        // Only colon inside brackets — no match
-        assert_eq!(find_entry_colon("Dict[k: v]"), None);
-    }
-
     // -- entry header parsing --
 
     /// Helper to parse an entry header from a single-line string.
@@ -1414,28 +1341,5 @@ mod tests {
         assert_eq!(strip_optional("int,optional"), ("int", Some(4)));
         assert_eq!(strip_optional("int,  optional"), ("int", Some(6)));
         assert_eq!(strip_optional("int, optional  "), ("int", Some(5)));
-    }
-
-    // -- split_comma_parts --
-
-    #[test]
-    fn test_split_comma_parts() {
-        let parts: Vec<_> = split_comma_parts("int, optional")
-            .iter()
-            .map(|(_, s)| s.trim())
-            .collect();
-        assert_eq!(parts, vec!["int", "optional"]);
-
-        // Brackets respected
-        let parts: Vec<_> = split_comma_parts("Dict[str, int], optional")
-            .iter()
-            .map(|(_, s)| s.trim())
-            .collect();
-        assert_eq!(parts, vec!["Dict[str, int]", "optional"]);
-
-        // Offsets
-        let parts = split_comma_parts("int, optional");
-        assert_eq!(parts[0].0, 0);
-        assert_eq!(parts[1].0, 4);
     }
 }

@@ -125,6 +125,14 @@ impl TextRange {
         self.start.0 <= offset.0 && offset.0 < self.end.0
     }
 
+    /// Creates a range from an absolute byte offset and a length.
+    pub const fn from_offset_len(offset: usize, len: usize) -> Self {
+        Self {
+            start: TextSize::new(offset as u32),
+            end: TextSize::new((offset + len) as u32),
+        }
+    }
+
     /// Extracts the corresponding slice from the source text.
     ///
     /// Returns an empty string if the range is empty or offsets are out of bounds.
