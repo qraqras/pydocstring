@@ -171,11 +171,7 @@ fn strip_optional(type_content: &str) -> (&str, Option<usize>) {
 /// - End of input
 ///
 /// On return, `cursor.line` points to the first unconsumed line.
-fn collect_description(
-    cursor: &mut Cursor,
-    entry_indent: usize,
-    base_indent: usize,
-) -> TextRange {
+fn collect_description(cursor: &mut Cursor, entry_indent: usize, base_indent: usize) -> TextRange {
     let mut desc_parts: Vec<&str> = Vec::new();
     let mut first_content_line: Option<usize> = None;
     let mut last_content_line = cursor.line;
@@ -211,7 +207,6 @@ fn collect_description(
         desc_parts.remove(0);
     }
 
-
     if let Some(first) = first_content_line {
         let first_line = cursor.line_text(first);
         let first_col = indent_len(first_line);
@@ -224,68 +219,61 @@ fn collect_description(
     }
 }
 
-/// Merge a first-line description fragment with a continuation `TextRange`.
-fn build_full_description(
-    first_line: &str,
-    first_col: usize,
-    first_line_idx: usize,
-    cont: &TextRange,
-    cursor: &Cursor,
-) -> TextRange {
-    if first_line.is_empty() {
-        if cont.is_empty() {
-            return TextRange::empty();
-        }
-        return cont.clone();
+/// Merge a first-line description `TextRange` with a continuation `TextRange`.
+///
+/// Either or both may be empty. When both are non-empty, returns a range
+/// spanning from the start of `first` to the end of `cont`.
+fn merge_descriptions(first: TextRange, cont: TextRange) -> TextRange {
+    if first.is_empty() {
+        return cont;
     }
     if cont.is_empty() {
-        return cursor.make_range(first_line_idx,
-            first_col,
-            first_line_idx,
-            first_col + first_line.len(),
-        );
+        return first;
     }
-    let (end_line, end_col) = cursor.offset_to_line_col(cont.end().raw() as usize);
-    cursor.make_range(first_line_idx, first_col, end_line, end_col)
+    TextRange::new(first.start(), cont.end())
 }
 
 // =============================================================================
 // Entry header parsing
 // =============================================================================
 
+/// Create a `TextRange` from an absolute byte offset and length.
+fn span(offset: usize, len: usize) -> TextRange {
+    TextRange::new(
+        TextSize::new(offset as u32),
+        TextSize::new((offset + len) as u32),
+    )
+}
+
 /// Type information from a parsed entry header.
-struct TypeInfo<'a> {
-    /// Clean type string (without optional marker).
-    clean_type: &'a str,
-    /// Absolute byte offset of the clean type in source.
-    type_start: usize,
-    /// Absolute byte offset of `optional` in source, if present.
-    optional_start: Option<usize>,
+///
+/// All fields are `TextRange` (byte-offset spans in the source).
+struct TypeInfo {
+    /// Opening bracket (`(`, `[`, `{`, or `<`).
+    open_bracket: TextRange,
+    /// Type annotation (without `optional` marker). `None` when brackets are empty.
+    r#type: Option<TextRange>,
+    /// Closing bracket (`)`, `]`, `}`, or `>`).
+    close_bracket: TextRange,
+    /// The `optional` marker, if present.
+    optional: Option<TextRange>,
 }
 
 /// Parsed components of a Google-style entry header.
 ///
-/// All byte offsets are absolute offsets within the source string.
-struct EntryHeader<'a> {
+/// All span fields are `TextRange` (byte-offset spans in the source).
+struct EntryHeader {
+    /// Span of the entire header (from name start to the end of the last
+    /// token on the header line — description fragment, colon, or bracket).
+    range: TextRange,
     /// Entry name (parameter name, exception type, etc.).
-    name: &'a str,
-    /// Absolute byte offset of name in source.
-    name_start: usize,
-    /// Opening bracket character and its absolute byte offset, if present.
-    open_bracket: Option<(usize, &'static str)>,
-    /// Type annotation info.
-    type_info: Option<TypeInfo<'a>>,
-    /// Closing bracket character and its absolute byte offset, if present.
-    close_bracket: Option<(usize, &'static str)>,
-    /// Absolute byte offset of the entry-separating colon (`:`) in the source, if present.
-    colon_offset: Option<usize>,
-    /// First-line description text.
-    desc_text: &'a str,
-    /// Absolute byte offset of description text in source.
-    desc_start: usize,
-    /// Line index where the header ends (e.g. line of the closing paren).
-    /// Description continuation starts on `end_line + 1`.
-    end_line: usize,
+    name: TextRange,
+    /// Type annotation info (includes brackets, type, and optional marker).
+    type_info: Option<TypeInfo>,
+    /// The entry-separating colon (`:`) span, if present.
+    colon: Option<TextRange>,
+    /// First-line description fragment (may be empty).
+    first_description: TextRange,
 }
 
 /// Parse a Google-style entry header at `cursor.line`.
@@ -300,9 +288,9 @@ struct EntryHeader<'a> {
 /// Bracket matching works on the full source, so type annotations that span
 /// multiple lines (e.g. `Dict[str,\n  int]`) are handled correctly.
 ///
-/// Does **not** advance the cursor — the caller must set `cursor.line`
-/// to `header.end_line + 1` after processing.
-fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
+/// Does **not** advance the cursor — the caller must derive the end line
+/// from `header.range` and advance past it.
+fn parse_entry_header(cursor: &Cursor) -> EntryHeader {
     let line = cursor.current_line_text();
     let trimmed = line.trim();
     let entry_start = cursor.substr_offset(trimmed);
@@ -322,19 +310,13 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
 
     if let Some(rel_paren) = bracket_pos {
         let abs_paren = entry_start + rel_paren;
-        let open_ch = trimmed.as_bytes()[rel_paren];
-        let (open_str, close_str): (&'static str, &'static str) = match open_ch {
-            b'(' => ("(", ")"),
-            b'[' => ("[", "]"),
-            b'{' => ("{", "}"),
-            b'<' => ("<", ">"),
-            _ => unreachable!(),
-        };
 
         // find_matching_close on full source — crosses line boundaries
         if let Some(abs_close) = cursor.find_matching_close(abs_paren) {
             let name = trimmed[..rel_paren].trim_end();
-            let name_start = entry_start;
+            let name_span = span(entry_start, name.len());
+            let open_bracket = span(abs_paren, 1); // single-byte ASCII bracket
+            let close_bracket = span(abs_close, 1); // single-byte ASCII bracket
 
             // Type content between the brackets (may span multiple lines)
             let type_raw = &cursor.source()[abs_paren + 1..abs_close];
@@ -347,24 +329,21 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
 
             // Strip optional marker
             let (clean_type, opt_rel) = strip_optional(type_trimmed);
-            let opt_start = opt_rel.map(|r| type_start + r);
+            let opt_span = opt_rel.map(|r| span(type_start + r, "optional".len()));
 
-            let type_info = if clean_type.is_empty() && opt_start.is_some() {
-                // Only `optional` inside brackets — no type, but we still record optional
-                Some(TypeInfo {
-                    clean_type: "",
-                    type_start,
-                    optional_start: opt_start,
-                })
-            } else if !clean_type.is_empty() {
-                Some(TypeInfo {
-                    clean_type,
-                    type_start: cursor.substr_offset(clean_type),
-                    optional_start: opt_start,
-                })
+            let type_span = if !clean_type.is_empty() {
+                let ts = cursor.substr_offset(clean_type);
+                Some(span(ts, clean_type.len()))
             } else {
                 None
             };
+
+            let type_info = Some(TypeInfo {
+                open_bracket,
+                r#type: type_span,
+                close_bracket,
+                optional: opt_span,
+            });
 
             // Find which line the close bracket is on
             let close_line = cursor.offset_to_line_col(abs_close).0;
@@ -373,19 +352,22 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
             let close_line_str = cursor.line_text(close_line);
             let close_line_end = cursor.substr_offset(close_line_str) + close_line_str.len();
             let after_close = &cursor.source()[abs_close + 1..close_line_end];
-            let (desc_text, desc_start, colon_offset) =
-                extract_desc_after_colon(after_close, abs_close + 1);
+            let (first_description, colon) = extract_desc_after_colon(after_close, abs_close + 1);
+
+            let range_end = if !first_description.is_empty() {
+                first_description.end()
+            } else if let Some(ref c) = colon {
+                c.end()
+            } else {
+                close_bracket.end()
+            };
 
             return EntryHeader {
-                name,
-                name_start,
-                open_bracket: Some((abs_paren, open_str)),
+                range: TextRange::new(name_span.start(), range_end),
+                name: name_span,
                 type_info,
-                close_bracket: Some((abs_close, close_str)),
-                colon_offset,
-                desc_text,
-                desc_start,
-                end_line: close_line,
+                colon,
+                first_description,
             };
         }
     }
@@ -396,52 +378,63 @@ fn parse_entry_header<'a>(cursor: &Cursor<'a>) -> EntryHeader<'a> {
         let after_colon = &trimmed[colon_rel + 1..];
         let desc = after_colon.trim_start();
         let ws_after = after_colon.len() - desc.len();
+        let desc_start = entry_start + colon_rel + 1 + ws_after;
+        let colon_span = span(entry_start + colon_rel, 1);
+        let first_description = if desc.is_empty() {
+            TextRange::empty()
+        } else {
+            span(desc_start, desc.len())
+        };
+        let range_end = if !first_description.is_empty() {
+            first_description.end()
+        } else {
+            colon_span.end()
+        };
         return EntryHeader {
-            name,
-            name_start: entry_start,
-            open_bracket: None,
+            range: TextRange::new(TextSize::new(entry_start as u32), range_end),
+            name: span(entry_start, name.len()),
             type_info: None,
-            close_bracket: None,
-            colon_offset: Some(entry_start + colon_rel),
-            desc_text: desc,
-            desc_start: entry_start + colon_rel + 1 + ws_after,
-            end_line: cursor.line,
+            colon: Some(colon_span),
+            first_description,
         };
     }
 
     // --- Fallback: bare name or plain text ---
+    let name_span = span(entry_start, trimmed.len());
     EntryHeader {
-        name: trimmed,
-        name_start: entry_start,
-        open_bracket: None,
+        range: name_span,
+        name: name_span,
         type_info: None,
-        close_bracket: None,
-        colon_offset: None,
-        desc_text: "",
-        desc_start: entry_start + trimmed.len(),
-        end_line: cursor.line,
+        colon: None,
+        first_description: TextRange::empty(),
     }
 }
 
-/// Extract description text after a colon following the closing paren.
+/// Extract description and colon spans after the closing bracket.
 ///
 /// `after_paren` is the portion of text after `)`, and `base_offset` is its
-/// byte offset within the source.
+/// absolute byte offset within the source.
 ///
-/// Returns `(desc_text, desc_offset, colon_offset)` where `colon_offset`
-/// is the absolute byte offset of the `:` in the source (or `None` if
-/// no colon was found).
-fn extract_desc_after_colon(after_paren: &str, base_offset: usize) -> (&str, usize, Option<usize>) {
+/// Returns `(description_range, colon_range)`.
+fn extract_desc_after_colon(
+    after_paren: &str,
+    base_offset: usize,
+) -> (TextRange, Option<TextRange>) {
     let stripped = after_paren.trim_start();
     if let Some(after_colon) = stripped.strip_prefix(':') {
         let desc = after_colon.trim_start();
         let leading_to_stripped = after_paren.len() - stripped.len();
         let leading_after_colon = after_colon.len() - desc.len();
         let colon_abs = base_offset + leading_to_stripped;
-        let offset = colon_abs + 1 + leading_after_colon;
-        (desc, offset, Some(colon_abs))
+        let desc_start = colon_abs + 1 + leading_after_colon;
+        let desc_range = if desc.is_empty() {
+            TextRange::empty()
+        } else {
+            span(desc_start, desc.len())
+        };
+        (desc_range, Some(span(colon_abs, 1)))
     } else {
-        ("", base_offset + after_paren.len(), None)
+        (TextRange::empty(), None)
     }
 }
 
@@ -504,11 +497,8 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
         let trimmed = cursor.current_trimmed();
         if !trimmed.is_empty() {
             let col = cursor.current_indent();
-            docstring.summary = cursor.make_range(cursor.line,
-                col,
-                cursor.line,
-                col + trimmed.len(),
-            );
+            docstring.summary =
+                cursor.make_range(cursor.line, col, cursor.line, col + trimmed.len());
             cursor.advance();
         }
     }
@@ -567,11 +557,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
             let colon = if has_colon {
                 // Colon is always the last character of the trimmed line
                 let colon_col = header_col + header_trimmed.len() - 1;
-                Some(cursor.make_range(cursor.line,
-                    colon_col,
-                    cursor.line,
-                    colon_col + 1,
-                ))
+                Some(cursor.make_range(cursor.line, colon_col, cursor.line, colon_col + 1))
             } else {
                 None
             };
@@ -587,7 +573,8 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                     header_col + header_trimmed.len(),
                 ),
                 kind: section_kind,
-                name: cursor.make_range(cursor.line,
+                name: cursor.make_range(
+                    cursor.line,
                     header_col,
                     cursor.line,
                     header_col + header_name.len(),
@@ -747,11 +734,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
             let trimmed = line.trim();
             if !trimmed.is_empty() {
                 let col = cursor.current_indent();
-                let spanned = cursor.make_range(cursor.line,
-                    col,
-                    cursor.line,
-                    col + trimmed.len(),
-                );
+                let spanned = cursor.make_range(cursor.line, col, cursor.line, col + trimmed.len());
                 docstring
                     .items
                     .push(GoogleDocstringItem::StrayLine(spanned));
@@ -806,89 +789,39 @@ fn parse_args(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleArg> {
 
             let header = parse_entry_header(cursor);
 
-            // Name
-            let name_spanned = TextRange::new(
-                    TextSize::new(header.name_start as u32),
-                    TextSize::new((header.name_start + header.name.len()) as u32),
-                );
-
-            // Type and optional
-            let (arg_type, optional) = match &header.type_info {
-                Some(ti) => {
-                    let arg_t = if !ti.clean_type.is_empty() {
-                        Some(TextRange::new(
-                                TextSize::new(ti.type_start as u32),
-                                TextSize::new((ti.type_start + ti.clean_type.len()) as u32),
-                            ))
-                    } else {
-                        None
-                    };
-                    let opt = ti.optional_start.map(|os| {
-                        TextRange::new(
-                                TextSize::new(os as u32),
-                                TextSize::new((os + "optional".len()) as u32),
-                            )
-                    });
-                    (arg_t, opt)
-                }
-                None => (None, None),
+            // Extract type info fields (already TextRange)
+            let (arg_type, optional, open_bracket, close_bracket) = match &header.type_info {
+                Some(ti) => (
+                    ti.r#type,
+                    ti.optional,
+                    Some(ti.open_bracket),
+                    Some(ti.close_bracket),
+                ),
+                None => (None, None, None, None),
             };
 
-            // Description: inline fragment + continuation lines
-            let first_desc = header.desc_text;
-            let desc_first_line = header.end_line;
-            let desc_first_col = if !first_desc.is_empty() {
-                cursor.offset_to_line_col(header.desc_start).1
-            } else {
-                0 // irrelevant when first_desc is empty
-            };
-
-            cursor.line = header.end_line + 1;
+            // Description: first-line fragment + continuation lines
+            let header_end_line = cursor
+                .offset_to_line_col(header.range.end().raw() as usize)
+                .0;
+            cursor.line = header_end_line + 1;
             let cont_desc = collect_description(cursor, ei, base_indent);
-            let full_desc = build_full_description(
-                first_desc,
-                desc_first_col,
-                desc_first_line,
-                &cont_desc,
-                cursor,
-            );
+            let full_desc = merge_descriptions(header.first_description, cont_desc);
 
-            let (end_line, end_col) = if full_desc.is_empty() {
-                let last_header_line = cursor.line_text(header.end_line);
-                (
-                    header.end_line,
-                    indent_len(last_header_line) + last_header_line.trim().len(),
-                )
+            let range_end = if full_desc.is_empty() {
+                header.range.end()
             } else {
-                cursor.offset_to_line_col(full_desc.end().raw() as usize)
+                full_desc.end()
             };
-
-            // Bracket spans
-            let open_bracket = header.open_bracket.map(|(pos, ch)| {
-                TextRange::new(
-                        TextSize::new(pos as u32),
-                        TextSize::new((pos + ch.len()) as u32),
-                    )
-            });
-            let close_bracket = header.close_bracket.map(|(pos, ch)| {
-                TextRange::new(
-                        TextSize::new(pos as u32),
-                        TextSize::new((pos + ch.len()) as u32),
-                    )
-            });
-
-            // Colon span
-            let colon = header.colon_offset.map(|pos| {
-                TextRange::new(TextSize::new(pos as u32), TextSize::new((pos + 1) as u32))
-            });
+            let (end_line, end_col) = cursor.offset_to_line_col(range_end.raw() as usize);
 
             args.push(GoogleArg {
                 range: cursor.make_range(entry_start_line, col, end_line, end_col),
-                name: name_spanned,
+                name: header.name,
                 open_bracket,
                 r#type: arg_type,
                 close_bracket,
-                colon,
+                colon: header.colon,
                 description: full_desc,
                 optional,
             });
@@ -962,34 +895,52 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
 
     // Try `type: description` / `type:description` / `type:` pattern
     // only on the first content line.
-    let (return_type, colon, first_desc, desc_col) =
-        if let Some(colon_pos) = find_entry_colon(trimmed) {
-            let type_str = trimmed[..colon_pos].trim_end();
-            let after_colon = &trimmed[colon_pos + 1..];
-            let desc_str = after_colon.trim_start();
-            let ws_after = after_colon.len() - desc_str.len();
-            let type_col = col;
-            let rt = Some(cursor.make_range(cursor.line,
-                type_col,
-                cursor.line,
-                type_col + type_str.len(),
-            ));
-            let colon_spanned = Some(cursor.make_range(cursor.line,
-                col + colon_pos,
-                cursor.line,
-                col + colon_pos + 1,
-            ));
-            (rt, colon_spanned, desc_str, col + colon_pos + 1 + ws_after)
+    let (return_type, colon, first_desc_range) = if let Some(colon_pos) = find_entry_colon(trimmed)
+    {
+        let type_str = trimmed[..colon_pos].trim_end();
+        let after_colon = &trimmed[colon_pos + 1..];
+        let desc_str = after_colon.trim_start();
+        let ws_after = after_colon.len() - desc_str.len();
+        let type_col = col;
+        let rt = Some(cursor.make_range(
+            cursor.line,
+            type_col,
+            cursor.line,
+            type_col + type_str.len(),
+        ));
+        let colon_spanned = Some(cursor.make_range(
+            cursor.line,
+            col + colon_pos,
+            cursor.line,
+            col + colon_pos + 1,
+        ));
+        let desc_start = col + colon_pos + 1 + ws_after;
+        let desc_range = if desc_str.is_empty() {
+            TextRange::empty()
         } else {
-            // No type — just description
-            (None, None, trimmed, col)
+            cursor.make_range(
+                cursor.line,
+                desc_start,
+                cursor.line,
+                desc_start + desc_str.len(),
+            )
         };
+        (rt, colon_spanned, desc_range)
+    } else {
+        // No type — just description
+        let desc_range = if trimmed.is_empty() {
+            TextRange::empty()
+        } else {
+            cursor.make_range(cursor.line, col, cursor.line, col + trimmed.len())
+        };
+        (None, None, desc_range)
+    };
 
     cursor.advance();
 
     // Collect all remaining indented lines as continuation description.
     let cont_desc = parse_section_content(cursor, base_indent);
-    let full_desc = build_full_description(first_desc, desc_col, entry_start, &cont_desc, cursor);
+    let full_desc = merge_descriptions(first_desc_range, cont_desc);
 
     let (end_line, end_col) = if full_desc.is_empty() {
         (entry_start, col + trimmed.len())
@@ -1042,32 +993,34 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
             let col = indent;
             let entry_start = cursor.line;
 
-            let (exc_type_str, first_desc, desc_col, colon_offset) =
+            let (exc_type_str, first_desc_range, colon_offset) =
                 if let Some(colon_pos) = find_entry_colon(trimmed) {
                     let et = trimmed[..colon_pos].trim_end();
                     let after_colon = &trimmed[colon_pos + 1..];
                     let desc = after_colon.trim_start();
                     let ws_after = after_colon.len() - desc.len();
-                    (
-                        et,
-                        desc,
-                        col + colon_pos + 1 + ws_after,
-                        Some(col + colon_pos),
-                    )
+                    let desc_start = col + colon_pos + 1 + ws_after;
+                    let dr = if desc.is_empty() {
+                        TextRange::empty()
+                    } else {
+                        cursor.make_range(
+                            cursor.line,
+                            desc_start,
+                            cursor.line,
+                            desc_start + desc.len(),
+                        )
+                    };
+                    (et, dr, Some(col + colon_pos))
                 } else {
-                    (trimmed, "", col + trimmed.len(), None)
+                    (trimmed, TextRange::empty(), None)
                 };
 
-            let exc_type = cursor.make_range(cursor.line,
-                col,
-                cursor.line,
-                col + exc_type_str.len(),
-            );
+            let exc_type =
+                cursor.make_range(cursor.line, col, cursor.line, col + exc_type_str.len());
 
             cursor.advance();
             let cont_desc = collect_description(cursor, ei, base_indent);
-            let full_desc =
-                build_full_description(first_desc, desc_col, entry_start, &cont_desc, cursor);
+            let full_desc = merge_descriptions(first_desc_range, cont_desc);
 
             let (end_line, end_col) = if full_desc.is_empty() {
                 (entry_start, col + trimmed.len())
@@ -1076,11 +1029,7 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
             };
 
             let colon = colon_offset.map(|colon_col| {
-                cursor.make_range(entry_start,
-                    colon_col,
-                    entry_start,
-                    colon_col + 1,
-                )
+                cursor.make_range(entry_start, colon_col, entry_start, colon_col + 1)
             });
 
             raises.push(GoogleException {
@@ -1141,7 +1090,6 @@ fn parse_section_content(cursor: &mut Cursor, base_indent: usize) -> TextRange {
         content_lines.remove(0);
     }
 
-
     if let Some(first) = first_content_line {
         let first_line = cursor.line_text(first);
         let first_col = indent_len(first_line);
@@ -1198,20 +1146,26 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
             let entry_start = cursor.line;
 
             // Split on first colon for description (tolerant of any whitespace)
-            let (names_part, first_desc, desc_col, colon_offset) =
+            let (names_part, first_desc_range, colon_offset) =
                 if let Some(colon_pos) = find_entry_colon(trimmed) {
                     let n = trimmed[..colon_pos].trim_end();
                     let after_colon = &trimmed[colon_pos + 1..];
                     let desc = after_colon.trim_start();
                     let ws_after = after_colon.len() - desc.len();
-                    (
-                        n,
-                        desc,
-                        col + colon_pos + 1 + ws_after,
-                        Some(col + colon_pos),
-                    )
+                    let desc_start = col + colon_pos + 1 + ws_after;
+                    let dr = if desc.is_empty() {
+                        TextRange::empty()
+                    } else {
+                        cursor.make_range(
+                            cursor.line,
+                            desc_start,
+                            cursor.line,
+                            desc_start + desc.len(),
+                        )
+                    };
+                    (n, dr, Some(col + colon_pos))
                 } else {
-                    (trimmed, "", col + trimmed.len(), None)
+                    (trimmed, TextRange::empty(), None)
                 };
 
             // Parse comma-separated names
@@ -1222,7 +1176,8 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
                 if !name.is_empty() {
                     // Find the actual position of this name within the line
                     let name_start = name_offset + (part.len() - part.trim_start().len());
-                    names.push(cursor.make_range(cursor.line,
+                    names.push(cursor.make_range(
+                        cursor.line,
                         name_start,
                         cursor.line,
                         name_start + name.len(),
@@ -1233,8 +1188,7 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
 
             cursor.advance();
             let cont_desc = collect_description(cursor, ei, base_indent);
-            let full_desc =
-                build_full_description(first_desc, desc_col, entry_start, &cont_desc, cursor);
+            let full_desc = merge_descriptions(first_desc_range, cont_desc);
 
             let description = if full_desc.is_empty() {
                 None
@@ -1249,11 +1203,7 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
             };
 
             let colon = colon_offset.map(|colon_col| {
-                cursor.make_range(entry_start,
-                    colon_col,
-                    entry_start,
-                    colon_col + 1,
-                )
+                cursor.make_range(entry_start, colon_col, entry_start, colon_col + 1)
             });
 
             items.push(GoogleSeeAlsoItem {
@@ -1341,65 +1291,76 @@ mod tests {
     // -- entry header parsing --
 
     /// Helper to parse an entry header from a single-line string.
-    fn header_from(text: &str) -> EntryHeader<'_> {
+    fn header_from(text: &str) -> EntryHeader {
         let cursor = Cursor::new(text);
         parse_entry_header(&cursor)
     }
 
     #[test]
     fn test_parse_entry_header_with_type() {
-        let header = header_from("name (int): Description");
-        assert_eq!(header.name, "name");
+        let src = "name (int): Description";
+        let header = header_from(src);
+        assert_eq!(header.name.source_text(src), "name");
         assert!(header.type_info.is_some());
         let ti = header.type_info.unwrap();
-        assert_eq!(ti.clean_type, "int");
-        assert_eq!(header.desc_text, "Description");
+        assert_eq!(ti.r#type.unwrap().source_text(src), "int");
+        assert_eq!(header.first_description.source_text(src), "Description");
     }
 
     #[test]
     fn test_parse_entry_header_optional() {
-        let header = header_from("name (int, optional): Description");
-        assert_eq!(header.name, "name");
+        let src = "name (int, optional): Description";
+        let header = header_from(src);
+        assert_eq!(header.name.source_text(src), "name");
         let ti = header.type_info.unwrap();
-        assert_eq!(ti.clean_type, "int");
-        assert!(ti.optional_start.is_some());
+        assert_eq!(ti.r#type.unwrap().source_text(src), "int");
+        assert!(ti.optional.is_some());
+        assert_eq!(ti.optional.unwrap().source_text(src), "optional");
     }
 
     #[test]
     fn test_parse_entry_header_no_type() {
-        let header = header_from("name: Description");
-        assert_eq!(header.name, "name");
+        let src = "name: Description";
+        let header = header_from(src);
+        assert_eq!(header.name.source_text(src), "name");
         assert!(header.type_info.is_none());
-        assert_eq!(header.desc_text, "Description");
+        assert_eq!(header.first_description.source_text(src), "Description");
     }
 
     #[test]
     fn test_parse_entry_header_complex_type() {
-        let header = header_from("data (Dict[str, List[int]]): Values");
-        assert_eq!(header.name, "data");
+        let src = "data (Dict[str, List[int]]): Values";
+        let header = header_from(src);
+        assert_eq!(header.name.source_text(src), "data");
         let ti = header.type_info.unwrap();
-        assert_eq!(ti.clean_type, "Dict[str, List[int]]");
-        assert_eq!(header.desc_text, "Values");
+        assert_eq!(ti.r#type.unwrap().source_text(src), "Dict[str, List[int]]");
+        assert_eq!(header.first_description.source_text(src), "Values");
     }
 
     #[test]
     fn test_parse_entry_header_colon_only() {
-        let header = header_from("x:");
-        assert_eq!(header.name, "x");
+        let src = "x:";
+        let header = header_from(src);
+        assert_eq!(header.name.source_text(src), "x");
         assert!(header.type_info.is_none());
-        assert_eq!(header.desc_text, "");
+        assert!(header.first_description.is_empty());
     }
 
     #[test]
     fn test_parse_entry_header_varargs() {
-        let header = header_from("*args: Positional arguments");
-        assert_eq!(header.name, "*args");
-        assert_eq!(header.desc_text, "Positional arguments");
+        let src1 = "*args: Positional arguments";
+        let header = header_from(src1);
+        assert_eq!(header.name.source_text(src1), "*args");
+        assert_eq!(
+            header.first_description.source_text(src1),
+            "Positional arguments"
+        );
 
-        let header = header_from("**kwargs (dict): Keyword arguments");
-        assert_eq!(header.name, "**kwargs");
+        let src2 = "**kwargs (dict): Keyword arguments";
+        let header = header_from(src2);
+        assert_eq!(header.name.source_text(src2), "**kwargs");
         let ti = header.type_info.unwrap();
-        assert_eq!(ti.clean_type, "dict");
+        assert_eq!(ti.r#type.unwrap().source_text(src2), "dict");
     }
 
     #[test]
@@ -1407,27 +1368,35 @@ mod tests {
         let input = "x (Dict[str,\n        int]): The value.";
         let cursor = Cursor::new(input);
         let header = parse_entry_header(&cursor);
-        assert_eq!(header.name, "x");
+        assert_eq!(header.name.source_text(input), "x");
         let ti = header.type_info.unwrap();
-        assert_eq!(ti.clean_type, "Dict[str,\n        int]");
-        assert_eq!(header.desc_text, "The value.");
-        assert_eq!(header.end_line, 1);
+        assert_eq!(
+            ti.r#type.unwrap().source_text(input),
+            "Dict[str,\n        int]"
+        );
+        assert_eq!(header.first_description.source_text(input), "The value.");
+        assert_eq!(
+            header.range.source_text(input),
+            "x (Dict[str,\n        int]): The value."
+        );
     }
 
     #[test]
     fn test_parse_entry_header_no_space_after_colon() {
-        let header = header_from("name:Description");
-        assert_eq!(header.name, "name");
+        let src = "name:Description";
+        let header = header_from(src);
+        assert_eq!(header.name.source_text(src), "name");
         assert!(header.type_info.is_none());
-        assert_eq!(header.desc_text, "Description");
+        assert_eq!(header.first_description.source_text(src), "Description");
     }
 
     #[test]
     fn test_parse_entry_header_extra_spaces_after_colon() {
-        let header = header_from("name:   Description");
-        assert_eq!(header.name, "name");
+        let src = "name:   Description";
+        let header = header_from(src);
+        assert_eq!(header.name.source_text(src), "name");
         assert!(header.type_info.is_none());
-        assert_eq!(header.desc_text, "Description");
+        assert_eq!(header.first_description.source_text(src), "Description");
     }
 
     // -- strip_optional --
