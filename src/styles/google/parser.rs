@@ -18,7 +18,7 @@
 //! ```
 
 use crate::ast::TextRange;
-use crate::cursor::{Cursor, indent_len};
+use crate::cursor::{Cursor, indent_columns, indent_len};
 use crate::styles::google::ast::{
     GoogleArg, GoogleAttribute, GoogleDocstring, GoogleDocstringItem, GoogleException,
     GoogleMethod, GoogleReturns, GoogleSection, GoogleSectionBody, GoogleSectionHeader,
@@ -54,7 +54,7 @@ fn extract_section_name(trimmed: &str) -> (&str, bool) {
 /// For the colonless form, only names in [`KNOWN_SECTIONS`] are accepted
 /// to avoid treating ordinary text lines as headers.
 fn is_section_header(line: &str, base_indent: usize) -> bool {
-    let indent = indent_len(line);
+    let indent = indent_columns(line);
     if indent != base_indent {
         return false;
     }
@@ -137,7 +137,7 @@ fn collect_description(cursor: &mut Cursor, entry_indent: usize, base_indent: us
         let trimmed = line.trim();
 
         // Non-empty line at or below entry indent ⇒ new entry
-        if !trimmed.is_empty() && indent_len(line) <= entry_indent {
+        if !trimmed.is_empty() && indent_columns(line) <= entry_indent {
             break;
         }
 
@@ -436,7 +436,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
     }
 
     // Detect base indentation from the first non-empty line
-    let base_indent = cursor.current_indent();
+    let base_indent = cursor.current_indent_columns();
 
     // --- Summary ---
     if !is_section_header(cursor.current_line_text(), base_indent) {
@@ -722,14 +722,15 @@ fn parse_args(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleArg> {
         }
 
         let indent = cursor.current_indent();
-        if indent <= base_indent {
+        let indent_cols = cursor.current_indent_columns();
+        if indent_cols <= base_indent {
             break;
         }
 
-        let ei = *entry_indent.get_or_insert(indent);
+        let ei = *entry_indent.get_or_insert(indent_cols);
 
         // Entry line at entry indent level
-        if indent <= ei {
+        if indent_cols <= ei {
             let col = indent;
             let entry_start_line = cursor.line;
 
@@ -811,7 +812,7 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
         }
         let trimmed = line.trim();
         if !trimmed.is_empty() {
-            let indent = cursor.current_indent();
+            let indent = cursor.current_indent_columns();
             if indent <= base_indent {
                 return GoogleReturns {
                     range: TextRange::empty(),
@@ -929,13 +930,14 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
         }
 
         let indent = cursor.current_indent();
-        if indent <= base_indent {
+        let indent_cols = cursor.current_indent_columns();
+        if indent_cols <= base_indent {
             break;
         }
 
-        let ei = *entry_indent.get_or_insert(indent);
+        let ei = *entry_indent.get_or_insert(indent_cols);
 
-        if indent <= ei {
+        if indent_cols <= ei {
             let col = indent;
             let entry_start = cursor.line;
 
@@ -1014,7 +1016,7 @@ fn parse_section_content(cursor: &mut Cursor, base_indent: usize) -> TextRange {
 
         let trimmed = line.trim();
         // Non-empty line at or below base indent ⇒ outside the section
-        if !trimmed.is_empty() && indent_len(line) <= base_indent {
+        if !trimmed.is_empty() && indent_columns(line) <= base_indent {
             break;
         }
 
@@ -1081,13 +1083,14 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
         }
 
         let indent = cursor.current_indent();
-        if indent <= base_indent {
+        let indent_cols = cursor.current_indent_columns();
+        if indent_cols <= base_indent {
             break;
         }
 
-        let ei = *entry_indent.get_or_insert(indent);
+        let ei = *entry_indent.get_or_insert(indent_cols);
 
-        if indent <= ei {
+        if indent_cols <= ei {
             let col = indent;
             let entry_start = cursor.line;
 

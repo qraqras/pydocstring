@@ -114,7 +114,10 @@ fn test_simple_summary() {
     let docstring = "This is a brief summary.";
     let result = parse_numpy(docstring);
 
-    assert_eq!(result.summary.source_text(&result.source), "This is a brief summary.");
+    assert_eq!(
+        result.summary.source_text(&result.source),
+        "This is a brief summary."
+    );
     assert!(result.extended_summary.is_none());
     assert!(parameters(&result).is_empty());
 }
@@ -123,7 +126,10 @@ fn test_simple_summary() {
 fn test_parse_simple_span() {
     let docstring = "Brief description.";
     let result = parse_numpy(docstring);
-    assert_eq!(result.summary.source_text(&result.source), "Brief description.");
+    assert_eq!(
+        result.summary.source_text(&result.source),
+        "Brief description."
+    );
     assert_eq!(result.summary.start(), TextSize::new(0));
     assert_eq!(result.summary.end(), TextSize::new(18));
     assert_eq!(
@@ -234,10 +240,16 @@ int
 "#;
     let result = parse_numpy(docstring);
 
-    assert_eq!(result.summary.source_text(&result.source), "Calculate the sum of two numbers.");
+    assert_eq!(
+        result.summary.source_text(&result.source),
+        "Calculate the sum of two numbers."
+    );
     assert_eq!(parameters(&result).len(), 2);
 
-    assert_eq!(parameters(&result)[0].names[0].source_text(&result.source), "x");
+    assert_eq!(
+        parameters(&result)[0].names[0].source_text(&result.source),
+        "x"
+    );
     assert_eq!(
         parameters(&result)[0]
             .r#type
@@ -246,11 +258,16 @@ int
         Some("int")
     );
     assert_eq!(
-        parameters(&result)[0].description.source_text(&result.source),
+        parameters(&result)[0]
+            .description
+            .source_text(&result.source),
         "The first number."
     );
 
-    assert_eq!(parameters(&result)[1].names[0].source_text(&result.source), "y");
+    assert_eq!(
+        parameters(&result)[1].names[0].source_text(&result.source),
+        "y"
+    );
     assert_eq!(
         parameters(&result)[1]
             .r#type
@@ -310,13 +327,11 @@ y : str, optional
 
     // Verify name spans point to correct source text
     assert_eq!(
-        parameters(&result)[0].names[0]
-            .source_text(&result.source),
+        parameters(&result)[0].names[0].source_text(&result.source),
         "x"
     );
     assert_eq!(
-        parameters(&result)[1].names[0]
-            .source_text(&result.source),
+        parameters(&result)[1].names[0].source_text(&result.source),
         "y"
     );
     // Verify type spans
@@ -338,7 +353,10 @@ fn test_parameters_no_space_before_colon() {
     let p = parameters(&result);
     assert_eq!(p.len(), 1);
     assert_eq!(p[0].names[0].source_text(&result.source), "x");
-    assert_eq!(p[0].r#type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(
+        p[0].r#type.as_ref().unwrap().source_text(&result.source),
+        "int"
+    );
     assert_eq!(p[0].description.source_text(&result.source), "The value.");
 }
 
@@ -350,7 +368,10 @@ fn test_parameters_no_space_after_colon() {
     let p = parameters(&result);
     assert_eq!(p.len(), 1);
     assert_eq!(p[0].names[0].source_text(&result.source), "x");
-    assert_eq!(p[0].r#type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(
+        p[0].r#type.as_ref().unwrap().source_text(&result.source),
+        "int"
+    );
 }
 
 /// Parameters with no spaces around colon: `x:int`
@@ -361,7 +382,10 @@ fn test_parameters_no_spaces_around_colon() {
     let p = parameters(&result);
     assert_eq!(p.len(), 1);
     assert_eq!(p[0].names[0].source_text(&result.source), "x");
-    assert_eq!(p[0].r#type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(
+        p[0].r#type.as_ref().unwrap().source_text(&result.source),
+        "int"
+    );
 }
 
 /// Returns with no spaces around colon (named): `result:int`
@@ -371,8 +395,17 @@ fn test_returns_no_spaces_around_colon() {
     let result = parse_numpy(docstring);
     let r = returns(&result);
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].name.as_ref().unwrap().source_text(&result.source), "result");
-    assert_eq!(r[0].return_type.as_ref().unwrap().source_text(&result.source), "int");
+    assert_eq!(
+        r[0].name.as_ref().unwrap().source_text(&result.source),
+        "result"
+    );
+    assert_eq!(
+        r[0].return_type
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
+        "int"
+    );
 }
 
 /// See Also with no space before colon.
@@ -422,7 +455,10 @@ x : int
 "#;
     let result = parse_numpy(docstring);
     assert_eq!(parameters(&result).len(), 1);
-    assert_eq!(parameters(&result)[0].names[0].source_text(&result.source), "x");
+    assert_eq!(
+        parameters(&result)[0].names[0].source_text(&result.source),
+        "x"
+    );
     assert!(
         parameters(&result)[0]
             .description
@@ -443,7 +479,9 @@ x : int
     Second paragraph of x.
 "#;
     let result = parse_numpy(docstring);
-    let desc = &parameters(&result)[0].description.source_text(&result.source);
+    let desc = &parameters(&result)[0]
+        .description
+        .source_text(&result.source);
     assert!(desc.contains("First paragraph of x."));
     assert!(desc.contains("Second paragraph of x."));
     assert!(desc.contains('\n'));
@@ -467,7 +505,10 @@ y : float
     let result = parse_numpy(docstring);
     assert_eq!(returns(&result).len(), 2);
     assert_eq!(
-        returns(&result)[0].name.as_ref().map(|n| n.source_text(&result.source)),
+        returns(&result)[0]
+            .name
+            .as_ref()
+            .map(|n| n.source_text(&result.source)),
         Some("x")
     );
     assert_eq!(
@@ -477,9 +518,15 @@ y : float
             .map(|t| t.source_text(&result.source)),
         Some("int")
     );
-    assert_eq!(returns(&result)[0].description.source_text(&result.source), "The first value.");
     assert_eq!(
-        returns(&result)[1].name.as_ref().map(|n| n.source_text(&result.source)),
+        returns(&result)[0].description.source_text(&result.source),
+        "The first value."
+    );
+    assert_eq!(
+        returns(&result)[1]
+            .name
+            .as_ref()
+            .map(|n| n.source_text(&result.source)),
         Some("y")
     );
 }
@@ -502,8 +549,14 @@ TypeError
     let result = parse_numpy(docstring);
 
     assert_eq!(raises(&result).len(), 2);
-    assert_eq!(raises(&result)[0].r#type.source_text(&result.source), "ValueError");
-    assert_eq!(raises(&result)[1].r#type.source_text(&result.source), "TypeError");
+    assert_eq!(
+        raises(&result)[0].r#type.source_text(&result.source),
+        "ValueError"
+    );
+    assert_eq!(
+        raises(&result)[1].r#type.source_text(&result.source),
+        "TypeError"
+    );
 }
 
 #[test]
@@ -544,7 +597,12 @@ This is an important note about the function.
     let result = parse_numpy(docstring);
 
     assert!(notes(&result).is_some());
-    assert!(notes(&result).unwrap().source_text(&result.source).contains("important note"));
+    assert!(
+        notes(&result)
+            .unwrap()
+            .source_text(&result.source)
+            .contains("important note")
+    );
 }
 
 #[test]
@@ -561,7 +619,10 @@ func_b, func_c
     assert_eq!(items.len(), 2);
     assert_eq!(items[0].names[0].source_text(&result.source), "func_a");
     assert_eq!(
-        items[0].description.as_ref().map(|d| d.source_text(&result.source)),
+        items[0]
+            .description
+            .as_ref()
+            .map(|d| d.source_text(&result.source)),
         Some("Does something.")
     );
     assert_eq!(items[1].names.len(), 2);
@@ -582,9 +643,19 @@ References
     let refs = references(&result);
     assert_eq!(refs.len(), 2);
     assert_eq!(refs[0].number.source_text(&result.source), "1");
-    assert!(refs[0].content.source_text(&result.source).contains("Author A"));
+    assert!(
+        refs[0]
+            .content
+            .source_text(&result.source)
+            .contains("Author A")
+    );
     assert_eq!(refs[1].number.source_text(&result.source), "2");
-    assert!(refs[1].content.source_text(&result.source).contains("Author B"));
+    assert!(
+        refs[1]
+            .content
+            .source_text(&result.source)
+            .contains("Author B")
+    );
 }
 
 // =============================================================================
@@ -611,12 +682,21 @@ Some notes here.
 "#;
     let result = parse_numpy(docstring);
     assert_eq!(parameters(&result).len(), 1);
-    assert_eq!(parameters(&result)[0].names[0].source_text(&result.source), "x");
+    assert_eq!(
+        parameters(&result)[0].names[0].source_text(&result.source),
+        "x"
+    );
     assert_eq!(returns(&result).len(), 1);
     assert!(notes(&result).is_some());
     // Original text is preserved in header
-    assert_eq!(sections(&result)[0].header.name.source_text(&result.source), "parameters");
-    assert_eq!(sections(&result)[2].header.name.source_text(&result.source), "NOTES");
+    assert_eq!(
+        sections(&result)[0].header.name.source_text(&result.source),
+        "parameters"
+    );
+    assert_eq!(
+        sections(&result)[2].header.name.source_text(&result.source),
+        "NOTES"
+    );
 }
 
 // =============================================================================
@@ -659,7 +739,10 @@ x : int
         sections(&result)[0].header.name.source_text(src),
         "Parameters"
     );
-    let underline = &sections(&result)[0].header.underline.source_text(&result.source);
+    let underline = &sections(&result)[0]
+        .header
+        .underline
+        .source_text(&result.source);
     assert!(underline.chars().all(|c| c == '-'));
 
     let p = &parameters(&result)[0];
@@ -690,7 +773,10 @@ x : int
         .as_ref()
         .expect("deprecation should be parsed");
     assert_eq!(dep.version.source_text(&result.source), "1.6.0");
-    assert_eq!(dep.description.source_text(&result.source), "Use `new_func` instead.");
+    assert_eq!(
+        dep.description.source_text(&result.source),
+        "Use `new_func` instead."
+    );
     assert_eq!(dep.version.source_text(&result.source), "1.6.0");
 }
 
@@ -705,7 +791,10 @@ fn test_indented_docstring() {
 
     assert_eq!(result.summary.source_text(&result.source), "Summary line.");
     assert_eq!(parameters(&result).len(), 2);
-    assert_eq!(parameters(&result)[0].names[0].source_text(&result.source), "x");
+    assert_eq!(
+        parameters(&result)[0].names[0].source_text(&result.source),
+        "x"
+    );
     assert_eq!(
         parameters(&result)[0]
             .r#type
@@ -713,7 +802,10 @@ fn test_indented_docstring() {
             .map(|t| t.source_text(&result.source)),
         Some("int")
     );
-    assert_eq!(parameters(&result)[1].names[0].source_text(&result.source), "y");
+    assert_eq!(
+        parameters(&result)[1].names[0].source_text(&result.source),
+        "y"
+    );
     assert!(parameters(&result)[1].optional.is_some());
     assert_eq!(returns(&result).len(), 1);
     assert_eq!(
@@ -725,13 +817,9 @@ fn test_indented_docstring() {
     );
 
     // Spans point to correct positions in indented source
+    assert_eq!(result.summary.source_text(&result.source), "Summary line.");
     assert_eq!(
-        result.summary.source_text(&result.source),
-        "Summary line."
-    );
-    assert_eq!(
-        parameters(&result)[0].names[0]
-            .source_text(&result.source),
+        parameters(&result)[0].names[0].source_text(&result.source),
         "x"
     );
     assert_eq!(
@@ -751,9 +839,15 @@ fn test_deeply_indented_docstring() {
 
     assert_eq!(result.summary.source_text(&result.source), "Brief.");
     assert_eq!(parameters(&result).len(), 1);
-    assert_eq!(parameters(&result)[0].names[0].source_text(&result.source), "a");
+    assert_eq!(
+        parameters(&result)[0].names[0].source_text(&result.source),
+        "a"
+    );
     assert_eq!(raises(&result).len(), 1);
-    assert_eq!(raises(&result)[0].r#type.source_text(&result.source), "ValueError");
+    assert_eq!(
+        raises(&result)[0].r#type.source_text(&result.source),
+        "ValueError"
+    );
     assert_eq!(
         raises(&result)[0].r#type.source_text(&result.source),
         "ValueError"
@@ -771,9 +865,16 @@ fn test_indented_with_deprecation() {
         .as_ref()
         .expect("should have deprecation");
     assert_eq!(dep.version.source_text(&result.source), "2.0.0");
-    assert!(dep.description.source_text(&result.source).contains("new_func"));
+    assert!(
+        dep.description
+            .source_text(&result.source)
+            .contains("new_func")
+    );
     assert_eq!(parameters(&result).len(), 1);
-    assert_eq!(parameters(&result)[0].names[0].source_text(&result.source), "x");
+    assert_eq!(
+        parameters(&result)[0].names[0].source_text(&result.source),
+        "x"
+    );
 }
 
 #[test]
@@ -784,8 +885,16 @@ fn test_mixed_indent_first_line() {
 
     assert_eq!(result.summary.source_text(&result.source), "Summary.");
     assert_eq!(parameters(&result).len(), 1);
-    assert_eq!(parameters(&result)[0].names[0].source_text(&result.source), "x");
-    assert_eq!(parameters(&result)[0].description.source_text(&result.source), "Description.");
+    assert_eq!(
+        parameters(&result)[0].names[0].source_text(&result.source),
+        "x"
+    );
+    assert_eq!(
+        parameters(&result)[0]
+            .description
+            .source_text(&result.source),
+        "Description."
+    );
 }
 
 // =============================================================================
@@ -802,7 +911,10 @@ fn test_enum_type_as_string() {
 
     let p = &params[0];
     assert_eq!(p.names[0].source_text(&result.source), "order");
-    assert_eq!(p.r#type.as_ref().unwrap().source_text(&result.source), "{'C', 'F', 'A'}");
+    assert_eq!(
+        p.r#type.as_ref().unwrap().source_text(&result.source),
+        "{'C', 'F', 'A'}"
+    );
     assert_eq!(p.description.source_text(&result.source), "Memory layout.");
 }
 
@@ -815,7 +927,10 @@ fn test_enum_type_with_optional() {
     let p = &params[0];
 
     assert!(p.optional.is_some());
-    assert_eq!(p.r#type.as_ref().unwrap().source_text(&result.source), "{'C', 'F'}");
+    assert_eq!(
+        p.r#type.as_ref().unwrap().source_text(&result.source),
+        "{'C', 'F'}"
+    );
 }
 
 #[test]
@@ -825,8 +940,87 @@ fn test_enum_type_with_default() {
     let params = parameters(&result);
     let p = &params[0];
 
-    assert_eq!(p.r#type.as_ref().unwrap().source_text(&result.source), "{'C', 'F', 'A'}");
-    assert_eq!(p.default_keyword.as_ref().unwrap().source_text(&result.source), "default");
+    assert_eq!(
+        p.r#type.as_ref().unwrap().source_text(&result.source),
+        "{'C', 'F', 'A'}"
+    );
+    assert_eq!(
+        p.default_keyword
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
+        "default"
+    );
     assert!(p.default_separator.is_none()); // space-separated
-    assert_eq!(p.default_value.as_ref().unwrap().source_text(&result.source), "'C'");
+    assert_eq!(
+        p.default_value
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
+        "'C'"
+    );
+}
+
+// =============================================================================
+// Tab indentation tests
+// =============================================================================
+
+/// Parameters section with tab-indented descriptions.
+#[test]
+fn test_tab_indented_parameters() {
+    let docstring = "Summary.\n\nParameters\n----------\nx : int\n\tDescription of x.\ny : str\n\tDescription of y.";
+    let result = parse_numpy(docstring);
+    let params = parameters(&result);
+    assert_eq!(params.len(), 2);
+    assert_eq!(params[0].names[0].source_text(&result.source), "x");
+    assert_eq!(
+        params[0].description.source_text(&result.source),
+        "Description of x."
+    );
+    assert_eq!(params[1].names[0].source_text(&result.source), "y");
+    assert_eq!(
+        params[1].description.source_text(&result.source),
+        "Description of y."
+    );
+}
+
+/// Mixed tabs and spaces: header at 0 indent, description indented with tab.
+#[test]
+fn test_mixed_tab_space_parameters() {
+    // Header uses no indent, description uses tab (== 4 columns > 0)
+    let docstring = "Summary.\n\nParameters\n----------\nx : int\n\tThe value.\n\t  More detail.";
+    let result = parse_numpy(docstring);
+    let params = parameters(&result);
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].names[0].source_text(&result.source), "x");
+    // Description should include "The value." (the first desc line)
+    let desc = params[0].description.source_text(&result.source);
+    assert!(desc.contains("The value."), "desc = {:?}", desc);
+}
+
+/// Returns section with tab-indented descriptions.
+#[test]
+fn test_tab_indented_returns() {
+    let docstring = "Summary.\n\nReturns\n-------\nint\n\tThe result value.";
+    let result = parse_numpy(docstring);
+    let rets = returns(&result);
+    assert_eq!(rets.len(), 1);
+    assert_eq!(
+        rets[0].description.source_text(&result.source),
+        "The result value."
+    );
+}
+
+/// Raises section with tab-indented description.
+#[test]
+fn test_tab_indented_raises() {
+    let docstring = "Summary.\n\nRaises\n------\nValueError\n\tIf the input is invalid.";
+    let result = parse_numpy(docstring);
+    let exc = raises(&result);
+    assert_eq!(exc.len(), 1);
+    assert_eq!(exc[0].r#type.source_text(&result.source), "ValueError");
+    assert_eq!(
+        exc[0].description.source_text(&result.source),
+        "If the input is invalid."
+    );
 }

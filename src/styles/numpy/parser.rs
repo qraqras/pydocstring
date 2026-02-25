@@ -20,7 +20,7 @@
 //! ```
 
 use crate::ast::TextRange;
-use crate::cursor::{Cursor, indent_len};
+use crate::cursor::{Cursor, indent_columns, indent_len};
 use crate::styles::numpy::ast::{
     NumPyDeprecation, NumPyDocstring, NumPyDocstringItem, NumPyException, NumPyParameter,
     NumPyReturns, NumPySection, NumPySectionBody, NumPySectionHeader, NumPySectionKind,
@@ -75,7 +75,7 @@ fn collect_description(cursor: &mut Cursor, end: usize, entry_indent: usize) -> 
     while cursor.line < end {
         let line = cursor.current_line_text();
         // Non-empty line at or below entry indentation signals end of description
-        if !line.trim().is_empty() && indent_len(line) <= entry_indent {
+        if !line.trim().is_empty() && indent_columns(line) <= entry_indent {
             break;
         }
         desc_parts.push(line.trim());
@@ -253,6 +253,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
 
         let section_start = cursor.line;
         let header_col = cursor.current_indent();
+        let header_indent = cursor.current_indent_columns();
 
         let underline_line = cursor.line_text(cursor.line + 1);
         let underline_trimmed = underline_line.trim();
@@ -288,15 +289,15 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
         let section_end = find_next_section_start(&cursor, cursor.line);
         let body = match section_kind {
             NumPySectionKind::Parameters => {
-                let params = parse_parameters(&mut cursor, section_end, header_col);
+                let params = parse_parameters(&mut cursor, section_end, header_indent);
                 NumPySectionBody::Parameters(params)
             }
             NumPySectionKind::Returns => {
-                let rets = parse_returns(&mut cursor, section_end, header_col);
+                let rets = parse_returns(&mut cursor, section_end, header_indent);
                 NumPySectionBody::Returns(rets)
             }
             NumPySectionKind::Raises => {
-                let raises = parse_raises(&mut cursor, section_end, header_col);
+                let raises = parse_raises(&mut cursor, section_end, header_indent);
                 NumPySectionBody::Raises(raises)
             }
             NumPySectionKind::Yields => {
@@ -304,15 +305,15 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                 NumPySectionBody::Yields(yields)
             }
             NumPySectionKind::Receives => {
-                let receives = parse_parameters(&mut cursor, section_end, header_col);
+                let receives = parse_parameters(&mut cursor, section_end, header_indent);
                 NumPySectionBody::Receives(receives)
             }
             NumPySectionKind::OtherParameters => {
-                let params = parse_parameters(&mut cursor, section_end, header_col);
+                let params = parse_parameters(&mut cursor, section_end, header_indent);
                 NumPySectionBody::OtherParameters(params)
             }
             NumPySectionKind::Warns => {
-                let raises = parse_raises(&mut cursor, section_end, header_col);
+                let raises = parse_raises(&mut cursor, section_end, header_indent);
                 let warns = raises
                     .into_iter()
                     .map(|e| crate::styles::numpy::ast::NumPyWarning {
@@ -344,7 +345,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                 NumPySectionBody::References(refs)
             }
             NumPySectionKind::Attributes => {
-                let params = parse_parameters(&mut cursor, section_end, header_col);
+                let params = parse_parameters(&mut cursor, section_end, header_indent);
                 let attrs = params
                     .into_iter()
                     .map(|p| crate::styles::numpy::ast::NumPyAttribute {
@@ -358,7 +359,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                 NumPySectionBody::Attributes(attrs)
             }
             NumPySectionKind::Methods => {
-                let params = parse_parameters(&mut cursor, section_end, header_col);
+                let params = parse_parameters(&mut cursor, section_end, header_indent);
                 let methods = params
                     .into_iter()
                     .map(|p| crate::styles::numpy::ast::NumPyMethod {
@@ -431,7 +432,7 @@ fn parse_parameters(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec
         // A parameter header is a non-empty line at or below entry indentation.
         // Lines with a colon are split into name/type; lines without a colon
         // are parsed best-effort as a bare name (colon = None).
-        if !trimmed.is_empty() && indent_len(line) <= entry_indent {
+        if !trimmed.is_empty() && indent_columns(line) <= entry_indent {
             let col = cursor.current_indent();
             let entry_start = cursor.line;
             let parts = parse_name_and_type(trimmed, cursor.line, col, cursor);
@@ -674,7 +675,7 @@ fn parse_returns(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Nu
         let line = cursor.current_line_text();
         let trimmed = line.trim();
 
-        if !trimmed.is_empty() && indent_len(line) <= entry_indent {
+        if !trimmed.is_empty() && indent_columns(line) <= entry_indent {
             let col = cursor.current_indent();
             let entry_start = cursor.line;
 
@@ -740,7 +741,7 @@ fn parse_raises(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Num
         let line = cursor.current_line_text();
         let trimmed = line.trim();
 
-        if !trimmed.is_empty() && indent_len(line) <= entry_indent {
+        if !trimmed.is_empty() && indent_columns(line) <= entry_indent {
             let col = cursor.current_indent();
             let entry_start = cursor.line;
 

@@ -87,6 +87,15 @@ impl<'a> Cursor<'a> {
         indent_len(self.current_line_text())
     }
 
+    /// Visual column width of leading whitespace on the current line.
+    ///
+    /// Expands tabs to 4-column stops.  Use this for indentation-level
+    /// comparison; use [`current_indent`](Self::current_indent) when you
+    /// need a byte offset.
+    pub fn current_indent_columns(&self) -> usize {
+        indent_columns(self.current_line_text())
+    }
+
     /// Whether the current line is blank (empty or whitespace-only).
     pub fn current_is_blank(&self) -> bool {
         self.current_line_text().trim().is_empty()
@@ -180,8 +189,32 @@ impl<'a> Cursor<'a> {
 // =============================================================================
 
 /// Number of leading whitespace bytes in `line`.
+///
+/// Use this for **byte-offset** calculations (e.g. column parameters to
+/// [`Cursor::make_range`]).  For indentation-level *comparison*, prefer
+/// [`indent_columns`] which handles tab characters correctly.
 pub(crate) fn indent_len(line: &str) -> usize {
     line.len() - line.trim_start().len()
+}
+
+/// Visual column width of leading whitespace in `line`.
+///
+/// Each tab character advances the column to the next multiple of
+/// `TAB_WIDTH` (4), matching the most common Python editor convention.
+/// Regular spaces count as one column each.
+///
+/// Use this for indentation-level *comparison* (not byte offsets).
+pub(crate) fn indent_columns(line: &str) -> usize {
+    const TAB_WIDTH: usize = 4;
+    let mut col = 0;
+    for byte in line.bytes() {
+        match byte {
+            b'\t' => col = (col / TAB_WIDTH + 1) * TAB_WIDTH,
+            b' ' => col += 1,
+            _ => break,
+        }
+    }
+    col
 }
 
 // =============================================================================
@@ -207,5 +240,43 @@ fn count_lines(source: &str, offsets: &[usize]) -> usize {
         offsets.len() - 1
     } else {
         offsets.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_indent_columns_spaces_only() {
+        assert_eq!(indent_columns("    hello"), 4);
+        assert_eq!(indent_columns("hello"), 0);
+        assert_eq!(indent_columns("  x"), 2);
+    }
+
+    #[test]
+    fn test_indent_columns_tab() {
+        // A single tab at the start → next multiple of 4 → 4
+        assert_eq!(indent_columns("\thello"), 4);
+        // Two tabs → 8
+        assert_eq!(indent_columns("\t\thello"), 8);
+    }
+
+    #[test]
+    fn test_indent_columns_mixed_tab_space() {
+        // 2 spaces then tab → col=2, tab → next mult of 4 → 4
+        assert_eq!(indent_columns("  \thello"), 4);
+        // 3 spaces then tab → col=3, tab → next mult of 4 → 4
+        assert_eq!(indent_columns("   \thello"), 4);
+        // tab then 2 spaces → col=4, +2 → 6
+        assert_eq!(indent_columns("\t  hello"), 6);
+    }
+
+    #[test]
+    fn test_indent_len_unchanged() {
+        // indent_len counts bytes, not visual columns
+        assert_eq!(indent_len("\thello"), 1);
+        assert_eq!(indent_len("    hello"), 4);
+        assert_eq!(indent_len("  \thello"), 3);
     }
 }
