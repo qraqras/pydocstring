@@ -319,6 +319,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                     .map(|e| crate::styles::numpy::ast::NumPyWarning {
                         range: e.range,
                         r#type: e.r#type,
+                        colon: e.colon,
                         description: e.description,
                     })
                     .collect();
@@ -437,11 +438,22 @@ fn parse_parameters(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec
             let entry_start = cursor.line;
             let parts = parse_name_and_type(trimmed, cursor.line, col, cursor);
 
-            cursor.advance();
+            // Advance past all header lines (may span multiple for multi-line types)
+            cursor.line = parts.header_end_line + 1;
             let desc = collect_description(cursor, end, entry_indent);
 
             let (entry_end_line, entry_end_col) = if desc.is_empty() {
-                (entry_start, col + trimmed.len())
+                if parts.header_end_line > entry_start {
+                    // Multi-line header: compute end from last header line
+                    let last_line = cursor.line_text(parts.header_end_line);
+                    let last_trimmed = last_line.trim();
+                    (
+                        parts.header_end_line,
+                        indent_len(last_line) + last_trimmed.len(),
+                    )
+                } else {
+                    (entry_start, col + trimmed.len())
+                }
             } else {
                 cursor.offset_to_line_col(desc.end().raw() as usize)
             };
@@ -475,11 +487,15 @@ struct ParamHeaderParts {
     default_keyword: Option<TextRange>,
     default_separator: Option<TextRange>,
     default_value: Option<TextRange>,
+    /// Line index where the header ends (may differ from start for multi-line types).
+    header_end_line: usize,
 }
 
 /// Parse `"name : type, optional"` into components with precise spans.
 ///
 /// Tolerant of any whitespace around the colon separator.
+/// Supports multi-line type annotations with brackets spanning multiple lines
+/// (e.g., `Dict[str,\n    int]`).
 ///
 /// `line_idx` is the 0-based line index, `col_base` is the byte column where
 /// `text` starts in the raw line.
@@ -490,132 +506,142 @@ fn parse_name_and_type(
     cursor: &Cursor,
 ) -> ParamHeaderParts {
     // Find the first colon not inside brackets
-    let (name_str, type_str, colon_span, colon_rel) =
-        if let Some(colon_pos) = find_entry_colon(text) {
-            let before = text[..colon_pos].trim_end();
-            let after = &text[colon_pos + 1..];
-            let after_trimmed = after.trim();
-            let colon_col = col_base + colon_pos;
-            let colon = Some(cursor.make_range(line_idx, colon_col, line_idx, colon_col + 1));
-            if after_trimmed.is_empty() {
-                (before, None, colon, colon_pos)
-            } else {
-                (before, Some(after_trimmed), colon, colon_pos)
-            }
-        } else {
-            // No separator — whole text is the name
-            let names = parse_name_list(text, line_idx, col_base, cursor);
-            return ParamHeaderParts {
-                names,
-                colon: None,
-                param_type: None,
-                optional: None,
-                default_keyword: None,
-                default_separator: None,
-                default_value: None,
-            };
+    let (name_str, colon_span, colon_rel) = if let Some(colon_pos) = find_entry_colon(text) {
+        let before = text[..colon_pos].trim_end();
+        let colon_col = col_base + colon_pos;
+        let colon = Some(cursor.make_range(line_idx, colon_col, line_idx, colon_col + 1));
+        (before, colon, Some(colon_pos))
+    } else {
+        // No separator — whole text is the name
+        let names = parse_name_list(text, line_idx, col_base, cursor);
+        return ParamHeaderParts {
+            names,
+            colon: None,
+            param_type: None,
+            optional: None,
+            default_keyword: None,
+            default_separator: None,
+            default_value: None,
+            header_end_line: line_idx,
         };
+    };
 
     let names = parse_name_list(name_str, line_idx, col_base, cursor);
 
-    let type_str = match type_str {
-        Some(t) if !t.is_empty() => t,
-        _ => {
-            return ParamHeaderParts {
-                names,
-                colon: colon_span,
-                param_type: None,
-                optional: None,
-                default_keyword: None,
-                default_separator: None,
-                default_value: None,
-            };
+    let colon_rel = colon_rel.unwrap();
+    let after_colon = &text[colon_rel + 1..];
+    let after_trimmed = after_colon.trim();
+
+    if after_trimmed.is_empty() {
+        return ParamHeaderParts {
+            names,
+            colon: colon_span,
+            param_type: None,
+            optional: None,
+            default_keyword: None,
+            default_separator: None,
+            default_value: None,
+            header_end_line: line_idx,
+        };
+    }
+
+    // Determine the full type text, potentially spanning multiple lines.
+    // `after_trimmed` is a subslice of cursor.source(), so we can use
+    // substr_offset to get its absolute byte position.
+    let type_abs_start = cursor.substr_offset(after_trimmed);
+
+    // Check if brackets are balanced on the current line.
+    let opens: usize = after_trimmed
+        .bytes()
+        .filter(|&b| matches!(b, b'(' | b'[' | b'{' | b'<'))
+        .count();
+    let closes: usize = after_trimmed
+        .bytes()
+        .filter(|&b| matches!(b, b')' | b']' | b'}' | b'>'))
+        .count();
+
+    let (type_text, header_end_line) = if opens > closes {
+        // Unclosed bracket — find the first opening bracket and its match
+        let first_open_rel = after_trimmed
+            .bytes()
+            .position(|b| matches!(b, b'(' | b'[' | b'{' | b'<'))
+            .unwrap();
+        let abs_open = type_abs_start + first_open_rel;
+        if let Some(abs_close) = cursor.find_matching_close(abs_open) {
+            let close_line_idx = cursor.offset_to_line_col(abs_close).0;
+            // Include everything from type start through end of close bracket's line
+            let close_line_text = cursor.line_text(close_line_idx);
+            let close_line_end =
+                cursor.substr_offset(close_line_text) + close_line_text.trim_end().len();
+            let full = &cursor.source()[type_abs_start..close_line_end];
+            (full, close_line_idx)
+        } else {
+            // No matching close found — treat as single-line
+            (after_trimmed, line_idx)
         }
+    } else {
+        (after_trimmed, line_idx)
     };
 
-    // Column where the type part starts in the line.
-    let after_colon = &text[colon_rel + 1..];
-    let ws_after = after_colon.len() - after_colon.trim_start().len();
-    let type_col = col_base + colon_rel + 1 + ws_after;
-
-    // Split the type annotation into bracket-aware, comma-separated segments
-    // and classify each one.
+    // Now classify segments within `type_text` using bracket-aware comma splitting.
     let mut optional: Option<TextRange> = None;
     let mut default_keyword: Option<TextRange> = None;
     let mut default_separator: Option<TextRange> = None;
     let mut default_value: Option<TextRange> = None;
-    let mut type_parts: Vec<&str> = Vec::new();
-    let mut type_parts_end: usize = 0; // byte end offset of last type part in type_str
+    let mut type_parts_end: usize = 0; // byte end offset of last type part in type_text
 
-    for (seg_offset, seg_raw) in split_comma_parts(type_str) {
+    for (seg_offset, seg_raw) in split_comma_parts(type_text) {
         let seg = seg_raw.trim();
         if seg.is_empty() {
             continue;
         }
 
         if seg == "optional" {
-            // Record the "optional" span
-            let ws_lead = seg_raw.len() - seg_raw.trim_start().len();
-            let opt_col = type_col + seg_offset + ws_lead;
-            optional =
-                Some(cursor.make_range(line_idx, opt_col, line_idx, opt_col + "optional".len()));
+            let seg_abs =
+                type_abs_start + seg_offset + (seg_raw.len() - seg_raw.trim_start().len());
+            optional = Some(TextRange::from_offset_len(seg_abs, "optional".len()));
         } else if seg.starts_with("default") {
-            // Record the "default" keyword span
             let ws_lead = seg_raw.len() - seg_raw.trim_start().len();
-            let kw_col = type_col + seg_offset + ws_lead;
-            default_keyword =
-                Some(cursor.make_range(line_idx, kw_col, line_idx, kw_col + "default".len()));
+            let kw_abs = type_abs_start + seg_offset + ws_lead;
+            default_keyword = Some(TextRange::from_offset_len(kw_abs, "default".len()));
 
-            // Check for separator (`=` or `:`) and value
             let after_kw = seg["default".len()..].trim_start();
             if let Some(rest) = after_kw.strip_prefix('=') {
                 let sep_pos = seg.find('=').unwrap();
-                let sep_col = kw_col + sep_pos;
-                default_separator =
-                    Some(cursor.make_range(line_idx, sep_col, line_idx, sep_col + 1));
+                let sep_abs = kw_abs + sep_pos;
+                default_separator = Some(TextRange::from_offset_len(sep_abs, 1));
                 let val = rest.trim_start();
                 if !val.is_empty() {
-                    let val_offset = type_str[seg_offset..].find(val).unwrap_or(0) + seg_offset;
-                    let val_col = type_col + val_offset;
-                    default_value =
-                        Some(cursor.make_range(line_idx, val_col, line_idx, val_col + val.len()));
+                    let val_abs = cursor.substr_offset(val);
+                    default_value = Some(TextRange::from_offset_len(val_abs, val.len()));
                 }
             } else if let Some(rest) = after_kw.strip_prefix(':') {
                 let sep_pos = seg.rfind(':').unwrap();
-                let sep_col = kw_col + sep_pos;
-                default_separator =
-                    Some(cursor.make_range(line_idx, sep_col, line_idx, sep_col + 1));
+                let sep_abs = kw_abs + sep_pos;
+                default_separator = Some(TextRange::from_offset_len(sep_abs, 1));
                 let val = rest.trim_start();
                 if !val.is_empty() {
-                    let val_offset = type_str[seg_offset..].find(val).unwrap_or(0) + seg_offset;
-                    let val_col = type_col + val_offset;
-                    default_value =
-                        Some(cursor.make_range(line_idx, val_col, line_idx, val_col + val.len()));
+                    let val_abs = cursor.substr_offset(val);
+                    default_value = Some(TextRange::from_offset_len(val_abs, val.len()));
                 }
             } else {
-                // No separator — value follows whitespace (e.g., "default True")
                 let val = after_kw.trim_start();
                 if !val.is_empty() {
-                    let val_offset = type_str[seg_offset..].find(val).unwrap_or(0) + seg_offset;
-                    let val_col = type_col + val_offset;
-                    default_value =
-                        Some(cursor.make_range(line_idx, val_col, line_idx, val_col + val.len()));
+                    let val_abs = cursor.substr_offset(val);
+                    default_value = Some(TextRange::from_offset_len(val_abs, val.len()));
                 }
             }
         } else {
-            // This is a real type segment
-            type_parts.push(seg);
+            // Real type segment
             type_parts_end = seg_offset + seg_raw.trim_end().len();
         }
     }
 
-    let param_type = if type_parts.is_empty() {
+    let param_type = if type_parts_end == 0 {
         None
     } else {
-        // Reconstruct the clean type and locate it in source
-        let clean = &type_str[..type_parts_end].trim_end_matches(',').trim_end();
-        let tc = type_col;
-        Some(cursor.make_range(line_idx, tc, line_idx, tc + clean.len()))
+        let clean = type_text[..type_parts_end].trim_end_matches(',').trim_end();
+        Some(TextRange::from_offset_len(type_abs_start, clean.len()))
     };
 
     ParamHeaderParts {
@@ -626,6 +652,7 @@ fn parse_name_and_type(
         default_keyword,
         default_separator,
         default_value,
+        header_end_line,
     }
 }
 
@@ -733,6 +760,8 @@ fn parse_returns(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Nu
 
 /// Parse the Raises section body.
 ///
+/// Supports both bare exception types and `ExcType : description` format.
+///
 /// On return, `cursor.line` points to the first line after the section.
 fn parse_raises(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<NumPyException> {
     let mut raises = Vec::new();
@@ -745,10 +774,44 @@ fn parse_raises(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Num
             let col = cursor.current_indent();
             let entry_start = cursor.line;
 
-            let exc_type = cursor.make_range(cursor.line, col, cursor.line, col + trimmed.len());
+            let (exc_type, colon, first_desc) = if let Some(colon_pos) = find_entry_colon(trimmed) {
+                let type_str = trimmed[..colon_pos].trim_end();
+                let after_colon = &trimmed[colon_pos + 1..];
+                let desc_str = after_colon.trim();
+                let ws_after = after_colon.len() - after_colon.trim_start().len();
+                let colon_col = col + colon_pos;
+                let desc_col = col + colon_pos + 1 + ws_after;
+
+                let et = cursor.make_range(cursor.line, col, cursor.line, col + type_str.len());
+                let c = Some(cursor.make_range(cursor.line, colon_col, cursor.line, colon_col + 1));
+                let fd = if desc_str.is_empty() {
+                    TextRange::empty()
+                } else {
+                    cursor.make_range(
+                        cursor.line,
+                        desc_col,
+                        cursor.line,
+                        desc_col + desc_str.len(),
+                    )
+                };
+                (et, c, fd)
+            } else {
+                // Bare type, no colon
+                let et = cursor.make_range(cursor.line, col, cursor.line, col + trimmed.len());
+                (et, None, TextRange::empty())
+            };
 
             cursor.advance();
-            let desc = collect_description(cursor, end, entry_indent);
+            let cont_desc = collect_description(cursor, end, entry_indent);
+
+            // Merge first-line description with continuation
+            let desc = if first_desc.is_empty() {
+                cont_desc
+            } else if cont_desc.is_empty() {
+                first_desc
+            } else {
+                TextRange::new(first_desc.start(), cont_desc.end())
+            };
 
             let (entry_end_line, entry_end_col) = if desc.is_empty() {
                 (entry_start, col + trimmed.len())
@@ -759,6 +822,7 @@ fn parse_raises(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Num
             raises.push(NumPyException {
                 range: cursor.make_range(entry_start, col, entry_end_line, entry_end_col),
                 r#type: exc_type,
+                colon,
                 description: desc,
             });
             continue;

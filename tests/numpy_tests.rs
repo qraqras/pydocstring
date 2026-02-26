@@ -1024,3 +1024,130 @@ fn test_tab_indented_raises() {
         "If the input is invalid."
     );
 }
+
+// =============================================================================
+// Raises colon splitting tests
+// =============================================================================
+
+/// Raises with colon separating type and description on the same line.
+#[test]
+fn test_raises_colon_split() {
+    let docstring = "Summary.\n\nRaises\n------\nValueError : If the input is invalid.\nTypeError : If the type is wrong.";
+    let result = parse_numpy(docstring);
+    let exc = raises(&result);
+    assert_eq!(exc.len(), 2);
+    assert_eq!(exc[0].r#type.source_text(&result.source), "ValueError");
+    assert!(exc[0].colon.is_some());
+    assert_eq!(
+        exc[0].description.source_text(&result.source),
+        "If the input is invalid."
+    );
+    assert_eq!(exc[1].r#type.source_text(&result.source), "TypeError");
+    assert!(exc[1].colon.is_some());
+    assert_eq!(
+        exc[1].description.source_text(&result.source),
+        "If the type is wrong."
+    );
+}
+
+/// Raises without colon (bare type, description on next line).
+#[test]
+fn test_raises_no_colon() {
+    let docstring = "Summary.\n\nRaises\n------\nValueError\n    If the input is invalid.";
+    let result = parse_numpy(docstring);
+    let exc = raises(&result);
+    assert_eq!(exc.len(), 1);
+    assert_eq!(exc[0].r#type.source_text(&result.source), "ValueError");
+    assert!(exc[0].colon.is_none());
+    assert_eq!(
+        exc[0].description.source_text(&result.source),
+        "If the input is invalid."
+    );
+}
+
+/// Raises with colon and continuation description on next lines.
+#[test]
+fn test_raises_colon_with_continuation() {
+    let docstring = "Summary.\n\nRaises\n------\nValueError : If bad.\n    More detail here.";
+    let result = parse_numpy(docstring);
+    let exc = raises(&result);
+    assert_eq!(exc.len(), 1);
+    assert_eq!(exc[0].r#type.source_text(&result.source), "ValueError");
+    assert!(exc[0].colon.is_some());
+    let desc = exc[0].description.source_text(&result.source);
+    assert!(desc.contains("If bad."), "desc = {:?}", desc);
+    assert!(desc.contains("More detail here."), "desc = {:?}", desc);
+}
+
+// =============================================================================
+// Multi-line type annotation tests
+// =============================================================================
+
+/// Parameter with multi-line type annotation (brackets spanning lines).
+#[test]
+fn test_multiline_type_annotation() {
+    let docstring = "Summary.\n\nParameters\n----------\nx : Dict[str,\n    int]\n    The mapping.";
+    let result = parse_numpy(docstring);
+    let params = parameters(&result);
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].names[0].source_text(&result.source), "x");
+    let type_text = params[0]
+        .r#type
+        .as_ref()
+        .unwrap()
+        .source_text(&result.source);
+    assert_eq!(type_text, "Dict[str,\n    int]");
+    assert_eq!(
+        params[0].description.source_text(&result.source),
+        "The mapping."
+    );
+}
+
+/// Parameter with multi-line type and optional marker after closing bracket.
+#[test]
+fn test_multiline_type_with_optional() {
+    let docstring =
+        "Summary.\n\nParameters\n----------\nx : Dict[str,\n    int], optional\n    The mapping.";
+    let result = parse_numpy(docstring);
+    let params = parameters(&result);
+    assert_eq!(params.len(), 1);
+    let type_text = params[0]
+        .r#type
+        .as_ref()
+        .unwrap()
+        .source_text(&result.source);
+    assert_eq!(type_text, "Dict[str,\n    int]");
+    assert!(params[0].optional.is_some());
+    assert_eq!(
+        params[0]
+            .optional
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
+        "optional"
+    );
+}
+
+/// Multiple parameters where the first has a multi-line type.
+#[test]
+fn test_multiline_type_followed_by_another_param() {
+    let docstring = "Summary.\n\nParameters\n----------\nx : Dict[str,\n    int]\n    The mapping.\ny : str\n    The name.";
+    let result = parse_numpy(docstring);
+    let params = parameters(&result);
+    assert_eq!(params.len(), 2);
+    let type_text = params[0]
+        .r#type
+        .as_ref()
+        .unwrap()
+        .source_text(&result.source);
+    assert_eq!(type_text, "Dict[str,\n    int]");
+    assert_eq!(params[1].names[0].source_text(&result.source), "y");
+    assert_eq!(
+        params[1]
+            .r#type
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
+        "str"
+    );
+}

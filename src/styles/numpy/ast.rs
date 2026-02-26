@@ -313,6 +313,8 @@ pub struct NumPyException {
     pub range: TextRange,
     /// Exception type with its span.
     pub r#type: TextRange,
+    /// The colon (`:`) separating type from description, with its span, if present.
+    pub colon: Option<TextRange>,
     /// Description of when raised, with its span.
     pub description: TextRange,
 }
@@ -324,6 +326,8 @@ pub struct NumPyWarning {
     pub range: TextRange,
     /// Warning type (e.g., "DeprecationWarning") with its span.
     pub r#type: TextRange,
+    /// The colon (`:`) separating type from description, with its span, if present.
+    pub colon: Option<TextRange>,
     /// When the warning is issued, with its span.
     pub description: TextRange,
 }
