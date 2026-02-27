@@ -458,6 +458,10 @@ impl Default for GoogleDocstring {
 
 impl fmt::Display for GoogleDocstring {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "GoogleDocstring(summary: {})", self.summary.source_text(&self.source))
+        write!(
+            f,
+            "GoogleDocstring(summary: {})",
+            self.summary.source_text(&self.source)
+        )
     }
 }

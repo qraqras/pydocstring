@@ -600,12 +600,12 @@ fn parse_name_and_type(
             let seg_abs =
                 type_abs_start + seg_offset + (seg_raw.len() - seg_raw.trim_start().len());
             optional = Some(TextRange::from_offset_len(seg_abs, "optional".len()));
-        } else if seg.starts_with("default") {
+        } else if let Some(stripped) = seg.strip_prefix("default") {
             let ws_lead = seg_raw.len() - seg_raw.trim_start().len();
             let kw_abs = type_abs_start + seg_offset + ws_lead;
             default_keyword = Some(TextRange::from_offset_len(kw_abs, "default".len()));
 
-            let after_kw = seg["default".len()..].trim_start();
+            let after_kw = stripped.trim_start();
             if let Some(rest) = after_kw.strip_prefix('=') {
                 let sep_pos = seg.find('=').unwrap();
                 let sep_abs = kw_abs + sep_pos;
@@ -986,10 +986,10 @@ fn parse_references(
                 let end_col = current_col + content.lines().last().unwrap_or("").len();
                 refs.push(crate::styles::numpy::ast::NumPyReference {
                     range: cursor.make_range(start_l, current_col, end_l, end_col),
-                    directive_marker: current_directive_marker.clone(),
-                    open_bracket: current_open_bracket.clone(),
-                    number: current_number.clone(),
-                    close_bracket: current_close_bracket.clone(),
+                    directive_marker: current_directive_marker,
+                    open_bracket: current_open_bracket,
+                    number: current_number,
+                    close_bracket: current_close_bracket,
                     content: cursor.make_range(start_l, current_col, end_l, end_col),
                 });
             }
@@ -1035,10 +1035,10 @@ fn parse_references(
                 let end_col = current_col + content.lines().last().unwrap_or("").len();
                 refs.push(crate::styles::numpy::ast::NumPyReference {
                     range: cursor.make_range(start_l, current_col, end_l, end_col),
-                    directive_marker: current_directive_marker.clone(),
-                    open_bracket: current_open_bracket.clone(),
-                    number: current_number.clone(),
-                    close_bracket: current_close_bracket.clone(),
+                    directive_marker: current_directive_marker,
+                    open_bracket: current_open_bracket,
+                    number: current_number,
+                    close_bracket: current_close_bracket,
                     content: cursor.make_range(start_l, current_col, end_l, end_col),
                 });
                 current_content_lines.clear();
