@@ -1,6 +1,6 @@
 [package]
 name = "pydocstring"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
 authors = ["Ryuma Asai"]
 description = "A fast, zero-dependency Rust parser for Python docstrings (NumPy and Google styles) with full AST and source location tracking"
