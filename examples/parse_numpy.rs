@@ -57,8 +57,11 @@ Examples
             NumPySectionBody::Parameters(params) => {
                 println!("\nParameters:");
                 for param in params {
-                    let names: Vec<&str> =
-                        param.names.iter().map(|n| n.source_text(&doc.source)).collect();
+                    let names: Vec<&str> = param
+                        .names
+                        .iter()
+                        .map(|n| n.source_text(&doc.source))
+                        .collect();
                     println!(
                         "  - {:?}: {:?}",
                         names,
@@ -80,7 +83,11 @@ Examples
             NumPySectionBody::Raises(excs) => {
                 println!("\nRaises:");
                 for exc in excs {
-                    println!("  - {}: {}", exc.r#type.source_text(&doc.source), exc.description.source_text(&doc.source));
+                    println!(
+                        "  - {}: {}",
+                        exc.r#type.source_text(&doc.source),
+                        exc.description.source_text(&doc.source)
+                    );
                 }
             }
             NumPySectionBody::Notes(text) => {

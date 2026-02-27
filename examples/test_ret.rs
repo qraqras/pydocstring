@@ -1,5 +1,5 @@
-use pydocstring::google::parse_google;
 use pydocstring::GoogleSectionBody;
+use pydocstring::google::parse_google;
 
 fn main() {
     let input = "\
@@ -22,7 +22,11 @@ Returns:
     for (idx, item) in doc.items.iter().enumerate() {
         match item {
             pydocstring::GoogleDocstringItem::Section(s) => {
-                println!("Item {}: Section {:?}", idx, s.header.name.source_text(&doc.source));
+                println!(
+                    "Item {}: Section {:?}",
+                    idx,
+                    s.header.name.source_text(&doc.source)
+                );
                 if let GoogleSectionBody::Returns(ref ret) = s.body {
                     let type_str = ret.return_type.as_ref().map(|t| t.source_text(&doc.source));
                     let d = &ret.description.source_text(&doc.source);

@@ -43,10 +43,16 @@ Raises:
         .collect();
     println!("\nArgs ({}):", args.len());
     for arg in &args {
-        let type_str = arg.r#type.as_ref().map(|t| t.source_text(&doc.source)).unwrap_or("?");
+        let type_str = arg
+            .r#type
+            .as_ref()
+            .map(|t| t.source_text(&doc.source))
+            .unwrap_or("?");
         println!(
             "  {} ({}): {}",
-            arg.name.source_text(&doc.source), type_str, arg.description.source_text(&doc.source)
+            arg.name.source_text(&doc.source),
+            type_str,
+            arg.description.source_text(&doc.source)
         );
     }
 
@@ -63,7 +69,11 @@ Raises:
             .as_ref()
             .map(|t| t.source_text(&doc.source))
             .unwrap_or("?");
-        println!("\nReturns: {}: {}", type_str, ret.description.source_text(&doc.source));
+        println!(
+            "\nReturns: {}: {}",
+            type_str,
+            ret.description.source_text(&doc.source)
+        );
     }
 
     let raises: Vec<_> = doc
@@ -80,7 +90,11 @@ Raises:
         .collect();
     println!("\nRaises ({}):", raises.len());
     for exc in &raises {
-        println!("  {}: {}", exc.r#type.source_text(&doc.source), exc.description.source_text(&doc.source));
+        println!(
+            "  {}: {}",
+            exc.r#type.source_text(&doc.source),
+            exc.description.source_text(&doc.source)
+        );
     }
 
     let all_sections: Vec<_> = doc
@@ -95,7 +109,8 @@ Raises:
     for section in &all_sections {
         println!(
             "  {} (header: {:?})",
-            section.header.name.source_text(&doc.source), section.header.range
+            section.header.name.source_text(&doc.source),
+            section.header.range
         );
     }
 }
