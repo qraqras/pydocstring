@@ -18,7 +18,7 @@
 //! "#;
 //!
 //! let result = parse_numpy(docstring);
-//! assert_eq!(result.summary.source_text(&result.source), "Brief description.");
+//! assert_eq!(result.summary.as_ref().unwrap().source_text(&result.source), "Brief description.");
 //! ```
 //!
 //! ## Style Auto-Detection

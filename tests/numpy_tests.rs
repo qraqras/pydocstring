@@ -115,7 +115,7 @@ fn test_simple_summary() {
     let result = parse_numpy(docstring);
 
     assert_eq!(
-        result.summary.source_text(&result.source),
+        result.summary.as_ref().unwrap().source_text(&result.source),
         "This is a brief summary."
     );
     assert!(result.extended_summary.is_none());
@@ -127,13 +127,13 @@ fn test_parse_simple_span() {
     let docstring = "Brief description.";
     let result = parse_numpy(docstring);
     assert_eq!(
-        result.summary.source_text(&result.source),
+        result.summary.as_ref().unwrap().source_text(&result.source),
         "Brief description."
     );
-    assert_eq!(result.summary.start(), TextSize::new(0));
-    assert_eq!(result.summary.end(), TextSize::new(18));
+    assert_eq!(result.summary.as_ref().unwrap().start(), TextSize::new(0));
+    assert_eq!(result.summary.as_ref().unwrap().end(), TextSize::new(18));
     assert_eq!(
-        result.summary.source_text(&result.source),
+        result.summary.as_ref().unwrap().source_text(&result.source),
         "Brief description."
     );
 }
@@ -147,20 +147,46 @@ more details about the function.
 "#;
     let result = parse_numpy(docstring);
 
-    assert_eq!(result.summary.source_text(&result.source), "Brief summary.");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Brief summary."
+    );
     assert!(result.extended_summary.is_some());
+}
+
+#[test]
+fn test_multiline_summary() {
+    let docstring = "This is a long summary\nthat spans two lines.\n\nExtended description.";
+    let result = parse_numpy(docstring);
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "This is a long summary\nthat spans two lines."
+    );
+    let desc = result.extended_summary.as_ref().unwrap();
+    assert_eq!(desc.source_text(&result.source), "Extended description.");
+}
+
+#[test]
+fn test_multiline_summary_no_extended() {
+    let docstring = "Summary line one\ncontinues here.";
+    let result = parse_numpy(docstring);
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Summary line one\ncontinues here."
+    );
+    assert!(result.extended_summary.is_none());
 }
 
 #[test]
 fn test_empty_docstring() {
     let result = parse_numpy("");
-    assert_eq!(result.summary.source_text(&result.source), "");
+    assert!(result.summary.is_none());
 }
 
 #[test]
 fn test_whitespace_only_docstring() {
     let result = parse_numpy("   \n\n   ");
-    assert_eq!(result.summary.source_text(&result.source), "");
+    assert!(result.summary.is_none());
 }
 
 #[test]
@@ -190,7 +216,10 @@ b : int
 "#;
     let result = parse_numpy(docstring);
     // The signature-like line is now parsed as the summary
-    assert_eq!(result.summary.source_text(&result.source), "add(a, b)");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "add(a, b)"
+    );
     assert_eq!(parameters(&result).len(), 2);
 }
 
@@ -241,7 +270,7 @@ int
     let result = parse_numpy(docstring);
 
     assert_eq!(
-        result.summary.source_text(&result.source),
+        result.summary.as_ref().unwrap().source_text(&result.source),
         "Calculate the sum of two numbers."
     );
     assert_eq!(parameters(&result).len(), 2);
@@ -734,7 +763,10 @@ x : int
     let result = parse_numpy(docstring);
     let src = &result.source;
 
-    assert_eq!(result.summary.source_text(src), "Summary line.");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(src),
+        "Summary line."
+    );
     assert_eq!(
         sections(&result)[0].header.name.source_text(src),
         "Parameters"
@@ -789,7 +821,10 @@ fn test_indented_docstring() {
     let docstring = "    Summary line.\n\n    Parameters\n    ----------\n    x : int\n        Description of x.\n    y : str, optional\n        Description of y.\n\n    Returns\n    -------\n    bool\n        The result.\n";
     let result = parse_numpy(docstring);
 
-    assert_eq!(result.summary.source_text(&result.source), "Summary line.");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Summary line."
+    );
     assert_eq!(parameters(&result).len(), 2);
     assert_eq!(
         parameters(&result)[0].names[0].source_text(&result.source),
@@ -817,7 +852,10 @@ fn test_indented_docstring() {
     );
 
     // Spans point to correct positions in indented source
-    assert_eq!(result.summary.source_text(&result.source), "Summary line.");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Summary line."
+    );
     assert_eq!(
         parameters(&result)[0].names[0].source_text(&result.source),
         "x"
@@ -837,7 +875,10 @@ fn test_deeply_indented_docstring() {
     let docstring = "        Brief.\n\n        Parameters\n        ----------\n        a : float\n            The value.\n\n        Raises\n        ------\n        ValueError\n            If bad.\n";
     let result = parse_numpy(docstring);
 
-    assert_eq!(result.summary.source_text(&result.source), "Brief.");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Brief."
+    );
     assert_eq!(parameters(&result).len(), 1);
     assert_eq!(
         parameters(&result)[0].names[0].source_text(&result.source),
@@ -859,7 +900,10 @@ fn test_indented_with_deprecation() {
     let docstring = "    Summary.\n\n    .. deprecated:: 2.0.0\n        Use new_func instead.\n\n    Parameters\n    ----------\n    x : int\n        Desc.\n";
     let result = parse_numpy(docstring);
 
-    assert_eq!(result.summary.source_text(&result.source), "Summary.");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Summary."
+    );
     let dep = result
         .deprecation
         .as_ref()
@@ -883,7 +927,10 @@ fn test_mixed_indent_first_line() {
         "Summary.\n\n    Parameters\n    ----------\n    x : int\n        Description.\n";
     let result = parse_numpy(docstring);
 
-    assert_eq!(result.summary.source_text(&result.source), "Summary.");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Summary."
+    );
     assert_eq!(parameters(&result).len(), 1);
     assert_eq!(
         parameters(&result)[0].names[0].source_text(&result.source),

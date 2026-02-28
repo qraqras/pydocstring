@@ -17,7 +17,12 @@ Returns:
   table (and require_all_keys must have been False).
 ";
     let doc = parse_google(input);
-    println!("Summary: {:?}", doc.summary.source_text(&doc.source));
+    println!(
+        "Summary: {:?}",
+        doc.summary
+            .as_ref()
+            .map_or("", |s| s.source_text(&doc.source))
+    );
     println!("Items: {}", doc.items.len());
     for (idx, item) in doc.items.iter().enumerate() {
         match item {

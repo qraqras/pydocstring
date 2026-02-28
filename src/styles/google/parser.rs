@@ -18,7 +18,7 @@
 //! ```
 
 use crate::ast::TextRange;
-use crate::cursor::{Cursor, indent_columns, indent_len};
+use crate::cursor::{LineCursor, indent_columns, indent_len};
 use crate::styles::google::ast::{
     GoogleArg, GoogleAttribute, GoogleDocstring, GoogleDocstringItem, GoogleException,
     GoogleMethod, GoogleReturns, GoogleSection, GoogleSectionBody, GoogleSectionHeader,
@@ -42,9 +42,9 @@ fn extract_section_name(trimmed: &str) -> (&str, bool) {
     }
 }
 
-/// Check if a line is a Google-style section header at the given base indentation.
+/// Check if a line is a Google-style section header.
 ///
-/// A section header is a line at `base_indent` that matches one of:
+/// A section header is a line that matches one of:
 /// - `Word:` / `Two Words:` — standard form with colon
 /// - `Word :` — colon preceded by whitespace
 /// - `Word` — colonless form, only for known section names
@@ -53,12 +53,13 @@ fn extract_section_name(trimmed: &str) -> (&str, bool) {
 /// embedded colons) is accepted (dispatched as Unknown if unrecognised).
 /// For the colonless form, only names in [`KNOWN_SECTIONS`] are accepted
 /// to avoid treating ordinary text lines as headers.
-fn is_section_header(line: &str, base_indent: usize) -> bool {
-    let indent = indent_columns(line);
-    if indent != base_indent {
-        return false;
-    }
-    let trimmed = line.trim();
+///
+/// The caller must pass a line with leading / trailing whitespace
+/// already stripped.  Indentation is intentionally **not** checked
+/// here so that the parser remains tolerant of irregular formatting.
+/// Indent-level validation is left to a downstream lint pass that can
+/// inspect the parsed AST.
+fn is_section_header(trimmed: &str) -> bool {
     let (name, has_colon) = extract_section_name(trimmed);
 
     if name.is_empty() || !name.starts_with(|c: char| c.is_ascii_alphabetic()) {
@@ -67,8 +68,10 @@ fn is_section_header(line: &str, base_indent: usize) -> bool {
 
     if has_colon {
         // Standard / space-before-colon form: accept any short name without
-        // embedded colons.
-        name.len() <= 40 && !name.contains(':')
+        // embedded colons or entry-like characters (brackets, asterisks).
+        name.len() <= 40
+            && !name.contains(':')
+            && name.chars().all(|c| c.is_alphanumeric() || c == ' ')
     } else {
         // Colonless form: only known names.
         GoogleSectionKind::is_known(&name.to_ascii_lowercase())
@@ -112,29 +115,70 @@ fn strip_optional(type_content: &str) -> (&str, Option<usize>) {
 }
 
 // =============================================================================
+// Text range collector
+// =============================================================================
+
+/// Collect consecutive lines into a [`TextRange`], stopping at section headers
+/// and EOF.
+///
+/// When `stop_at_blank` is `true`, also stops at blank lines (used for
+/// single-paragraph collection such as Summary).  Leading and trailing
+/// blank lines within the collected range are excluded from the span.
+///
+/// On return, `cursor.line` points to the first unconsumed line.
+fn collect_text_range(cursor: &mut LineCursor, stop_at_blank: bool) -> TextRange {
+    let mut first_content: Option<usize> = None;
+    let mut last_content = cursor.line;
+
+    while !cursor.is_eof() {
+        let trimmed = cursor.current_trimmed();
+        if is_section_header(trimmed) || (stop_at_blank && trimmed.is_empty()) {
+            break;
+        }
+        if !trimmed.is_empty() {
+            if first_content.is_none() {
+                first_content = Some(cursor.line);
+            }
+            last_content = cursor.line;
+        }
+        cursor.advance();
+    }
+
+    if let Some(first) = first_content {
+        let first_line = cursor.line_text(first);
+        let first_col = indent_len(first_line);
+        let last_line = cursor.line_text(last_content);
+        let last_col = indent_len(last_line) + last_line.trim().len();
+        cursor.make_range(first, first_col, last_content, last_col)
+    } else {
+        TextRange::empty()
+    }
+}
+
+// =============================================================================
 // Description collector
 // =============================================================================
 
 /// Collect indented description continuation lines starting at `cursor.line`.
 ///
 /// Stops at:
-/// - Section headers at `base_indent`
+/// - Section headers (detected by pattern)
 /// - Non-empty lines at or below `entry_indent` (i.e. a new entry)
 /// - End of input
 ///
 /// On return, `cursor.line` points to the first unconsumed line.
-fn collect_description(cursor: &mut Cursor, entry_indent: usize, base_indent: usize) -> TextRange {
+fn collect_description(cursor: &mut LineCursor, entry_indent: usize) -> TextRange {
     let mut desc_parts: Vec<&str> = Vec::new();
     let mut first_content_line: Option<usize> = None;
     let mut last_content_line = cursor.line;
 
     while !cursor.is_eof() {
         let line = cursor.current_line_text();
-        if is_section_header(line, base_indent) {
+        let trimmed = line.trim();
+
+        if is_section_header(trimmed) {
             break;
         }
-
-        let trimmed = line.trim();
 
         // Non-empty line at or below entry indent ⇒ new entry
         if !trimmed.is_empty() && indent_columns(line) <= entry_indent {
@@ -234,7 +278,7 @@ struct EntryHeader {
 ///
 /// Does **not** advance the cursor — the caller must derive the end line
 /// from `header.range` and advance past it.
-fn parse_entry_header(cursor: &Cursor) -> EntryHeader {
+fn parse_entry_header(cursor: &LineCursor) -> EntryHeader {
     let line = cursor.current_line_text();
     let trimmed = line.trim();
     let entry_start = cursor.substr_offset(trimmed);
@@ -399,7 +443,7 @@ fn extract_desc_after_colon(
 /// let input = "Summary.\n\nArgs:\n    x (int): The value.\n\nReturns:\n    int: The result.";
 /// let doc = &parse_google(input);
 ///
-/// assert_eq!(doc.summary.source_text(&doc.source), "Summary.");
+/// assert_eq!(doc.summary.as_ref().unwrap().source_text(&doc.source), "Summary.");
 ///
 /// let args: Vec<_> = doc.items.iter().filter_map(|item| match item {
 ///     pydocstring::GoogleDocstringItem::Section(s) => match &s.body {
@@ -421,79 +465,51 @@ fn extract_desc_after_colon(
 /// assert_eq!(ret.return_type.as_ref().unwrap().source_text(&doc.source), "int");
 /// ```
 pub fn parse_google(input: &str) -> GoogleDocstring {
-    let mut cursor = Cursor::new(input);
-    let mut docstring = GoogleDocstring::new();
-    docstring.source = input.to_string();
+    let mut line_cursor = LineCursor::new(input);
+    let mut docstring = GoogleDocstring::new(input);
 
-    if cursor.total_lines() == 0 {
+    line_cursor.skip_blanks();
+    if line_cursor.is_eof() {
         return docstring;
     }
-
-    // --- Skip leading blank lines ---
-    cursor.skip_blank_lines();
-    if cursor.is_eof() {
-        return docstring;
-    }
-
-    // Detect base indentation from the first non-empty line
-    let base_indent = cursor.current_indent_columns();
 
     // --- Summary ---
-    if !is_section_header(cursor.current_line_text(), base_indent) {
-        let trimmed = cursor.current_trimmed();
-        if !trimmed.is_empty() {
-            let col = cursor.current_indent();
-            docstring.summary =
-                cursor.make_range(cursor.line, col, cursor.line, col + trimmed.len());
-            cursor.advance();
+    if !is_section_header(line_cursor.current_trimmed()) {
+        let range = collect_text_range(&mut line_cursor, true);
+        if !range.is_empty() {
+            docstring.summary = Some(range);
+        }
+        line_cursor.skip_blanks();
+        if line_cursor.is_eof() {
+            docstring.range = line_cursor.full_range();
+            return docstring;
         }
     }
 
-    // skip blanks
-    cursor.skip_blank_lines();
-
-    // --- Extended description ---
-    if !cursor.is_eof() && !is_section_header(cursor.current_line_text(), base_indent) {
-        let start_line = cursor.line;
-        let mut desc_lines: Vec<&str> = Vec::new();
-        let mut last_non_empty = cursor.line;
-
-        while !cursor.is_eof() && !is_section_header(cursor.current_line_text(), base_indent) {
-            let trimmed = cursor.current_trimmed();
-            desc_lines.push(trimmed);
-            if !trimmed.is_empty() {
-                last_non_empty = cursor.line;
-            }
-            cursor.advance();
+    // --- Extended Summary ---
+    if !is_section_header(line_cursor.current_trimmed()) {
+        let range = collect_text_range(&mut line_cursor, false);
+        if !range.is_empty() {
+            docstring.extended_summary = Some(range);
         }
-
-        let keep = last_non_empty - start_line + 1;
-        desc_lines.truncate(keep);
-
-        let joined = desc_lines.join("\n");
-        if !joined.trim().is_empty() {
-            let first_line = cursor.line_text(start_line);
-            let first_col = indent_len(first_line);
-            let last_line = cursor.line_text(last_non_empty);
-            let last_trimmed = last_line.trim();
-            let last_col = indent_len(last_line) + last_trimmed.len();
-            docstring.extended_summary =
-                Some(cursor.make_range(start_line, first_col, last_non_empty, last_col));
+        line_cursor.skip_blanks();
+        if line_cursor.is_eof() {
+            docstring.range = line_cursor.full_range();
+            return docstring;
         }
     }
 
     // --- Sections ---
-    while !cursor.is_eof() {
-        if cursor.current_is_blank() {
-            cursor.advance();
+    while !line_cursor.is_eof() {
+        if line_cursor.current_is_blank() {
+            line_cursor.advance();
             continue;
         }
 
-        if is_section_header(cursor.current_line_text(), base_indent) {
-            let section_start = cursor.line;
-            let header_line = cursor.current_line_text();
-            let header_trimmed = header_line.trim();
-            let header_col = cursor.current_indent();
+        let header_trimmed = line_cursor.current_trimmed();
+        if is_section_header(header_trimmed) {
+            let section_start = line_cursor.line;
+            let header_col = line_cursor.current_indent();
 
             // Extract the section name and whether a colon is present.
             // Handles "Args:", "Args :", and colonless "Args".
@@ -503,7 +519,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
             let colon = if has_colon {
                 // Colon is always the last character of the trimmed line
                 let colon_col = header_col + header_trimmed.len() - 1;
-                Some(cursor.make_range(cursor.line, colon_col, cursor.line, colon_col + 1))
+                Some(line_cursor.make_line_range(line_cursor.line, colon_col, 1))
             } else {
                 None
             };
@@ -512,50 +528,42 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
             let section_kind = GoogleSectionKind::from_name(&normalized);
 
             let header = GoogleSectionHeader {
-                range: cursor.make_range(
-                    cursor.line,
+                range: line_cursor.make_line_range(
+                    line_cursor.line,
                     header_col,
-                    cursor.line,
-                    header_col + header_trimmed.len(),
+                    header_trimmed.len(),
                 ),
                 kind: section_kind,
-                name: cursor.make_range(
-                    cursor.line,
-                    header_col,
-                    cursor.line,
-                    header_col + header_name.len(),
-                ),
+                name: line_cursor.make_line_range(line_cursor.line, header_col, header_name.len()),
                 colon,
             };
 
-            cursor.advance(); // skip header line
+            line_cursor.advance(); // skip header line
             let body = match section_kind {
                 // ----- Parameter-like sections -----
-                GoogleSectionKind::Args => {
-                    GoogleSectionBody::Args(parse_args(&mut cursor, base_indent))
-                }
+                GoogleSectionKind::Args => GoogleSectionBody::Args(parse_args(&mut line_cursor)),
                 GoogleSectionKind::KeywordArgs => {
-                    GoogleSectionBody::KeywordArgs(parse_args(&mut cursor, base_indent))
+                    GoogleSectionBody::KeywordArgs(parse_args(&mut line_cursor))
                 }
                 GoogleSectionKind::OtherParameters => {
-                    GoogleSectionBody::OtherParameters(parse_args(&mut cursor, base_indent))
+                    GoogleSectionBody::OtherParameters(parse_args(&mut line_cursor))
                 }
                 GoogleSectionKind::Receives => {
-                    GoogleSectionBody::Receives(parse_args(&mut cursor, base_indent))
+                    GoogleSectionBody::Receives(parse_args(&mut line_cursor))
                 }
                 // ----- Return/yield sections -----
                 GoogleSectionKind::Returns => {
-                    GoogleSectionBody::Returns(parse_returns_section(&mut cursor, base_indent))
+                    GoogleSectionBody::Returns(parse_returns_section(&mut line_cursor))
                 }
                 GoogleSectionKind::Yields => {
-                    GoogleSectionBody::Yields(parse_returns_section(&mut cursor, base_indent))
+                    GoogleSectionBody::Yields(parse_returns_section(&mut line_cursor))
                 }
                 // ----- Exception/warning sections -----
                 GoogleSectionKind::Raises => {
-                    GoogleSectionBody::Raises(parse_raises_section(&mut cursor, base_indent))
+                    GoogleSectionBody::Raises(parse_raises_section(&mut line_cursor))
                 }
                 GoogleSectionKind::Warns => {
-                    let raises = parse_raises_section(&mut cursor, base_indent);
+                    let raises = parse_raises_section(&mut line_cursor);
                     let warns = raises
                         .into_iter()
                         .map(|e| GoogleWarning {
@@ -569,7 +577,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                 }
                 // ----- Structured sections -----
                 GoogleSectionKind::Attributes => {
-                    let args = parse_args(&mut cursor, base_indent);
+                    let args = parse_args(&mut line_cursor);
                     let attrs = args
                         .into_iter()
                         .map(|a| GoogleAttribute {
@@ -585,7 +593,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                     GoogleSectionBody::Attributes(attrs)
                 }
                 GoogleSectionKind::Methods => {
-                    let args = parse_args(&mut cursor, base_indent);
+                    let args = parse_args(&mut line_cursor);
                     let methods = args
                         .into_iter()
                         .map(|a| GoogleMethod {
@@ -601,55 +609,55 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                     GoogleSectionBody::Methods(methods)
                 }
                 GoogleSectionKind::SeeAlso => {
-                    GoogleSectionBody::SeeAlso(parse_see_also_section(&mut cursor, base_indent))
+                    GoogleSectionBody::SeeAlso(parse_see_also_section(&mut line_cursor))
                 }
                 // ----- Free-text / admonition sections -----
                 GoogleSectionKind::Notes => {
-                    GoogleSectionBody::Notes(parse_section_content(&mut cursor, base_indent))
+                    GoogleSectionBody::Notes(parse_section_content(&mut line_cursor))
                 }
                 GoogleSectionKind::Examples => {
-                    GoogleSectionBody::Examples(parse_section_content(&mut cursor, base_indent))
+                    GoogleSectionBody::Examples(parse_section_content(&mut line_cursor))
                 }
                 GoogleSectionKind::Todo => {
-                    GoogleSectionBody::Todo(parse_section_content(&mut cursor, base_indent))
+                    GoogleSectionBody::Todo(parse_section_content(&mut line_cursor))
                 }
                 GoogleSectionKind::References => {
-                    GoogleSectionBody::References(parse_section_content(&mut cursor, base_indent))
+                    GoogleSectionBody::References(parse_section_content(&mut line_cursor))
                 }
                 GoogleSectionKind::Warnings => {
-                    GoogleSectionBody::Warnings(parse_section_content(&mut cursor, base_indent))
+                    GoogleSectionBody::Warnings(parse_section_content(&mut line_cursor))
                 }
                 GoogleSectionKind::Attention => {
-                    GoogleSectionBody::Attention(parse_section_content(&mut cursor, base_indent))
+                    GoogleSectionBody::Attention(parse_section_content(&mut line_cursor))
                 }
                 GoogleSectionKind::Caution => {
-                    GoogleSectionBody::Caution(parse_section_content(&mut cursor, base_indent))
+                    GoogleSectionBody::Caution(parse_section_content(&mut line_cursor))
                 }
                 GoogleSectionKind::Danger => {
-                    GoogleSectionBody::Danger(parse_section_content(&mut cursor, base_indent))
+                    GoogleSectionBody::Danger(parse_section_content(&mut line_cursor))
                 }
                 GoogleSectionKind::Error => {
-                    GoogleSectionBody::Error(parse_section_content(&mut cursor, base_indent))
+                    GoogleSectionBody::Error(parse_section_content(&mut line_cursor))
                 }
                 GoogleSectionKind::Hint => {
-                    GoogleSectionBody::Hint(parse_section_content(&mut cursor, base_indent))
+                    GoogleSectionBody::Hint(parse_section_content(&mut line_cursor))
                 }
                 GoogleSectionKind::Important => {
-                    GoogleSectionBody::Important(parse_section_content(&mut cursor, base_indent))
+                    GoogleSectionBody::Important(parse_section_content(&mut line_cursor))
                 }
                 GoogleSectionKind::Tip => {
-                    GoogleSectionBody::Tip(parse_section_content(&mut cursor, base_indent))
+                    GoogleSectionBody::Tip(parse_section_content(&mut line_cursor))
                 }
                 GoogleSectionKind::Unknown => {
-                    GoogleSectionBody::Unknown(parse_section_content(&mut cursor, base_indent))
+                    GoogleSectionBody::Unknown(parse_section_content(&mut line_cursor))
                 }
             };
 
             // Compute section span
             let section_end_line = {
-                let mut end = cursor.line.saturating_sub(1);
+                let mut end = line_cursor.line.saturating_sub(1);
                 while end > section_start {
-                    if !cursor.line_text(end).trim().is_empty() {
+                    if !line_cursor.line_text(end).trim().is_empty() {
                         break;
                     }
                     end -= 1;
@@ -657,14 +665,14 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
                 end
             };
             let section_end_col = {
-                let end_line = cursor.line_text(section_end_line);
+                let end_line = line_cursor.line_text(section_end_line);
                 indent_len(end_line) + end_line.trim().len()
             };
 
             docstring
                 .items
                 .push(GoogleDocstringItem::Section(GoogleSection {
-                    range: cursor.make_range(
+                    range: line_cursor.make_range(
                         section_start,
                         header_col,
                         section_end_line,
@@ -676,23 +684,20 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
         } else {
             // Not a section header and not blank: record as a stray line
             // so that a linter layer can inspect it later.
-            let line = cursor.current_line_text();
-            let trimmed = line.trim();
+            let trimmed = line_cursor.current_trimmed();
             if !trimmed.is_empty() {
-                let col = cursor.current_indent();
-                let spanned = cursor.make_range(cursor.line, col, cursor.line, col + trimmed.len());
+                let col = line_cursor.current_indent();
+                let spanned = line_cursor.make_line_range(line_cursor.line, col, trimmed.len());
                 docstring
                     .items
                     .push(GoogleDocstringItem::StrayLine(spanned));
             }
-            cursor.advance();
+            line_cursor.advance();
         }
     }
 
     // --- Docstring span ---
-    let last_line_idx = cursor.total_lines().saturating_sub(1);
-    let last_col = cursor.line_text(last_line_idx).len();
-    docstring.range = cursor.make_range(0, 0, last_line_idx, last_col);
+    docstring.range = line_cursor.full_range();
 
     docstring
 }
@@ -704,17 +709,15 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
 /// Parse the Args / Arguments section body.
 ///
 /// On return, `cursor.line` points to the first line after the section.
-fn parse_args(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleArg> {
+fn parse_args(cursor: &mut LineCursor) -> Vec<GoogleArg> {
     let mut args = Vec::new();
     let mut entry_indent: Option<usize> = None;
 
     while !cursor.is_eof() {
-        let line = cursor.current_line_text();
-        if is_section_header(line, base_indent) {
+        let trimmed = cursor.current_trimmed();
+        if is_section_header(trimmed) {
             break;
         }
-
-        let trimmed = line.trim();
 
         if trimmed.is_empty() {
             cursor.advance();
@@ -723,9 +726,6 @@ fn parse_args(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleArg> {
 
         let indent = cursor.current_indent();
         let indent_cols = cursor.current_indent_columns();
-        if indent_cols <= base_indent {
-            break;
-        }
 
         let ei = *entry_indent.get_or_insert(indent_cols);
 
@@ -752,7 +752,7 @@ fn parse_args(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleArg> {
                 .offset_to_line_col(header.range.end().raw() as usize)
                 .0;
             cursor.line = header_end_line + 1;
-            let cont_desc = collect_description(cursor, ei, base_indent);
+            let cont_desc = collect_description(cursor, ei);
             let full_desc = merge_descriptions(header.first_description, cont_desc);
 
             let range_end = if full_desc.is_empty() {
@@ -798,11 +798,11 @@ fn parse_args(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleArg> {
 /// ```
 ///
 /// On return, `cursor.line` points to the first line after the section.
-fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleReturns {
+fn parse_returns_section(cursor: &mut LineCursor) -> GoogleReturns {
     // Skip leading blank lines within the section
     while !cursor.is_eof() {
-        let line = cursor.current_line_text();
-        if is_section_header(line, base_indent) {
+        let trimmed = cursor.current_trimmed();
+        if is_section_header(trimmed) {
             return GoogleReturns {
                 range: TextRange::empty(),
                 return_type: None,
@@ -810,17 +810,7 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
                 description: TextRange::empty(),
             };
         }
-        let trimmed = line.trim();
         if !trimmed.is_empty() {
-            let indent = cursor.current_indent_columns();
-            if indent <= base_indent {
-                return GoogleReturns {
-                    range: TextRange::empty(),
-                    return_type: None,
-                    colon: None,
-                    description: TextRange::empty(),
-                };
-            }
             break;
         }
         cursor.advance();
@@ -835,8 +825,7 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
         };
     }
 
-    let line = cursor.current_line_text();
-    let trimmed = line.trim();
+    let trimmed = cursor.current_trimmed();
     let col = cursor.current_indent();
     let entry_start = cursor.line;
 
@@ -849,28 +838,13 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
         let desc_str = after_colon.trim_start();
         let ws_after = after_colon.len() - desc_str.len();
         let type_col = col;
-        let rt = Some(cursor.make_range(
-            cursor.line,
-            type_col,
-            cursor.line,
-            type_col + type_str.len(),
-        ));
-        let colon_spanned = Some(cursor.make_range(
-            cursor.line,
-            col + colon_pos,
-            cursor.line,
-            col + colon_pos + 1,
-        ));
+        let rt = Some(cursor.make_line_range(cursor.line, type_col, type_str.len()));
+        let colon_spanned = Some(cursor.make_line_range(cursor.line, col + colon_pos, 1));
         let desc_start = col + colon_pos + 1 + ws_after;
         let desc_range = if desc_str.is_empty() {
             TextRange::empty()
         } else {
-            cursor.make_range(
-                cursor.line,
-                desc_start,
-                cursor.line,
-                desc_start + desc_str.len(),
-            )
+            cursor.make_line_range(cursor.line, desc_start, desc_str.len())
         };
         (rt, colon_spanned, desc_range)
     } else {
@@ -878,7 +852,7 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
         let desc_range = if trimmed.is_empty() {
             TextRange::empty()
         } else {
-            cursor.make_range(cursor.line, col, cursor.line, col + trimmed.len())
+            cursor.make_line_range(cursor.line, col, trimmed.len())
         };
         (None, None, desc_range)
     };
@@ -886,7 +860,7 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
     cursor.advance();
 
     // Collect all remaining indented lines as continuation description.
-    let cont_desc = parse_section_content(cursor, base_indent);
+    let cont_desc = parse_section_content(cursor);
     let full_desc = merge_descriptions(first_desc_range, cont_desc);
 
     let (end_line, end_col) = if full_desc.is_empty() {
@@ -912,17 +886,15 @@ fn parse_returns_section(cursor: &mut Cursor, base_indent: usize) -> GoogleRetur
 /// Format: `ExceptionType: description`
 ///
 /// On return, `cursor.line` points to the first line after the section.
-fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleException> {
+fn parse_raises_section(cursor: &mut LineCursor) -> Vec<GoogleException> {
     let mut raises = Vec::new();
     let mut entry_indent: Option<usize> = None;
 
     while !cursor.is_eof() {
-        let line = cursor.current_line_text();
-        if is_section_header(line, base_indent) {
+        let trimmed = cursor.current_trimmed();
+        if is_section_header(trimmed) {
             break;
         }
-
-        let trimmed = line.trim();
 
         if trimmed.is_empty() {
             cursor.advance();
@@ -931,9 +903,6 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
 
         let indent = cursor.current_indent();
         let indent_cols = cursor.current_indent_columns();
-        if indent_cols <= base_indent {
-            break;
-        }
 
         let ei = *entry_indent.get_or_insert(indent_cols);
 
@@ -951,23 +920,17 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
                     let dr = if desc.is_empty() {
                         TextRange::empty()
                     } else {
-                        cursor.make_range(
-                            cursor.line,
-                            desc_start,
-                            cursor.line,
-                            desc_start + desc.len(),
-                        )
+                        cursor.make_line_range(cursor.line, desc_start, desc.len())
                     };
                     (et, dr, Some(col + colon_pos))
                 } else {
                     (trimmed, TextRange::empty(), None)
                 };
 
-            let exc_type =
-                cursor.make_range(cursor.line, col, cursor.line, col + exc_type_str.len());
+            let exc_type = cursor.make_line_range(cursor.line, col, exc_type_str.len());
 
             cursor.advance();
-            let cont_desc = collect_description(cursor, ei, base_indent);
+            let cont_desc = collect_description(cursor, ei);
             let full_desc = merge_descriptions(first_desc_range, cont_desc);
 
             let (end_line, end_col) = if full_desc.is_empty() {
@@ -976,9 +939,8 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
                 cursor.offset_to_line_col(full_desc.end().raw() as usize)
             };
 
-            let colon = colon_offset.map(|colon_col| {
-                cursor.make_range(entry_start, colon_col, entry_start, colon_col + 1)
-            });
+            let colon =
+                colon_offset.map(|colon_col| cursor.make_line_range(entry_start, colon_col, 1));
 
             raises.push(GoogleException {
                 range: cursor.make_range(entry_start, col, end_line, end_col),
@@ -1003,51 +965,8 @@ fn parse_raises_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleEx
 /// Collects all indented lines until the next section header.
 ///
 /// On return, `cursor.line` points to the first line after the section.
-fn parse_section_content(cursor: &mut Cursor, base_indent: usize) -> TextRange {
-    let mut content_lines: Vec<&str> = Vec::new();
-    let mut first_content_line: Option<usize> = None;
-    let mut last_content_line = cursor.line;
-
-    while !cursor.is_eof() {
-        let line = cursor.current_line_text();
-        if is_section_header(line, base_indent) {
-            break;
-        }
-
-        let trimmed = line.trim();
-        // Non-empty line at or below base indent ⇒ outside the section
-        if !trimmed.is_empty() && indent_columns(line) <= base_indent {
-            break;
-        }
-
-        content_lines.push(trimmed);
-        if !trimmed.is_empty() {
-            if first_content_line.is_none() {
-                first_content_line = Some(cursor.line);
-            }
-            last_content_line = cursor.line;
-        }
-        cursor.advance();
-    }
-
-    // Trim leading / trailing empty
-    while content_lines.last().is_some_and(|l| l.is_empty()) {
-        content_lines.pop();
-    }
-    while content_lines.first().is_some_and(|l| l.is_empty()) {
-        content_lines.remove(0);
-    }
-
-    if let Some(first) = first_content_line {
-        let first_line = cursor.line_text(first);
-        let first_col = indent_len(first_line);
-        let last_line = cursor.line_text(last_content_line);
-        let last_trimmed = last_line.trim();
-        let last_col = indent_len(last_line) + last_trimmed.len();
-        cursor.make_range(first, first_col, last_content_line, last_col)
-    } else {
-        TextRange::empty()
-    }
+fn parse_section_content(cursor: &mut LineCursor) -> TextRange {
+    collect_text_range(cursor, false)
 }
 
 // =============================================================================
@@ -1065,17 +984,15 @@ fn parse_section_content(cursor: &mut Cursor, base_indent: usize) -> TextRange {
 /// ```
 ///
 /// On return, `cursor.line` points to the first line after the section.
-fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<GoogleSeeAlsoItem> {
+fn parse_see_also_section(cursor: &mut LineCursor) -> Vec<GoogleSeeAlsoItem> {
     let mut items = Vec::new();
     let mut entry_indent: Option<usize> = None;
 
     while !cursor.is_eof() {
-        let line = cursor.current_line_text();
-        if is_section_header(line, base_indent) {
+        let trimmed = cursor.current_trimmed();
+        if is_section_header(trimmed) {
             break;
         }
-
-        let trimmed = line.trim();
 
         if trimmed.is_empty() {
             cursor.advance();
@@ -1084,9 +1001,6 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
 
         let indent = cursor.current_indent();
         let indent_cols = cursor.current_indent_columns();
-        if indent_cols <= base_indent {
-            break;
-        }
 
         let ei = *entry_indent.get_or_insert(indent_cols);
 
@@ -1105,12 +1019,7 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
                     let dr = if desc.is_empty() {
                         TextRange::empty()
                     } else {
-                        cursor.make_range(
-                            cursor.line,
-                            desc_start,
-                            cursor.line,
-                            desc_start + desc.len(),
-                        )
+                        cursor.make_line_range(cursor.line, desc_start, desc.len())
                     };
                     (n, dr, Some(col + colon_pos))
                 } else {
@@ -1125,18 +1034,13 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
                 if !name.is_empty() {
                     // Find the actual position of this name within the line
                     let name_start = name_offset + (part.len() - part.trim_start().len());
-                    names.push(cursor.make_range(
-                        cursor.line,
-                        name_start,
-                        cursor.line,
-                        name_start + name.len(),
-                    ));
+                    names.push(cursor.make_line_range(cursor.line, name_start, name.len()));
                 }
                 name_offset += part.len() + 1; // +1 for the comma
             }
 
             cursor.advance();
-            let cont_desc = collect_description(cursor, ei, base_indent);
+            let cont_desc = collect_description(cursor, ei);
             let full_desc = merge_descriptions(first_desc_range, cont_desc);
 
             let description = if full_desc.is_empty() {
@@ -1151,9 +1055,8 @@ fn parse_see_also_section(cursor: &mut Cursor, base_indent: usize) -> Vec<Google
                 (entry_start, col + trimmed.len())
             };
 
-            let colon = colon_offset.map(|colon_col| {
-                cursor.make_range(entry_start, colon_col, entry_start, colon_col + 1)
-            });
+            let colon =
+                colon_offset.map(|colon_col| cursor.make_line_range(entry_start, colon_col, 1));
 
             items.push(GoogleSeeAlsoItem {
                 range: cursor.make_range(entry_start, col, end_line, end_col),
@@ -1181,48 +1084,42 @@ mod tests {
 
     #[test]
     fn test_is_section_header() {
-        // Standard colon form
-        assert!(is_section_header("Args:", 0));
-        assert!(is_section_header("    Args:", 4));
-        assert!(!is_section_header("    Args:", 0));
+        // Standard colon form (expects pre-trimmed input)
+        assert!(is_section_header("Args:"));
         // "NotASection:" is still detected as an unknown section header (has colon)
-        assert!(is_section_header("NotASection:", 0));
-        assert!(is_section_header("Returns:", 0));
+        assert!(is_section_header("NotASection:"));
+        assert!(is_section_header("Returns:"));
+        assert!(is_section_header("Custom:"));
         // Case-insensitive
-        assert!(is_section_header("args:", 0));
-        assert!(is_section_header("RETURNS:", 0));
+        assert!(is_section_header("args:"));
+        assert!(is_section_header("RETURNS:"));
         // Not a section header: contains embedded colon
-        assert!(!is_section_header("key: value:", 0));
+        assert!(!is_section_header("key: value:"));
         // Not a section header: too long
         assert!(!is_section_header(
-            "This is a very long line that should not be a section header:",
-            0
+            "This is a very long line that should not be a section header:"
         ));
-        // Not a section header: starts with space but indent doesn't match
-        assert!(!is_section_header("  Custom:", 4));
 
         // Space-before-colon form
-        assert!(is_section_header("Args :", 0));
-        assert!(is_section_header("Returns :", 0));
-        assert!(is_section_header("    Args :", 4));
+        assert!(is_section_header("Args :"));
+        assert!(is_section_header("Returns :"));
 
         // Colonless form — only known section names
-        assert!(is_section_header("Args", 0));
-        assert!(is_section_header("Returns", 0));
-        assert!(is_section_header("    Args", 4));
-        assert!(is_section_header("args", 0));
-        assert!(is_section_header("RETURNS", 0));
-        assert!(is_section_header("See Also", 0));
+        assert!(is_section_header("Args"));
+        assert!(is_section_header("Returns"));
+        assert!(is_section_header("args"));
+        assert!(is_section_header("RETURNS"));
+        assert!(is_section_header("See Also"));
         // Unknown names without colon are NOT headers
-        assert!(!is_section_header("NotASection", 0));
-        assert!(!is_section_header("SomeWord", 0));
+        assert!(!is_section_header("NotASection"));
+        assert!(!is_section_header("SomeWord"));
     }
 
     // -- entry header parsing --
 
     /// Helper to parse an entry header from a single-line string.
     fn header_from(text: &str) -> EntryHeader {
-        let cursor = Cursor::new(text);
+        let cursor = LineCursor::new(text);
         parse_entry_header(&cursor)
     }
 
@@ -1296,7 +1193,7 @@ mod tests {
     #[test]
     fn test_parse_entry_header_multiline_type() {
         let input = "x (Dict[str,\n        int]): The value.";
-        let cursor = Cursor::new(input);
+        let cursor = LineCursor::new(input);
         let header = parse_entry_header(&cursor);
         assert_eq!(header.name.source_text(input), "x");
         let ti = header.type_info.unwrap();

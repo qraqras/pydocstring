@@ -24,7 +24,12 @@ Raises:
     let result = parse_google(docstring);
     let doc = &result;
 
-    println!("Summary: {}", doc.summary.source_text(&doc.source));
+    println!(
+        "Summary: {}",
+        doc.summary
+            .as_ref()
+            .map_or("", |s| s.source_text(&doc.source))
+    );
     if let Some(desc) = &doc.extended_summary {
         println!("Description: {}", desc.source_text(&doc.source));
     }

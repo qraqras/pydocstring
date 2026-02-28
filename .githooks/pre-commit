@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "=== Pre-commit: Auto-fix fmt & clippy ==="
+
+echo "--- Format ---"
+cargo fmt --all
+echo "OK"
+
+echo "--- Clippy fix ---"
+cargo clippy --all-targets --fix --allow-dirty --allow-staged -- -D warnings
+echo "OK"
+
+echo "--- Stage fixed files ---"
+git add -u
+echo "OK"
+
+echo "=== All checks passed ==="
