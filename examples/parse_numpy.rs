@@ -36,7 +36,12 @@ Examples
     let result = parse_numpy(docstring);
     let doc = &result;
 
-    println!("Summary: {}", doc.summary.source_text(&doc.source));
+    println!(
+        "Summary: {}",
+        doc.summary
+            .as_ref()
+            .map_or("", |s| s.source_text(&doc.source))
+    );
     println!(
         "\nExtended Summary: {}",
         doc.extended_summary

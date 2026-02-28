@@ -1,24 +1,24 @@
 //! Source cursor for line-oriented docstring parsing.
 //!
-//! [`Cursor`] bundles the source text, line-offset table, and current
+//! [`LineCursor`] bundles the source text, line-offset table, and current
 //! line position into a single struct, eliminating the need to thread
 //! `(source, &offsets, total_lines)` through every helper function.
 
 use crate::ast::{TextRange, TextSize};
 
 // =============================================================================
-// Cursor
+// LineCursor
 // =============================================================================
 
 /// A read/write cursor over a source string, providing line-oriented
 /// navigation and span construction helpers.
 ///
-/// Callers advance the cursor by mutating [`Cursor::line`] directly
-/// (or via convenience methods like [`advance`](Cursor::advance) and
-/// [`skip_blank_lines`](Cursor::skip_blank_lines)).  Sub-parsers
-/// receive `&mut Cursor` and leave it positioned after the last
+/// Callers advance the cursor by mutating [`LineCursor::line`] directly
+/// (or via convenience methods like [`advance`](LineCursor::advance) and
+/// [`skip_blank_lines`](LineCursor::skip_blank_lines)).  Sub-parsers
+/// receive `&mut LineCursor` and leave it positioned after the last
 /// consumed line.
-pub(crate) struct Cursor<'a> {
+pub(crate) struct LineCursor<'a> {
     source: &'a str,
     offsets: Vec<usize>,
     total: usize,
@@ -26,7 +26,7 @@ pub(crate) struct Cursor<'a> {
     pub line: usize,
 }
 
-impl<'a> Cursor<'a> {
+impl<'a> LineCursor<'a> {
     /// Create a new cursor over `source`, starting at line 0.
     pub fn new(source: &'a str) -> Self {
         let offsets = build_line_offsets(source);
@@ -44,6 +44,13 @@ impl<'a> Cursor<'a> {
     /// The full source text.
     pub fn source(&self) -> &'a str {
         self.source
+    }
+
+    /// A `TextRange` spanning the entire source text.
+    pub fn full_range(&self) -> TextRange {
+        let last_line = self.total.saturating_sub(1);
+        let last_col = self.line_text(last_line).len();
+        self.make_range(0, 0, last_line, last_col)
     }
 
     // ── Position ────────────────────────────────────────────────────
@@ -64,7 +71,7 @@ impl<'a> Cursor<'a> {
     }
 
     /// Skip blank (whitespace-only) lines starting at the current position.
-    pub fn skip_blank_lines(&mut self) {
+    pub fn skip_blanks(&mut self) {
         while !self.is_eof() && self.current_line_text().trim().is_empty() {
             self.line += 1;
         }
@@ -144,6 +151,14 @@ impl<'a> Cursor<'a> {
         )
     }
 
+    /// Build a [`TextRange`] spanning `len` bytes on a single line.
+    ///
+    /// Equivalent to `make_range(line, col, line, col + len)`.
+    pub fn make_line_range(&self, line: usize, col: usize, len: usize) -> TextRange {
+        let start = self.offsets[line] + col;
+        TextRange::from_offset_len(start, len)
+    }
+
     // ── Offset utilities ───────────────────────────────────────────
 
     /// Convert a byte offset to `(line, col)`.
@@ -196,13 +211,13 @@ impl<'a> Cursor<'a> {
 }
 
 // =============================================================================
-// Standalone helpers (still useful outside Cursor)
+// Standalone helpers (still useful outside LineCursor)
 // =============================================================================
 
 /// Number of leading whitespace bytes in `line`.
 ///
 /// Use this for **byte-offset** calculations (e.g. column parameters to
-/// [`Cursor::make_range`]).  For indentation-level *comparison*, prefer
+/// [`LineCursor::make_range`]).  For indentation-level *comparison*, prefer
 /// [`indent_columns`] which handles tab characters correctly.
 pub(crate) fn indent_len(line: &str) -> usize {
     line.len() - line.trim_start().len()
@@ -293,39 +308,39 @@ mod tests {
 
     #[test]
     fn test_find_matching_close_basic() {
-        let c = Cursor::new("(abc)");
+        let c = LineCursor::new("(abc)");
         assert_eq!(c.find_matching_close(0), Some(4));
     }
 
     #[test]
     fn test_find_matching_close_nested_same() {
-        let c = Cursor::new("(a(b)c)");
+        let c = LineCursor::new("(a(b)c)");
         assert_eq!(c.find_matching_close(0), Some(6));
     }
 
     #[test]
     fn test_find_matching_close_nested_mixed() {
-        let c = Cursor::new("(a[b]c)");
+        let c = LineCursor::new("(a[b]c)");
         assert_eq!(c.find_matching_close(0), Some(6));
     }
 
     #[test]
     fn test_find_matching_close_mismatched_ignored() {
         // `(` should NOT be closed by `]` — the `]` is ignored and `)` closes it.
-        let c = Cursor::new("(a]b)");
+        let c = LineCursor::new("(a]b)");
         assert_eq!(c.find_matching_close(0), Some(4));
     }
 
     #[test]
     fn test_find_matching_close_no_match() {
         // Only mismatched closers — never finds a match
-        let c = Cursor::new("(a]b}c");
+        let c = LineCursor::new("(a]b}c");
         assert_eq!(c.find_matching_close(0), None);
     }
 
     #[test]
     fn test_find_matching_close_angle_brackets() {
-        let c = Cursor::new("<int>");
+        let c = LineCursor::new("<int>");
         assert_eq!(c.find_matching_close(0), Some(4));
     }
 }

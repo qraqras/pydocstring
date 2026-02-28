@@ -230,8 +230,8 @@ pub struct NumPyDocstring {
     pub source: String,
     /// Source span of the entire docstring.
     pub range: TextRange,
-    /// Brief summary (first line).
-    pub summary: TextRange,
+    /// Brief summary (first paragraph, up to the first blank line).
+    pub summary: Option<TextRange>,
     /// Deprecation warning (if applicable).
     pub deprecation: Option<NumPyDeprecation>,
     /// Extended summary (multiple sentences before any section header).
@@ -399,12 +399,12 @@ pub struct NumPyMethod {
 }
 
 impl NumPyDocstring {
-    /// Creates a new empty NumPy-style docstring.
-    pub fn new() -> Self {
+    /// Creates a new empty NumPy-style docstring with the given source.
+    pub fn new(input: &str) -> Self {
         Self {
-            source: String::new(),
+            source: input.to_string(),
             range: TextRange::empty(),
-            summary: TextRange::empty(),
+            summary: None,
             deprecation: None,
             extended_summary: None,
             items: Vec::new(),
@@ -414,7 +414,7 @@ impl NumPyDocstring {
 
 impl Default for NumPyDocstring {
     fn default() -> Self {
-        Self::new()
+        Self::new("")
     }
 }
 
@@ -423,7 +423,9 @@ impl fmt::Display for NumPyDocstring {
         write!(
             f,
             "NumPyDocstring(summary: {})",
-            self.summary.source_text(&self.source)
+            self.summary
+                .as_ref()
+                .map_or("", |s| s.source_text(&self.source))
         )
     }
 }

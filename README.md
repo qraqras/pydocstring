@@ -55,7 +55,7 @@ ValueError
 
 let result = parse_numpy(docstring);
 
-println!("Summary: {}", result.summary.source_text(&result.source));
+println!("Summary: {}", result.summary.as_ref().map_or("", |s| s.source_text(&result.source)));
 for item in &result.items {
     if let pydocstring::NumPyDocstringItem::Section(s) = item {
         if let pydocstring::NumPySectionBody::Parameters(params) = &s.body {
@@ -94,7 +94,7 @@ Raises:
 
 let result = parse_google(docstring);
 
-println!("Summary: {}", result.summary.source_text(&result.source));
+println!("Summary: {}", result.summary.as_ref().map_or("", |s| s.source_text(&result.source)));
 for item in &result.items {
     if let pydocstring::GoogleDocstringItem::Section(s) = item {
         if let pydocstring::GoogleSectionBody::Args(args) = &s.body {
@@ -136,7 +136,7 @@ if result.has_errors() {
 }
 
 // The AST is still available
-println!("Summary: {}", result.summary.source_text(&result.source));
+println!("Summary: {}", result.summary.as_ref().map_or("", |s| s.source_text(&result.source)));
 ```
 
 ## Source Locations

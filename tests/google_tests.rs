@@ -242,7 +242,7 @@ fn test_simple_summary() {
     let docstring = "This is a brief summary.";
     let result = parse_google(docstring);
     assert_eq!(
-        result.summary.source_text(&result.source),
+        result.summary.as_ref().unwrap().source_text(&result.source),
         "This is a brief summary."
     );
 }
@@ -251,10 +251,10 @@ fn test_simple_summary() {
 fn test_summary_span() {
     let docstring = "Brief description.";
     let result = parse_google(docstring);
-    assert_eq!(result.summary.start(), TextSize::new(0));
-    assert_eq!(result.summary.end(), TextSize::new(18));
+    assert_eq!(result.summary.as_ref().unwrap().start(), TextSize::new(0));
+    assert_eq!(result.summary.as_ref().unwrap().end(), TextSize::new(18));
     assert_eq!(
-        result.summary.source_text(&result.source),
+        result.summary.as_ref().unwrap().source_text(&result.source),
         "Brief description."
     );
 }
@@ -262,13 +262,13 @@ fn test_summary_span() {
 #[test]
 fn test_empty_docstring() {
     let result = parse_google("");
-    assert_eq!(result.summary.source_text(&result.source), "");
+    assert!(result.summary.is_none());
 }
 
 #[test]
 fn test_whitespace_only_docstring() {
     let result = parse_google("   \n   \n");
-    assert_eq!(result.summary.source_text(&result.source), "");
+    assert!(result.summary.is_none());
 }
 
 #[test]
@@ -277,7 +277,10 @@ fn test_summary_with_description() {
         "Brief summary.\n\nExtended description that provides\nmore details about the function.";
     let result = parse_google(docstring);
 
-    assert_eq!(result.summary.source_text(&result.source), "Brief summary.");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Brief summary."
+    );
     let desc = result.extended_summary.as_ref().unwrap();
     assert_eq!(
         desc.source_text(&result.source),
@@ -293,13 +296,51 @@ First paragraph of description.
 
 Second paragraph of description."#;
     let result = parse_google(docstring);
-    assert_eq!(result.summary.source_text(&result.source), "Brief summary.");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Brief summary."
+    );
     let desc = result.extended_summary.as_ref().unwrap();
     assert!(desc.source_text(&result.source).contains("First paragraph"));
     assert!(
         desc.source_text(&result.source)
             .contains("Second paragraph")
     );
+}
+
+#[test]
+fn test_multiline_summary() {
+    let docstring = "This is a long summary\nthat spans two lines.\n\nExtended description.";
+    let result = parse_google(docstring);
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "This is a long summary\nthat spans two lines."
+    );
+    let desc = result.extended_summary.as_ref().unwrap();
+    assert_eq!(desc.source_text(&result.source), "Extended description.");
+}
+
+#[test]
+fn test_multiline_summary_no_extended() {
+    let docstring = "Summary line one\ncontinues here.";
+    let result = parse_google(docstring);
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Summary line one\ncontinues here."
+    );
+    assert!(result.extended_summary.is_none());
+}
+
+#[test]
+fn test_multiline_summary_then_section() {
+    let docstring = "Summary line one\ncontinues here.\nArgs:\n    x (int): val";
+    let result = parse_google(docstring);
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Summary line one\ncontinues here."
+    );
+    assert!(result.extended_summary.is_none());
+    assert_eq!(result.items.len(), 1);
 }
 
 // =============================================================================
@@ -1002,7 +1043,7 @@ Note:
 
     let result = parse_google(docstring);
     assert_eq!(
-        result.summary.source_text(&result.source),
+        result.summary.as_ref().unwrap().source_text(&result.source),
         "Calculate the sum."
     );
     assert!(result.extended_summary.is_some());
@@ -1126,7 +1167,10 @@ fn test_multiple_unknown_sections() {
 fn test_indented_docstring() {
     let docstring = "    Summary.\n\n    Args:\n        x (int): Value.";
     let result = parse_google(docstring);
-    assert_eq!(result.summary.source_text(&result.source), "Summary.");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Summary."
+    );
     let a = args(&result);
     assert_eq!(a.len(), 1);
     assert_eq!(a[0].name.source_text(&result.source), "x");
@@ -1140,9 +1184,12 @@ fn test_indented_docstring() {
 fn test_indented_summary_span() {
     let docstring = "    Summary.";
     let result = parse_google(docstring);
-    assert_eq!(result.summary.start(), TextSize::new(4));
-    assert_eq!(result.summary.end(), TextSize::new(12));
-    assert_eq!(result.summary.source_text(&result.source), "Summary.");
+    assert_eq!(result.summary.as_ref().unwrap().start(), TextSize::new(4));
+    assert_eq!(result.summary.as_ref().unwrap().end(), TextSize::new(12));
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Summary."
+    );
 }
 
 // =============================================================================
@@ -1153,7 +1200,10 @@ fn test_indented_summary_span() {
 fn test_docstring_like_summary() {
     let docstring = "Summary.";
     let result = parse_google(docstring);
-    assert_eq!(result.summary.source_text(&result.source), "Summary.");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Summary."
+    );
 }
 
 #[test]
@@ -1204,7 +1254,10 @@ fn test_span_source_text_round_trip() {
     let result = parse_google(docstring);
 
     // Summary
-    assert_eq!(result.summary.source_text(&result.source), "Summary.");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Summary."
+    );
 
     // Arg name
     assert_eq!(args(&result)[0].name.source_text(&result.source), "x");
@@ -1247,7 +1300,10 @@ fn test_section_only_no_summary() {
 fn test_leading_blank_lines() {
     let docstring = "\n\n\nSummary.\n\nArgs:\n    x: Value.";
     let result = parse_google(docstring);
-    assert_eq!(result.summary.source_text(&result.source), "Summary.");
+    assert_eq!(
+        result.summary.as_ref().unwrap().source_text(&result.source),
+        "Summary."
+    );
     assert_eq!(args(&result).len(), 1);
 }
 
@@ -1821,7 +1877,7 @@ Example:
 
     let result = parse_google(docstring);
     assert_eq!(
-        result.summary.source_text(&result.source),
+        result.summary.as_ref().unwrap().source_text(&result.source),
         "Calculate something."
     );
     assert!(result.extended_summary.is_some());

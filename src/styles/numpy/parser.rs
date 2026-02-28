@@ -20,7 +20,7 @@
 //! ```
 
 use crate::ast::TextRange;
-use crate::cursor::{Cursor, indent_columns, indent_len};
+use crate::cursor::{LineCursor, indent_columns, indent_len};
 use crate::styles::numpy::ast::{
     NumPyDeprecation, NumPyDocstring, NumPyDocstringItem, NumPyException, NumPyParameter,
     NumPyReturns, NumPySection, NumPySectionBody, NumPySectionHeader, NumPySectionKind,
@@ -41,7 +41,7 @@ fn is_underline(trimmed: &str) -> bool {
 ///
 /// Uses the "pending line" pattern: each line is read once, and when a dash
 /// line is encountered the previous non-empty line is identified as the header.
-fn find_next_section_start(cursor: &Cursor, start: usize) -> usize {
+fn find_next_section_start(cursor: &LineCursor, start: usize) -> usize {
     let mut prev_non_empty = false;
     let mut prev_idx = start;
     for i in start..cursor.total_lines() {
@@ -67,7 +67,7 @@ fn find_next_section_start(cursor: &Cursor, start: usize) -> usize {
 /// below `entry_indent`.
 ///
 /// On return, `cursor.line` points to the first unconsumed line.
-fn collect_description(cursor: &mut Cursor, end: usize, entry_indent: usize) -> TextRange {
+fn collect_description(cursor: &mut LineCursor, end: usize, entry_indent: usize) -> TextRange {
     let mut desc_parts: Vec<&str> = Vec::new();
     let mut first_content_line: Option<usize> = None;
     let mut last_content_line = cursor.line;
@@ -115,34 +115,48 @@ fn collect_description(cursor: &mut Cursor, end: usize, entry_indent: usize) -> 
 
 /// Parse a NumPy-style docstring.
 pub fn parse_numpy(input: &str) -> NumPyDocstring {
-    let mut cursor = Cursor::new(input);
+    let mut cursor = LineCursor::new(input);
     let first_section = find_next_section_start(&cursor, 0);
-    let mut docstring = NumPyDocstring::new();
-    docstring.source = input.to_string();
+    let mut docstring = NumPyDocstring::new(input);
 
     if cursor.total_lines() == 0 {
         return docstring;
     }
 
     // --- Skip leading blank lines ---
-    cursor.skip_blank_lines();
+    cursor.skip_blanks();
     if cursor.is_eof() {
         return docstring;
     }
 
-    // --- Summary ---
+    // --- Summary (all lines until blank line or first section) ---
     if cursor.line < first_section {
         let trimmed = cursor.current_trimmed();
         if !trimmed.is_empty() {
-            let col = cursor.current_indent();
-            docstring.summary =
-                cursor.make_range(cursor.line, col, cursor.line, col + trimmed.len());
-            cursor.advance();
+            let start_line = cursor.line;
+            let start_col = cursor.current_indent();
+            let mut last_line = start_line;
+
+            while cursor.line < first_section && !cursor.is_eof() {
+                let t = cursor.current_trimmed();
+                if t.is_empty() {
+                    break;
+                }
+                last_line = cursor.line;
+                cursor.advance();
+            }
+
+            let last_text = cursor.line_text(last_line);
+            let last_col = indent_len(last_text) + last_text.trim().len();
+            let range = cursor.make_range(start_line, start_col, last_line, last_col);
+            if !range.is_empty() {
+                docstring.summary = Some(range);
+            }
         }
     }
 
     // skip blanks
-    cursor.skip_blank_lines();
+    cursor.skip_blanks();
 
     // --- Deprecation directive ---
     if !cursor.is_eof() {
@@ -157,21 +171,16 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
             let version_col = col + prefix.len() + ws_len;
 
             // `..` at col..col+2
-            let directive_marker = Some(cursor.make_range(cursor.line, col, cursor.line, col + 2));
+            let directive_marker = Some(cursor.make_line_range(cursor.line, col, 2));
             // `deprecated` at col+3..col+13
             let kw_col = col + 3;
-            let keyword = Some(cursor.make_range(cursor.line, kw_col, cursor.line, kw_col + 10));
+            let keyword = Some(cursor.make_line_range(cursor.line, kw_col, 10));
             // `::` at col+13..col+15
             let dc_col = col + 13;
-            let double_colon =
-                Some(cursor.make_range(cursor.line, dc_col, cursor.line, dc_col + 2));
+            let double_colon = Some(cursor.make_line_range(cursor.line, dc_col, 2));
 
-            let version_spanned = cursor.make_range(
-                cursor.line,
-                version_col,
-                cursor.line,
-                version_col + version_str.len(),
-            );
+            let version_spanned =
+                cursor.make_line_range(cursor.line, version_col, version_str.len());
 
             let dep_start_line = cursor.line;
             cursor.advance();
@@ -196,7 +205,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
             });
 
             // skip blanks
-            cursor.skip_blank_lines();
+            cursor.skip_blanks();
         }
     }
 
@@ -243,8 +252,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
             // Non-blank lines that are not section headers are stray lines.
             if !header_trimmed.is_empty() {
                 let col = cursor.current_indent();
-                let spanned =
-                    cursor.make_range(cursor.line, col, cursor.line, col + header_trimmed.len());
+                let spanned = cursor.make_line_range(cursor.line, col, header_trimmed.len());
                 docstring.items.push(NumPyDocstringItem::StrayLine(spanned));
             }
             cursor.advance();
@@ -270,17 +278,11 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
                 underline_col + underline_trimmed.len(),
             ),
             kind: section_kind,
-            name: cursor.make_range(
-                cursor.line,
-                header_col,
-                cursor.line,
-                header_col + header_trimmed.len(),
-            ),
-            underline: cursor.make_range(
+            name: cursor.make_line_range(cursor.line, header_col, header_trimmed.len()),
+            underline: cursor.make_line_range(
                 cursor.line + 1,
                 underline_col,
-                cursor.line + 1,
-                underline_col + underline_trimmed.len(),
+                underline_trimmed.len(),
             ),
         };
 
@@ -409,9 +411,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
     }
 
     // Docstring span
-    let last_line_idx = cursor.total_lines().saturating_sub(1);
-    let last_col = cursor.line_text(last_line_idx).len();
-    docstring.range = cursor.make_range(0, 0, last_line_idx, last_col);
+    docstring.range = cursor.full_range();
 
     docstring
 }
@@ -423,7 +423,11 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
 /// Parse the Parameters section body.
 ///
 /// On return, `cursor.line` points to the first line after the section.
-fn parse_parameters(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<NumPyParameter> {
+fn parse_parameters(
+    cursor: &mut LineCursor,
+    end: usize,
+    entry_indent: usize,
+) -> Vec<NumPyParameter> {
     let mut parameters = Vec::new();
 
     while cursor.line < end {
@@ -503,13 +507,13 @@ fn parse_name_and_type(
     text: &str,
     line_idx: usize,
     col_base: usize,
-    cursor: &Cursor,
+    cursor: &LineCursor,
 ) -> ParamHeaderParts {
     // Find the first colon not inside brackets
     let (name_str, colon_span, colon_rel) = if let Some(colon_pos) = find_entry_colon(text) {
         let before = text[..colon_pos].trim_end();
         let colon_col = col_base + colon_pos;
-        let colon = Some(cursor.make_range(line_idx, colon_col, line_idx, colon_col + 1));
+        let colon = Some(cursor.make_line_range(line_idx, colon_col, 1));
         (before, colon, Some(colon_pos))
     } else {
         // No separator — whole text is the name
@@ -661,7 +665,7 @@ fn parse_name_list(
     text: &str,
     line_idx: usize,
     col_base: usize,
-    cursor: &Cursor,
+    cursor: &LineCursor,
 ) -> Vec<TextRange> {
     let mut names = Vec::new();
     let mut byte_pos = 0usize;
@@ -671,7 +675,7 @@ fn parse_name_list(
         let trimmed = part.trim();
         if !trimmed.is_empty() {
             let name_col = col_base + byte_pos + leading;
-            names.push(cursor.make_range(line_idx, name_col, line_idx, name_col + trimmed.len()));
+            names.push(cursor.make_line_range(line_idx, name_col, trimmed.len()));
         }
         byte_pos += part.len() + 1; // +1 for the comma
     }
@@ -695,7 +699,7 @@ fn parse_name_list(
 /// ```
 ///
 /// On return, `cursor.line` points to the first line after the section.
-fn parse_returns(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<NumPyReturns> {
+fn parse_returns(cursor: &mut LineCursor, end: usize, entry_indent: usize) -> Vec<NumPyReturns> {
     let mut returns = Vec::new();
 
     while cursor.line < end {
@@ -716,16 +720,16 @@ fn parse_returns(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Nu
                 let type_col = col + colon_pos + 1 + ws_after;
                 let colon_col = col + colon_pos;
                 (
-                    Some(cursor.make_range(cursor.line, name_col, cursor.line, name_col + n.len())),
-                    Some(cursor.make_range(cursor.line, colon_col, cursor.line, colon_col + 1)),
-                    Some(cursor.make_range(cursor.line, type_col, cursor.line, type_col + t.len())),
+                    Some(cursor.make_line_range(cursor.line, name_col, n.len())),
+                    Some(cursor.make_line_range(cursor.line, colon_col, 1)),
+                    Some(cursor.make_line_range(cursor.line, type_col, t.len())),
                 )
             } else {
                 // Unnamed: type only
                 (
                     None,
                     None,
-                    Some(cursor.make_range(cursor.line, col, cursor.line, col + trimmed.len())),
+                    Some(cursor.make_line_range(cursor.line, col, trimmed.len())),
                 )
             };
 
@@ -763,7 +767,7 @@ fn parse_returns(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Nu
 /// Supports both bare exception types and `ExcType : description` format.
 ///
 /// On return, `cursor.line` points to the first line after the section.
-fn parse_raises(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<NumPyException> {
+fn parse_raises(cursor: &mut LineCursor, end: usize, entry_indent: usize) -> Vec<NumPyException> {
     let mut raises = Vec::new();
 
     while cursor.line < end {
@@ -782,22 +786,17 @@ fn parse_raises(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Num
                 let colon_col = col + colon_pos;
                 let desc_col = col + colon_pos + 1 + ws_after;
 
-                let et = cursor.make_range(cursor.line, col, cursor.line, col + type_str.len());
-                let c = Some(cursor.make_range(cursor.line, colon_col, cursor.line, colon_col + 1));
+                let et = cursor.make_line_range(cursor.line, col, type_str.len());
+                let c = Some(cursor.make_line_range(cursor.line, colon_col, 1));
                 let fd = if desc_str.is_empty() {
                     TextRange::empty()
                 } else {
-                    cursor.make_range(
-                        cursor.line,
-                        desc_col,
-                        cursor.line,
-                        desc_col + desc_str.len(),
-                    )
+                    cursor.make_line_range(cursor.line, desc_col, desc_str.len())
                 };
                 (et, c, fd)
             } else {
                 // Bare type, no colon
-                let et = cursor.make_range(cursor.line, col, cursor.line, col + trimmed.len());
+                let et = cursor.make_line_range(cursor.line, col, trimmed.len());
                 (et, None, TextRange::empty())
             };
 
@@ -843,7 +842,7 @@ fn parse_raises(cursor: &mut Cursor, end: usize, entry_indent: usize) -> Vec<Num
 /// Preserves blank lines between paragraphs.
 ///
 /// On return, `cursor.line` points to the first line after the section.
-fn parse_section_content(cursor: &mut Cursor, end: usize) -> TextRange {
+fn parse_section_content(cursor: &mut LineCursor, end: usize) -> TextRange {
     let mut content_lines: Vec<&str> = Vec::new();
     let mut first_content_line: Option<usize> = None;
     let mut last_content_line = cursor.line;
@@ -893,7 +892,10 @@ fn parse_section_content(cursor: &mut Cursor, end: usize) -> TextRange {
 /// ```
 ///
 /// On return, `cursor.line` points to the first line after the section.
-fn parse_see_also(cursor: &mut Cursor, end: usize) -> Vec<crate::styles::numpy::ast::SeeAlsoItem> {
+fn parse_see_also(
+    cursor: &mut LineCursor,
+    end: usize,
+) -> Vec<crate::styles::numpy::ast::SeeAlsoItem> {
     let mut items = Vec::new();
 
     while cursor.line < end {
@@ -917,23 +919,17 @@ fn parse_see_also(cursor: &mut Cursor, end: usize) -> Vec<crate::styles::numpy::
             let colon_col = col + colon_pos;
             (
                 trimmed[..colon_pos].trim_end(),
-                Some(cursor.make_range(cursor.line, colon_col, cursor.line, colon_col + 1)),
-                Some(cursor.make_range(
-                    cursor.line,
-                    desc_col,
-                    cursor.line,
-                    desc_col + desc_text.len(),
-                )),
+                Some(cursor.make_line_range(cursor.line, colon_col, 1)),
+                Some(cursor.make_line_range(cursor.line, desc_col, desc_text.len())),
             )
         } else {
             (trimmed, None, None)
         };
 
         let names = parse_name_list(names_str, cursor.line, col, cursor);
-        let entry_end_col = col + trimmed.len();
 
         items.push(crate::styles::numpy::ast::SeeAlsoItem {
-            range: cursor.make_range(entry_start, col, entry_start, entry_end_col),
+            range: cursor.make_line_range(entry_start, col, trimmed.len()),
             names,
             colon,
             description,
@@ -955,7 +951,7 @@ fn parse_see_also(cursor: &mut Cursor, end: usize) -> Vec<crate::styles::numpy::
 ///
 /// On return, `cursor.line` points to the first line after the section.
 fn parse_references(
-    cursor: &mut Cursor,
+    cursor: &mut LineCursor,
     end: usize,
 ) -> Vec<crate::styles::numpy::ast::NumPyReference> {
     let mut refs = Vec::new();
@@ -1108,23 +1104,23 @@ mod tests {
 
     #[test]
     fn test_find_next_section_start() {
-        let c1 = Cursor::new("Parameters\n----------");
+        let c1 = LineCursor::new("Parameters\n----------");
         assert_eq!(find_next_section_start(&c1, 0), 0);
 
         // No section
-        let c2 = Cursor::new("just text\nmore text");
+        let c2 = LineCursor::new("just text\nmore text");
         assert_eq!(find_next_section_start(&c2, 0), c2.total_lines());
 
         // Empty line before underline — not a header
-        let c3 = Cursor::new("\n----------");
+        let c3 = LineCursor::new("\n----------");
         assert_eq!(find_next_section_start(&c3, 0), c3.total_lines());
 
         // Single line — no room for underline
-        let c4 = Cursor::new("Only one line");
+        let c4 = LineCursor::new("Only one line");
         assert_eq!(find_next_section_start(&c4, 0), c4.total_lines());
 
         // Start after first section finds second
-        let c5 = Cursor::new("Parameters\n----------\nx : int\nReturns\n-------");
+        let c5 = LineCursor::new("Parameters\n----------\nx : int\nReturns\n-------");
         assert_eq!(find_next_section_start(&c5, 0), 0);
         assert_eq!(find_next_section_start(&c5, 2), 3);
     }
@@ -1150,7 +1146,7 @@ mod tests {
     #[test]
     fn test_parse_name_and_type_basic() {
         let src = "x : int";
-        let cursor = Cursor::new(src);
+        let cursor = LineCursor::new(src);
         let p = parse_name_and_type(src, 0, 0, &cursor);
         assert_eq!(p.names[0].source_text(src), "x");
         assert!(p.colon.is_some());
@@ -1163,7 +1159,7 @@ mod tests {
     #[test]
     fn test_parse_name_and_type_optional() {
         let src = "x : int, optional";
-        let cursor = Cursor::new(src);
+        let cursor = LineCursor::new(src);
         let p = parse_name_and_type(src, 0, 0, &cursor);
         assert_eq!(p.names[0].source_text(src), "x");
         assert!(p.colon.is_some());
@@ -1174,7 +1170,7 @@ mod tests {
     #[test]
     fn test_parse_name_and_type_optional_no_space() {
         let src = "x : int,optional";
-        let cursor = Cursor::new(src);
+        let cursor = LineCursor::new(src);
         let p = parse_name_and_type(src, 0, 0, &cursor);
         assert!(p.colon.is_some());
         assert_eq!(p.param_type.unwrap().source_text(src), "int");
@@ -1184,7 +1180,7 @@ mod tests {
     #[test]
     fn test_parse_name_and_type_default_space() {
         let src = "x : int, default True";
-        let cursor = Cursor::new(src);
+        let cursor = LineCursor::new(src);
         let p = parse_name_and_type(src, 0, 0, &cursor);
         assert!(p.colon.is_some());
         assert_eq!(p.param_type.unwrap().source_text(src), "int");
@@ -1199,7 +1195,7 @@ mod tests {
     #[test]
     fn test_parse_name_and_type_default_equals() {
         let src = "x : int, default=True";
-        let cursor = Cursor::new(src);
+        let cursor = LineCursor::new(src);
         let p = parse_name_and_type(src, 0, 0, &cursor);
         assert_eq!(p.param_type.unwrap().source_text(src), "int");
         assert_eq!(
@@ -1213,7 +1209,7 @@ mod tests {
     #[test]
     fn test_parse_name_and_type_default_colon() {
         let src = "x : int, default: True";
-        let cursor = Cursor::new(src);
+        let cursor = LineCursor::new(src);
         let p = parse_name_and_type(src, 0, 0, &cursor);
         assert_eq!(p.param_type.unwrap().source_text(src), "int");
         assert_eq!(
@@ -1228,7 +1224,7 @@ mod tests {
     fn test_parse_name_and_type_default_bare() {
         // "default" alone with no value
         let src = "x : int, default";
-        let cursor = Cursor::new(src);
+        let cursor = LineCursor::new(src);
         let p = parse_name_and_type(src, 0, 0, &cursor);
         assert_eq!(p.param_type.unwrap().source_text(src), "int");
         assert_eq!(
@@ -1242,7 +1238,7 @@ mod tests {
     #[test]
     fn test_parse_name_and_type_complex() {
         let src = "x : Dict[str, int], optional";
-        let cursor = Cursor::new(src);
+        let cursor = LineCursor::new(src);
         let p = parse_name_and_type(src, 0, 0, &cursor);
         assert!(p.colon.is_some());
         assert_eq!(p.param_type.unwrap().source_text(src), "Dict[str, int]");
@@ -1252,7 +1248,7 @@ mod tests {
     #[test]
     fn test_parse_name_and_type_no_colon() {
         let src = "x";
-        let cursor = Cursor::new(src);
+        let cursor = LineCursor::new(src);
         let p = parse_name_and_type(src, 0, 0, &cursor);
         assert_eq!(p.names[0].source_text(src), "x");
         assert!(p.colon.is_none());

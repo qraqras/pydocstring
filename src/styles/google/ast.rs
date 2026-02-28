@@ -303,8 +303,8 @@ pub struct GoogleDocstring {
     pub source: String,
     /// Source range of the entire docstring.
     pub range: TextRange,
-    /// Brief summary (first line).
-    pub summary: TextRange,
+    /// Brief summary (first paragraph, up to the first blank line).
+    pub summary: Option<TextRange>,
     /// Extended summary (multiple paragraphs before any section header).
     pub extended_summary: Option<TextRange>,
     /// All sections and stray lines in document order.
@@ -438,12 +438,12 @@ pub struct GoogleMethod {
 }
 
 impl GoogleDocstring {
-    /// Creates a new empty Google-style docstring.
-    pub fn new() -> Self {
+    /// Creates a new empty Google-style docstring with the given source.
+    pub fn new(input: &str) -> Self {
         Self {
-            source: String::new(),
+            source: input.to_string(),
             range: TextRange::empty(),
-            summary: TextRange::empty(),
+            summary: None,
             extended_summary: None,
             items: Vec::new(),
         }
@@ -452,7 +452,7 @@ impl GoogleDocstring {
 
 impl Default for GoogleDocstring {
     fn default() -> Self {
-        Self::new()
+        Self::new("")
     }
 }
 
@@ -461,7 +461,9 @@ impl fmt::Display for GoogleDocstring {
         write!(
             f,
             "GoogleDocstring(summary: {})",
-            self.summary.source_text(&self.source)
+            self.summary
+                .as_ref()
+                .map_or("", |s| s.source_text(&self.source))
         )
     }
 }
