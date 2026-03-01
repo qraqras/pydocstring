@@ -103,11 +103,6 @@ impl<'a> LineCursor<'a> {
         indent_columns(self.current_line_text())
     }
 
-    /// Whether the current line is blank (empty or whitespace-only).
-    pub fn current_is_blank(&self) -> bool {
-        self.current_line_text().trim().is_empty()
-    }
-
     /// A [`TextRange`] spanning the trimmed (non-whitespace) content of
     /// the current line.
     ///
