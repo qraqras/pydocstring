@@ -108,6 +108,19 @@ impl<'a> LineCursor<'a> {
         self.current_line_text().trim().is_empty()
     }
 
+    /// A [`TextRange`] spanning the trimmed (non-whitespace) content of
+    /// the current line.
+    ///
+    /// Equivalent to
+    /// `make_line_range(line, current_indent(), current_trimmed().len())`.
+    pub fn current_trimmed_range(&self) -> TextRange {
+        self.make_line_range(
+            self.line,
+            self.current_indent(),
+            self.current_trimmed().len(),
+        )
+    }
+
     // ── Arbitrary-line helpers ──────────────────────────────────────
 
     /// Text of line `idx` (without trailing newline).
@@ -157,6 +170,27 @@ impl<'a> LineCursor<'a> {
     pub fn make_line_range(&self, line: usize, col: usize, len: usize) -> TextRange {
         let start = self.offsets[line] + col;
         TextRange::from_offset_len(start, len)
+    }
+
+    /// Build a [`TextRange`] from a starting offset to the end of the
+    /// last non-blank line before the current cursor position.
+    ///
+    /// Walks backwards from `cursor.line - 1`, skipping trailing blank
+    /// lines, to find the true content end.  The returned range starts at
+    /// `start_offset` and ends at the last non-whitespace byte on the
+    /// found line.
+    pub fn span_back_from_cursor(&self, start_offset: usize) -> TextRange {
+        let (start_line, start_col) = self.offset_to_line_col(start_offset);
+        let mut end_line = self.line.saturating_sub(1);
+        while end_line > start_line {
+            if !self.line_text(end_line).trim().is_empty() {
+                break;
+            }
+            end_line -= 1;
+        }
+        let end_text = self.line_text(end_line);
+        let end_col = indent_len(end_text) + end_text.trim().len();
+        self.make_range(start_line, start_col, end_line, end_col)
     }
 
     // ── Offset utilities ───────────────────────────────────────────
