@@ -251,15 +251,14 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
         {
             // Non-blank lines that are not section headers are stray lines.
             if !header_trimmed.is_empty() {
-                let col = cursor.current_indent();
-                let spanned = cursor.make_line_range(cursor.line, col, header_trimmed.len());
+                let spanned = cursor.current_trimmed_range();
                 docstring.items.push(NumPyDocstringItem::StrayLine(spanned));
             }
             cursor.advance();
             continue;
         }
 
-        let section_start = cursor.line;
+        let _section_start = cursor.line;
         let header_col = cursor.current_indent();
         let header_indent = cursor.current_indent_columns();
 
@@ -380,31 +379,12 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
             }
         };
 
-        // Compute section span (header to last non-empty body line)
-        let section_end_line = {
-            let mut end = cursor.line.saturating_sub(1);
-            while end > section_start {
-                if !cursor.line_text(end).trim().is_empty() {
-                    break;
-                }
-                end -= 1;
-            }
-            end
-        };
-        let section_end_col = {
-            let end_line_text = cursor.line_text(section_end_line);
-            indent_len(end_line_text) + end_line_text.trim().len()
-        };
+        let section_range = cursor.span_back_from_cursor(header.range.start().raw() as usize);
 
         docstring
             .items
             .push(NumPyDocstringItem::Section(NumPySection {
-                range: cursor.make_range(
-                    section_start,
-                    header_col,
-                    section_end_line,
-                    section_end_col,
-                ),
+                range: section_range,
                 header,
                 body,
             }));
@@ -726,11 +706,7 @@ fn parse_returns(cursor: &mut LineCursor, end: usize, entry_indent: usize) -> Ve
                 )
             } else {
                 // Unnamed: type only
-                (
-                    None,
-                    None,
-                    Some(cursor.make_line_range(cursor.line, col, trimmed.len())),
-                )
+                (None, None, Some(cursor.current_trimmed_range()))
             };
 
             cursor.advance();
@@ -796,7 +772,7 @@ fn parse_raises(cursor: &mut LineCursor, end: usize, entry_indent: usize) -> Vec
                 (et, c, fd)
             } else {
                 // Bare type, no colon
-                let et = cursor.make_line_range(cursor.line, col, trimmed.len());
+                let et = cursor.current_trimmed_range();
                 (et, None, TextRange::empty())
             };
 

@@ -429,6 +429,43 @@ fn extract_desc_after_colon(
 }
 
 // =============================================================================
+// Section header parsing
+// =============================================================================
+
+/// Try to parse a Google-style section header at `cursor.line`.
+///
+/// Returns `Some(header)` if the current line is a valid section header,
+/// `None` otherwise.  Does **not** advance the cursor.
+fn try_parse_section_header(cursor: &LineCursor) -> Option<GoogleSectionHeader> {
+    let trimmed = cursor.current_trimmed();
+    if !is_section_header(trimmed) {
+        return None;
+    }
+
+    let col = cursor.current_indent();
+
+    let (raw_name, has_colon) = extract_section_name(trimmed);
+    let header_name = raw_name.trim_end();
+
+    let colon = if has_colon {
+        let colon_col = col + trimmed.len() - 1;
+        Some(cursor.make_line_range(cursor.line, colon_col, 1))
+    } else {
+        None
+    };
+
+    let normalized = header_name.to_ascii_lowercase();
+    let kind = GoogleSectionKind::from_name(&normalized);
+
+    Some(GoogleSectionHeader {
+        range: cursor.current_trimmed_range(),
+        kind,
+        name: cursor.make_line_range(cursor.line, col, header_name.len()),
+        colon,
+    })
+}
+
+// =============================================================================
 // Main parser
 // =============================================================================
 
@@ -474,7 +511,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
     }
 
     // --- Summary ---
-    if !is_section_header(line_cursor.current_trimmed()) {
+    if try_parse_section_header(&line_cursor).is_none() {
         let range = collect_text_range(&mut line_cursor, true);
         if !range.is_empty() {
             docstring.summary = Some(range);
@@ -487,7 +524,7 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
     }
 
     // --- Extended Summary ---
-    if !is_section_header(line_cursor.current_trimmed()) {
+    if try_parse_section_header(&line_cursor).is_none() {
         let range = collect_text_range(&mut line_cursor, false);
         if !range.is_empty() {
             docstring.extended_summary = Some(range);
@@ -501,197 +538,55 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
 
     // --- Sections ---
     while !line_cursor.is_eof() {
-        if line_cursor.current_is_blank() {
-            line_cursor.advance();
-            continue;
+        line_cursor.skip_blanks();
+        if line_cursor.is_eof() {
+            break;
         }
 
-        let header_trimmed = line_cursor.current_trimmed();
-        if is_section_header(header_trimmed) {
-            let section_start = line_cursor.line;
-            let header_col = line_cursor.current_indent();
-
-            // Extract the section name and whether a colon is present.
-            // Handles "Args:", "Args :", and colonless "Args".
-            let (raw_name, has_colon) = extract_section_name(header_trimmed);
-            let header_name = raw_name.trim_end();
-
-            let colon = if has_colon {
-                // Colon is always the last character of the trimmed line
-                let colon_col = header_col + header_trimmed.len() - 1;
-                Some(line_cursor.make_line_range(line_cursor.line, colon_col, 1))
-            } else {
-                None
-            };
-
-            let normalized = header_name.to_ascii_lowercase();
-            let section_kind = GoogleSectionKind::from_name(&normalized);
-
-            let header = GoogleSectionHeader {
-                range: line_cursor.make_line_range(
-                    line_cursor.line,
-                    header_col,
-                    header_trimmed.len(),
-                ),
-                kind: section_kind,
-                name: line_cursor.make_line_range(line_cursor.line, header_col, header_name.len()),
-                colon,
-            };
-
+        if let Some(header) = try_parse_section_header(&line_cursor) {
             line_cursor.advance(); // skip header line
-            let body = match section_kind {
-                // ----- Parameter-like sections -----
-                GoogleSectionKind::Args => GoogleSectionBody::Args(parse_args(&mut line_cursor)),
-                GoogleSectionKind::KeywordArgs => {
-                    GoogleSectionBody::KeywordArgs(parse_args(&mut line_cursor))
-                }
-                GoogleSectionKind::OtherParameters => {
-                    GoogleSectionBody::OtherParameters(parse_args(&mut line_cursor))
-                }
-                GoogleSectionKind::Receives => {
-                    GoogleSectionBody::Receives(parse_args(&mut line_cursor))
-                }
-                // ----- Return/yield sections -----
-                GoogleSectionKind::Returns => {
-                    GoogleSectionBody::Returns(parse_returns_section(&mut line_cursor))
-                }
-                GoogleSectionKind::Yields => {
-                    GoogleSectionBody::Yields(parse_returns_section(&mut line_cursor))
-                }
-                // ----- Exception/warning sections -----
-                GoogleSectionKind::Raises => {
-                    GoogleSectionBody::Raises(parse_raises_section(&mut line_cursor))
-                }
-                GoogleSectionKind::Warns => {
-                    let raises = parse_raises_section(&mut line_cursor);
-                    let warns = raises
-                        .into_iter()
-                        .map(|e| GoogleWarning {
-                            range: e.range,
-                            warning_type: e.r#type,
-                            colon: e.colon,
-                            description: e.description,
-                        })
-                        .collect();
-                    GoogleSectionBody::Warns(warns)
-                }
-                // ----- Structured sections -----
-                GoogleSectionKind::Attributes => {
-                    let args = parse_args(&mut line_cursor);
-                    let attrs = args
-                        .into_iter()
-                        .map(|a| GoogleAttribute {
-                            range: a.range,
-                            name: a.name,
-                            open_bracket: a.open_bracket,
-                            r#type: a.r#type,
-                            close_bracket: a.close_bracket,
-                            colon: a.colon,
-                            description: a.description,
-                        })
-                        .collect();
-                    GoogleSectionBody::Attributes(attrs)
-                }
-                GoogleSectionKind::Methods => {
-                    let args = parse_args(&mut line_cursor);
-                    let methods = args
-                        .into_iter()
-                        .map(|a| GoogleMethod {
-                            range: a.range,
-                            name: a.name,
-                            open_bracket: a.open_bracket,
-                            r#type: a.r#type,
-                            close_bracket: a.close_bracket,
-                            colon: a.colon,
-                            description: a.description,
-                        })
-                        .collect();
-                    GoogleSectionBody::Methods(methods)
-                }
-                GoogleSectionKind::SeeAlso => {
-                    GoogleSectionBody::SeeAlso(parse_see_also_section(&mut line_cursor))
-                }
-                // ----- Free-text / admonition sections -----
-                GoogleSectionKind::Notes => {
-                    GoogleSectionBody::Notes(parse_section_content(&mut line_cursor))
-                }
-                GoogleSectionKind::Examples => {
-                    GoogleSectionBody::Examples(parse_section_content(&mut line_cursor))
-                }
-                GoogleSectionKind::Todo => {
-                    GoogleSectionBody::Todo(parse_section_content(&mut line_cursor))
-                }
-                GoogleSectionKind::References => {
-                    GoogleSectionBody::References(parse_section_content(&mut line_cursor))
-                }
-                GoogleSectionKind::Warnings => {
-                    GoogleSectionBody::Warnings(parse_section_content(&mut line_cursor))
-                }
-                GoogleSectionKind::Attention => {
-                    GoogleSectionBody::Attention(parse_section_content(&mut line_cursor))
-                }
-                GoogleSectionKind::Caution => {
-                    GoogleSectionBody::Caution(parse_section_content(&mut line_cursor))
-                }
-                GoogleSectionKind::Danger => {
-                    GoogleSectionBody::Danger(parse_section_content(&mut line_cursor))
-                }
-                GoogleSectionKind::Error => {
-                    GoogleSectionBody::Error(parse_section_content(&mut line_cursor))
-                }
-                GoogleSectionKind::Hint => {
-                    GoogleSectionBody::Hint(parse_section_content(&mut line_cursor))
-                }
-                GoogleSectionKind::Important => {
-                    GoogleSectionBody::Important(parse_section_content(&mut line_cursor))
-                }
-                GoogleSectionKind::Tip => {
-                    GoogleSectionBody::Tip(parse_section_content(&mut line_cursor))
-                }
-                GoogleSectionKind::Unknown => {
-                    GoogleSectionBody::Unknown(parse_section_content(&mut line_cursor))
-                }
+            #[rustfmt::skip]
+            let body = match header.kind {
+                GoogleSectionKind::Args            => GoogleSectionBody::Args           (parse_args              (&mut line_cursor)),
+                GoogleSectionKind::KeywordArgs     => GoogleSectionBody::KeywordArgs    (parse_args              (&mut line_cursor)),
+                GoogleSectionKind::OtherParameters => GoogleSectionBody::OtherParameters(parse_args              (&mut line_cursor)),
+                GoogleSectionKind::Receives        => GoogleSectionBody::Receives       (parse_args              (&mut line_cursor)),
+                GoogleSectionKind::Returns         => GoogleSectionBody::Returns        (parse_returns_section   (&mut line_cursor)),
+                GoogleSectionKind::Yields          => GoogleSectionBody::Yields         (parse_returns_section   (&mut line_cursor)),
+                GoogleSectionKind::Raises          => GoogleSectionBody::Raises         (parse_raises_section    (&mut line_cursor)),
+                GoogleSectionKind::Warns           => GoogleSectionBody::Warns          (parse_warns_section     (&mut line_cursor)),
+                GoogleSectionKind::Attributes      => GoogleSectionBody::Attributes     (parse_attributes_section(&mut line_cursor)),
+                GoogleSectionKind::Methods         => GoogleSectionBody::Methods        (parse_methods_section   (&mut line_cursor)),
+                GoogleSectionKind::SeeAlso         => GoogleSectionBody::SeeAlso        (parse_see_also_section  (&mut line_cursor)),
+                GoogleSectionKind::Notes           => GoogleSectionBody::Notes          (parse_section_content   (&mut line_cursor)),
+                GoogleSectionKind::Examples        => GoogleSectionBody::Examples       (parse_section_content   (&mut line_cursor)),
+                GoogleSectionKind::Todo            => GoogleSectionBody::Todo           (parse_section_content   (&mut line_cursor)),
+                GoogleSectionKind::References      => GoogleSectionBody::References     (parse_section_content   (&mut line_cursor)),
+                GoogleSectionKind::Warnings        => GoogleSectionBody::Warnings       (parse_section_content   (&mut line_cursor)),
+                GoogleSectionKind::Attention       => GoogleSectionBody::Attention      (parse_section_content   (&mut line_cursor)),
+                GoogleSectionKind::Caution         => GoogleSectionBody::Caution        (parse_section_content   (&mut line_cursor)),
+                GoogleSectionKind::Danger          => GoogleSectionBody::Danger         (parse_section_content   (&mut line_cursor)),
+                GoogleSectionKind::Error           => GoogleSectionBody::Error          (parse_section_content   (&mut line_cursor)),
+                GoogleSectionKind::Hint            => GoogleSectionBody::Hint           (parse_section_content   (&mut line_cursor)),
+                GoogleSectionKind::Important       => GoogleSectionBody::Important      (parse_section_content   (&mut line_cursor)),
+                GoogleSectionKind::Tip             => GoogleSectionBody::Tip            (parse_section_content   (&mut line_cursor)),
+                GoogleSectionKind::Unknown         => GoogleSectionBody::Unknown        (parse_section_content   (&mut line_cursor)),
             };
 
-            // Compute section span
-            let section_end_line = {
-                let mut end = line_cursor.line.saturating_sub(1);
-                while end > section_start {
-                    if !line_cursor.line_text(end).trim().is_empty() {
-                        break;
-                    }
-                    end -= 1;
-                }
-                end
-            };
-            let section_end_col = {
-                let end_line = line_cursor.line_text(section_end_line);
-                indent_len(end_line) + end_line.trim().len()
-            };
+            let range = line_cursor.span_back_from_cursor(header.range.start().raw() as usize);
 
             docstring
                 .items
                 .push(GoogleDocstringItem::Section(GoogleSection {
-                    range: line_cursor.make_range(
-                        section_start,
-                        header_col,
-                        section_end_line,
-                        section_end_col,
-                    ),
+                    range,
                     header,
                     body,
                 }));
         } else {
-            // Not a section header and not blank: record as a stray line
-            // so that a linter layer can inspect it later.
-            let trimmed = line_cursor.current_trimmed();
-            if !trimmed.is_empty() {
-                let col = line_cursor.current_indent();
-                let spanned = line_cursor.make_line_range(line_cursor.line, col, trimmed.len());
-                docstring
-                    .items
-                    .push(GoogleDocstringItem::StrayLine(spanned));
-            }
+            let spanned = line_cursor.current_trimmed_range();
+            docstring
+                .items
+                .push(GoogleDocstringItem::StrayLine(spanned));
             line_cursor.advance();
         }
     }
@@ -852,7 +747,7 @@ fn parse_returns_section(cursor: &mut LineCursor) -> GoogleReturns {
         let desc_range = if trimmed.is_empty() {
             TextRange::empty()
         } else {
-            cursor.make_line_range(cursor.line, col, trimmed.len())
+            cursor.current_trimmed_range()
         };
         (None, None, desc_range)
     };
@@ -954,6 +849,223 @@ fn parse_raises_section(cursor: &mut LineCursor) -> Vec<GoogleException> {
     }
 
     raises
+}
+
+// =============================================================================
+// Warns parsing
+// =============================================================================
+
+/// Parse the Warns section body.
+///
+/// Format: `WarningType: description`
+///
+/// On return, `cursor.line` points to the first line after the section.
+fn parse_warns_section(cursor: &mut LineCursor) -> Vec<GoogleWarning> {
+    let mut warns = Vec::new();
+    let mut entry_indent: Option<usize> = None;
+
+    while !cursor.is_eof() {
+        let trimmed = cursor.current_trimmed();
+        if is_section_header(trimmed) {
+            break;
+        }
+
+        if trimmed.is_empty() {
+            cursor.advance();
+            continue;
+        }
+
+        let indent = cursor.current_indent();
+        let indent_cols = cursor.current_indent_columns();
+
+        let ei = *entry_indent.get_or_insert(indent_cols);
+
+        if indent_cols <= ei {
+            let col = indent;
+            let entry_start = cursor.line;
+
+            let (warn_type_str, first_desc_range, colon_offset) =
+                if let Some(colon_pos) = find_entry_colon(trimmed) {
+                    let wt = trimmed[..colon_pos].trim_end();
+                    let after_colon = &trimmed[colon_pos + 1..];
+                    let desc = after_colon.trim_start();
+                    let ws_after = after_colon.len() - desc.len();
+                    let desc_start = col + colon_pos + 1 + ws_after;
+                    let dr = if desc.is_empty() {
+                        TextRange::empty()
+                    } else {
+                        cursor.make_line_range(cursor.line, desc_start, desc.len())
+                    };
+                    (wt, dr, Some(col + colon_pos))
+                } else {
+                    (trimmed, TextRange::empty(), None)
+                };
+
+            let warning_type = cursor.make_line_range(cursor.line, col, warn_type_str.len());
+
+            cursor.advance();
+            let cont_desc = collect_description(cursor, ei);
+            let full_desc = merge_descriptions(first_desc_range, cont_desc);
+
+            let (end_line, end_col) = if full_desc.is_empty() {
+                (entry_start, col + trimmed.len())
+            } else {
+                cursor.offset_to_line_col(full_desc.end().raw() as usize)
+            };
+
+            let colon =
+                colon_offset.map(|colon_col| cursor.make_line_range(entry_start, colon_col, 1));
+
+            warns.push(GoogleWarning {
+                range: cursor.make_range(entry_start, col, end_line, end_col),
+                warning_type,
+                colon,
+                description: full_desc,
+            });
+        } else {
+            cursor.advance();
+        }
+    }
+
+    warns
+}
+
+// =============================================================================
+// Attributes parsing
+// =============================================================================
+
+/// Parse the Attributes section body.
+///
+/// On return, `cursor.line` points to the first line after the section.
+fn parse_attributes_section(cursor: &mut LineCursor) -> Vec<GoogleAttribute> {
+    let mut attrs = Vec::new();
+    let mut entry_indent: Option<usize> = None;
+
+    while !cursor.is_eof() {
+        let trimmed = cursor.current_trimmed();
+        if is_section_header(trimmed) {
+            break;
+        }
+
+        if trimmed.is_empty() {
+            cursor.advance();
+            continue;
+        }
+
+        let indent = cursor.current_indent();
+        let indent_cols = cursor.current_indent_columns();
+
+        let ei = *entry_indent.get_or_insert(indent_cols);
+
+        if indent_cols <= ei {
+            let col = indent;
+            let entry_start_line = cursor.line;
+
+            let header = parse_entry_header(cursor);
+
+            let (attr_type, open_bracket, close_bracket) = match &header.type_info {
+                Some(ti) => (ti.r#type, Some(ti.open_bracket), Some(ti.close_bracket)),
+                None => (None, None, None),
+            };
+
+            let header_end_line = cursor
+                .offset_to_line_col(header.range.end().raw() as usize)
+                .0;
+            cursor.line = header_end_line + 1;
+            let cont_desc = collect_description(cursor, ei);
+            let full_desc = merge_descriptions(header.first_description, cont_desc);
+
+            let range_end = if full_desc.is_empty() {
+                header.range.end()
+            } else {
+                full_desc.end()
+            };
+            let (end_line, end_col) = cursor.offset_to_line_col(range_end.raw() as usize);
+
+            attrs.push(GoogleAttribute {
+                range: cursor.make_range(entry_start_line, col, end_line, end_col),
+                name: header.name,
+                open_bracket,
+                r#type: attr_type,
+                close_bracket,
+                colon: header.colon,
+                description: full_desc,
+            });
+        } else {
+            cursor.advance();
+        }
+    }
+
+    attrs
+}
+
+// =============================================================================
+// Methods parsing
+// =============================================================================
+
+/// Parse the Methods section body.
+///
+/// On return, `cursor.line` points to the first line after the section.
+fn parse_methods_section(cursor: &mut LineCursor) -> Vec<GoogleMethod> {
+    let mut methods = Vec::new();
+    let mut entry_indent: Option<usize> = None;
+
+    while !cursor.is_eof() {
+        let trimmed = cursor.current_trimmed();
+        if is_section_header(trimmed) {
+            break;
+        }
+
+        if trimmed.is_empty() {
+            cursor.advance();
+            continue;
+        }
+
+        let indent = cursor.current_indent();
+        let indent_cols = cursor.current_indent_columns();
+
+        let ei = *entry_indent.get_or_insert(indent_cols);
+
+        if indent_cols <= ei {
+            let col = indent;
+            let entry_start_line = cursor.line;
+
+            let header = parse_entry_header(cursor);
+
+            let (method_type, open_bracket, close_bracket) = match &header.type_info {
+                Some(ti) => (ti.r#type, Some(ti.open_bracket), Some(ti.close_bracket)),
+                None => (None, None, None),
+            };
+
+            let header_end_line = cursor
+                .offset_to_line_col(header.range.end().raw() as usize)
+                .0;
+            cursor.line = header_end_line + 1;
+            let cont_desc = collect_description(cursor, ei);
+            let full_desc = merge_descriptions(header.first_description, cont_desc);
+
+            let range_end = if full_desc.is_empty() {
+                header.range.end()
+            } else {
+                full_desc.end()
+            };
+            let (end_line, end_col) = cursor.offset_to_line_col(range_end.raw() as usize);
+
+            methods.push(GoogleMethod {
+                range: cursor.make_range(entry_start_line, col, end_line, end_col),
+                name: header.name,
+                open_bracket,
+                r#type: method_type,
+                close_bracket,
+                colon: header.colon,
+                description: full_desc,
+            });
+        } else {
+            cursor.advance();
+        }
+    }
+
+    methods
 }
 
 // =============================================================================
