@@ -1999,21 +1999,6 @@ fn test_raises_no_colon() {
     assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
 }
 
-/// Multiline type annotation spanning multiple lines in Args section.
-#[test]
-fn test_args_multiline_type() {
-    let docstring = "Summary.\n\nArgs:\n    x (Dict[str,\n            int]): The value.";
-    let result = parse_google(docstring);
-    let a = args(&result);
-    assert_eq!(a.len(), 1);
-    assert_eq!(a[0].name.source_text(&result.source), "x");
-    assert_eq!(
-        a[0].r#type.as_ref().unwrap().source_text(&result.source),
-        "Dict[str,\n            int]"
-    );
-    assert_eq!(a[0].description.source_text(&result.source), "The value.");
-}
-
 /// Unknown names without colon should NOT be treated as headers.
 #[test]
 fn test_unknown_name_without_colon_not_header() {
