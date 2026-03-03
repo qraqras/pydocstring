@@ -17,7 +17,7 @@
 //!     ValueError: If the input is invalid.
 //! ```
 
-use crate::ast::{TextRange, TextSize};
+use crate::ast::TextRange;
 use crate::cursor::{LineCursor, indent_len};
 use crate::styles::google::ast::{
     GoogleArg, GoogleAttribute, GoogleDocstring, GoogleDocstringItem, GoogleException,
@@ -76,74 +76,6 @@ fn strip_optional(type_content: &str) -> (&str, Option<usize>) {
     } else {
         (type_content, None)
     }
-}
-
-// =============================================================================
-// Text range collector
-// =============================================================================
-
-/// Collect consecutive lines into a [`TextRange`], stopping at section headers
-/// and EOF.
-///
-/// When `stop_at_blank` is `true`, also stops at blank lines (used for
-/// single-paragraph collection such as Summary).  Leading and trailing
-/// blank lines within the collected range are excluded from the span.
-///
-/// On return, `cursor.line` points to the first unconsumed line.
-///
-/// Returns `(range, next_header)` where `next_header` is `Some` if
-/// collection was terminated by a section header.  In that case the
-/// cursor is positioned on the header line.
-fn collect_text_range(
-    cursor: &mut LineCursor,
-    stop_at_blank: bool,
-) -> (TextRange, Option<GoogleSectionHeader>) {
-    let mut first_content: Option<usize> = None;
-    let mut last_content = cursor.line;
-    let mut found_header = None;
-
-    while !cursor.is_eof() {
-        if let Some(header) = try_parse_section_header(cursor) {
-            found_header = Some(header);
-            break;
-        }
-        let trimmed = cursor.current_trimmed();
-        if stop_at_blank && trimmed.is_empty() {
-            break;
-        }
-        if !trimmed.is_empty() {
-            if first_content.is_none() {
-                first_content = Some(cursor.line);
-            }
-            last_content = cursor.line;
-        }
-        cursor.advance();
-    }
-
-    let range = if let Some(first) = first_content {
-        let first_line = cursor.line_text(first);
-        let first_col = indent_len(first_line);
-        let last_line = cursor.line_text(last_content);
-        let last_col = indent_len(last_line) + last_line.trim().len();
-        cursor.make_range(first, first_col, last_content, last_col)
-    } else {
-        TextRange::empty()
-    };
-    (range, found_header)
-}
-
-/// Merge a first-line description `TextRange` with a continuation `TextRange`.
-///
-/// Either or both may be empty. When both are non-empty, returns a range
-/// spanning from the start of `first` to the end of `cont`.
-fn merge_descriptions(first: TextRange, cont: TextRange) -> TextRange {
-    if first.is_empty() {
-        return cont;
-    }
-    if cont.is_empty() {
-        return first;
-    }
-    TextRange::new(first.start(), cont.end())
 }
 
 // =============================================================================
@@ -436,47 +368,19 @@ fn try_parse_section_header(cursor: &LineCursor) -> Option<GoogleSectionHeader> 
 // Section body helpers
 // =============================================================================
 
-/// A partially-parsed entry whose continuation lines are still being
-/// accumulated.  Flushed when the next entry, section header, or EOF
-/// is reached.
-struct PendingEntry {
-    header: EntryHeader,
-    entry_start_line: usize,
-    entry_col: usize,
-    cont_first: Option<usize>,
-    cont_last: usize,
-}
-
-/// Create an empty [`GoogleSectionBody`] for an entry-based section.
-#[rustfmt::skip]
-fn empty_entry_body(kind: GoogleSectionKind) -> GoogleSectionBody {
-    match kind {
-        GoogleSectionKind::Args            => GoogleSectionBody::Args(Vec::new()),
-        GoogleSectionKind::KeywordArgs     => GoogleSectionBody::KeywordArgs(Vec::new()),
-        GoogleSectionKind::OtherParameters => GoogleSectionBody::OtherParameters(Vec::new()),
-        GoogleSectionKind::Receives        => GoogleSectionBody::Receives(Vec::new()),
-        GoogleSectionKind::Raises          => GoogleSectionBody::Raises(Vec::new()),
-        GoogleSectionKind::Warns           => GoogleSectionBody::Warns(Vec::new()),
-        GoogleSectionKind::Attributes      => GoogleSectionBody::Attributes(Vec::new()),
-        GoogleSectionKind::Methods         => GoogleSectionBody::Methods(Vec::new()),
-        GoogleSectionKind::SeeAlso         => GoogleSectionBody::SeeAlso(Vec::new()),
-        _ => unreachable!(),
-    }
-}
-
-/// Finalise a pending entry and push it into `body`.
-fn flush_pending_entry(cursor: &LineCursor, body: &mut GoogleSectionBody, pe: PendingEntry) {
-    let cont_range = build_content_range(cursor, pe.cont_first, pe.cont_last);
-    let full_desc = merge_descriptions(pe.header.first_description, cont_range);
-    let range_end = if full_desc.is_empty() {
-        pe.header.range.end()
+/// Push a new entry into `body` from the parsed header at the current line.
+fn push_entry(cursor: &LineCursor, body: &mut GoogleSectionBody) {
+    let header = parse_entry_header(cursor);
+    let entry_col = cursor.current_indent();
+    let range_end = if !header.first_description.is_empty() {
+        header.first_description.end()
     } else {
-        full_desc.end()
+        header.range.end()
     };
-    let (end_line, end_col) = cursor.offset_to_line_col(range_end.raw() as usize);
-    let entry_range = cursor.make_range(pe.entry_start_line, pe.entry_col, end_line, end_col);
+    let (end_line, end_col_pos) = cursor.offset_to_line_col(range_end.raw() as usize);
+    let entry_range = cursor.make_range(cursor.line, entry_col, end_line, end_col_pos);
 
-    let (r#type, optional, open_bracket, close_bracket) = match &pe.header.type_info {
+    let (r#type, optional, open_bracket, close_bracket) = match &header.type_info {
         Some(ti) => (
             ti.r#type,
             ti.optional,
@@ -493,57 +397,57 @@ fn flush_pending_entry(cursor: &LineCursor, body: &mut GoogleSectionBody, pe: Pe
         | GoogleSectionBody::Receives(v) => {
             v.push(GoogleArg {
                 range: entry_range,
-                name: pe.header.name,
+                name: header.name,
                 open_bracket,
                 r#type,
                 close_bracket,
-                colon: pe.header.colon,
-                description: full_desc,
+                colon: header.colon,
+                description: header.first_description,
                 optional,
             });
         }
         GoogleSectionBody::Raises(v) => {
             v.push(GoogleException {
                 range: entry_range,
-                r#type: pe.header.name,
-                colon: pe.header.colon,
-                description: full_desc,
+                r#type: header.name,
+                colon: header.colon,
+                description: header.first_description,
             });
         }
         GoogleSectionBody::Warns(v) => {
             v.push(GoogleWarning {
                 range: entry_range,
-                warning_type: pe.header.name,
-                colon: pe.header.colon,
-                description: full_desc,
+                warning_type: header.name,
+                colon: header.colon,
+                description: header.first_description,
             });
         }
         GoogleSectionBody::Attributes(v) => {
             v.push(GoogleAttribute {
                 range: entry_range,
-                name: pe.header.name,
+                name: header.name,
                 open_bracket,
                 r#type,
                 close_bracket,
-                colon: pe.header.colon,
-                description: full_desc,
+                colon: header.colon,
+                description: header.first_description,
             });
         }
         GoogleSectionBody::Methods(v) => {
             v.push(GoogleMethod {
                 range: entry_range,
-                name: pe.header.name,
+                name: header.name,
                 open_bracket,
                 r#type,
                 close_bracket,
-                colon: pe.header.colon,
-                description: full_desc,
+                colon: header.colon,
+                description: header.first_description,
             });
         }
         GoogleSectionBody::SeeAlso(v) => {
             // Split the name span by comma into individual name spans.
-            let name_text = pe.header.name.source_text(cursor.source());
-            let base = pe.header.name.start().raw() as usize;
+            let name_text = header.name.source_text(cursor.source());
+            let base = header.name.start().raw() as usize;
             let mut names = Vec::new();
             let mut offset = 0;
             for part in name_text.split(',') {
@@ -557,11 +461,11 @@ fn flush_pending_entry(cursor: &LineCursor, body: &mut GoogleSectionBody, pe: Pe
             v.push(GoogleSeeAlsoItem {
                 range: entry_range,
                 names,
-                colon: pe.header.colon,
-                description: if full_desc.is_empty() {
+                colon: header.colon,
+                description: if header.first_description.is_empty() {
                     None
                 } else {
-                    Some(full_desc)
+                    Some(header.first_description)
                 },
             });
         }
@@ -582,204 +486,94 @@ fn build_content_range(cursor: &LineCursor, first: Option<usize>, last: usize) -
     }
 }
 
-/// Wrap a freetext `TextRange` in the appropriate [`GoogleSectionBody`] variant.
-#[rustfmt::skip]
-fn wrap_freetext(kind: GoogleSectionKind, range: TextRange) -> GoogleSectionBody {
-    match kind {
-        GoogleSectionKind::Notes     => GoogleSectionBody::Notes(range),
-        GoogleSectionKind::Examples  => GoogleSectionBody::Examples(range),
-        GoogleSectionKind::Todo      => GoogleSectionBody::Todo(range),
-        GoogleSectionKind::References => GoogleSectionBody::References(range),
-        GoogleSectionKind::Warnings  => GoogleSectionBody::Warnings(range),
-        GoogleSectionKind::Attention => GoogleSectionBody::Attention(range),
-        GoogleSectionKind::Caution   => GoogleSectionBody::Caution(range),
-        GoogleSectionKind::Danger    => GoogleSectionBody::Danger(range),
-        GoogleSectionKind::Error     => GoogleSectionBody::Error(range),
-        GoogleSectionKind::Hint      => GoogleSectionBody::Hint(range),
-        GoogleSectionKind::Important => GoogleSectionBody::Important(range),
-        GoogleSectionKind::Tip       => GoogleSectionBody::Tip(range),
-        GoogleSectionKind::Unknown   => GoogleSectionBody::Unknown(range),
-        _ => unreachable!(),
-    }
-}
-
 // =============================================================================
-// Section body parsers
+// Per-line section body processors
 // =============================================================================
 
-/// Consume body lines for an entry-based section (Args, Raises, etc.).
+/// Process one content line for an entry-based section (Args, Raises, etc.).
 ///
-/// Reads lines from `cursor` until a section header or EOF is reached.
-/// If a header is found it is stored in `*next_header` (not consumed).
-fn parse_entry_body(
-    cursor: &mut LineCursor,
-    kind: GoogleSectionKind,
-    next_header: &mut Option<GoogleSectionHeader>,
-) -> GoogleSectionBody {
-    let mut body = empty_entry_body(kind);
-    let mut entry_indent: Option<usize> = None;
-    let mut pending: Option<PendingEntry> = None;
+/// Blank lines must be filtered by the caller before invoking this function.
+fn process_entry_line(
+    cursor: &LineCursor,
+    body: &mut GoogleSectionBody,
+    entry_indent: &mut Option<usize>,
+) {
+    let indent_cols = cursor.current_indent_columns();
 
-    while !cursor.is_eof() {
-        if let Some(h) = try_parse_section_header(cursor) {
-            *next_header = Some(h);
-            break;
+    // Continuation line for the current entry?
+    if let Some(base) = *entry_indent {
+        if indent_cols > base {
+            body.extend_last_description(cursor.current_trimmed_range());
+            return;
         }
-        if cursor.current_trimmed().is_empty() {
-            cursor.advance();
-            continue;
-        }
-        let indent_cols = cursor.current_indent_columns();
-        let ei = *entry_indent.get_or_insert(indent_cols);
-        if indent_cols <= ei {
-            // New entry: flush any pending, parse header
-            if let Some(pe) = pending.take() {
-                flush_pending_entry(cursor, &mut body, pe);
-            }
-            let header = parse_entry_header(cursor);
-            pending = Some(PendingEntry {
-                entry_start_line: cursor.line,
-                entry_col: cursor.current_indent(),
-                cont_first: None,
-                cont_last: cursor.line,
-                header,
-            });
-        } else if let Some(pe) = &mut pending {
-            // Continuation line for current entry
-            if pe.cont_first.is_none() {
-                pe.cont_first = Some(cursor.line);
-            }
-            pe.cont_last = cursor.line;
-        }
-        cursor.advance();
     }
-    if let Some(pe) = pending {
-        flush_pending_entry(cursor, &mut body, pe);
+
+    // New entry (or first entry): push immediately
+    if entry_indent.is_none() {
+        *entry_indent = Some(indent_cols);
     }
-    body
+    push_entry(cursor, body);
 }
 
-/// Consume body lines for a Returns / Yields section.
+/// Process one content line for a Returns / Yields section.
 ///
-/// The first non-blank line is parsed as `type: description`; remaining
-/// lines are treated as continuation.
-fn parse_returns_body(
-    cursor: &mut LineCursor,
-    kind: GoogleSectionKind,
-    next_header: &mut Option<GoogleSectionHeader>,
-) -> GoogleSectionBody {
-    let mut return_type: Option<TextRange> = None;
-    let mut colon: Option<TextRange> = None;
-    let mut first_desc = TextRange::empty();
-    let mut header_end = TextSize::from(0u32);
-    let mut entry_start: Option<usize> = None;
-    let mut entry_col: usize = 0;
-    let mut cont_first: Option<usize> = None;
-    let mut cont_last: usize = 0;
-
-    while !cursor.is_eof() {
-        if let Some(h) = try_parse_section_header(cursor) {
-            *next_header = Some(h);
-            break;
-        }
-        if cursor.current_trimmed().is_empty() {
-            cursor.advance();
-            continue;
-        }
-        if entry_start.is_none() {
-            // First content line — parse type and description
-            entry_start = Some(cursor.line);
-            entry_col = cursor.current_indent();
-            cont_last = cursor.line;
-
-            let trimmed = cursor.current_trimmed();
-            let col = cursor.current_indent();
-            if let Some(colon_pos) = find_entry_colon(trimmed) {
-                let type_str = trimmed[..colon_pos].trim_end();
-                let after_colon = &trimmed[colon_pos + 1..];
-                let desc_str = after_colon.trim_start();
-                let ws_after = after_colon.len() - desc_str.len();
-                return_type = Some(cursor.make_line_range(cursor.line, col, type_str.len()));
-                colon = Some(cursor.make_line_range(cursor.line, col + colon_pos, 1));
-                let desc_start = col + colon_pos + 1 + ws_after;
-                first_desc = if desc_str.is_empty() {
-                    TextRange::empty()
-                } else {
-                    cursor.make_line_range(cursor.line, desc_start, desc_str.len())
-                };
+/// The first non-blank content line is parsed as `type: description`;
+/// subsequent lines extend the description range.
+///
+/// Blank lines must be filtered by the caller before invoking this function.
+fn process_returns_line(cursor: &LineCursor, ret: &mut GoogleReturns) {
+    let trimmed_range = cursor.current_trimmed_range();
+    if ret.range.is_empty() {
+        // First content line — parse type and description
+        ret.range = trimmed_range;
+        let trimmed = cursor.current_trimmed();
+        let col = cursor.current_indent();
+        if let Some(colon_pos) = find_entry_colon(trimmed) {
+            let type_str = trimmed[..colon_pos].trim_end();
+            let after_colon = &trimmed[colon_pos + 1..];
+            let desc_str = after_colon.trim_start();
+            let ws_after = after_colon.len() - desc_str.len();
+            ret.return_type = Some(cursor.make_line_range(cursor.line, col, type_str.len()));
+            ret.colon = Some(cursor.make_line_range(cursor.line, col + colon_pos, 1));
+            let desc_start = col + colon_pos + 1 + ws_after;
+            ret.description = if desc_str.is_empty() {
+                TextRange::empty()
             } else {
-                first_desc = cursor.current_trimmed_range();
-            }
-            header_end = TextSize::from(cursor.substr_offset(trimmed) + trimmed.len());
+                cursor.make_line_range(cursor.line, desc_start, desc_str.len())
+            };
         } else {
-            // Continuation line
-            if cont_first.is_none() {
-                cont_first = Some(cursor.line);
-            }
-            cont_last = cursor.line;
-        }
-        cursor.advance();
-    }
-
-    let ret = if let Some(es) = entry_start {
-        let cont_range = build_content_range(cursor, cont_first, cont_last);
-        let full_desc = merge_descriptions(first_desc, cont_range);
-        let range_end = if full_desc.is_empty() {
-            header_end
-        } else {
-            full_desc.end()
-        };
-        let (end_line, end_col) = cursor.offset_to_line_col(range_end.raw() as usize);
-        GoogleReturns {
-            range: cursor.make_range(es, entry_col, end_line, end_col),
-            return_type,
-            colon,
-            description: full_desc,
+            ret.description = trimmed_range;
         }
     } else {
-        GoogleReturns {
-            range: TextRange::empty(),
-            return_type: None,
-            colon: None,
-            description: TextRange::empty(),
-        }
-    };
-    if kind == GoogleSectionKind::Yields {
-        GoogleSectionBody::Yields(ret)
-    } else {
-        GoogleSectionBody::Returns(ret)
+        // Continuation line — extend description and range
+        ret.description.extend(trimmed_range);
+        ret.range = TextRange::new(ret.range.start(), trimmed_range.end());
     }
 }
 
-/// Consume body lines for a freetext section (Notes, Examples, etc.).
-fn parse_freetext_body(
-    cursor: &mut LineCursor,
-    kind: GoogleSectionKind,
-    next_header: &mut Option<GoogleSectionHeader>,
-) -> GoogleSectionBody {
-    let mut first_content: Option<usize> = None;
-    let mut last_content: usize = 0;
+/// Process one content line for a free-text section (Notes, Examples, etc.).
+///
+/// Blank lines must be filtered by the caller before invoking this function.
+fn process_freetext_line(cursor: &LineCursor, content: &mut TextRange) {
+    content.extend(cursor.current_trimmed_range());
+}
 
-    while !cursor.is_eof() {
-        if let Some(h) = try_parse_section_header(cursor) {
-            *next_header = Some(h);
-            break;
-        }
-        if cursor.current_trimmed().is_empty() {
-            cursor.advance();
-            continue;
-        }
-        if first_content.is_none() {
-            first_content = Some(cursor.line);
-        }
-        last_content = cursor.line;
-        cursor.advance();
-    }
-
-    wrap_freetext(
-        kind,
-        build_content_range(cursor, first_content, last_content),
-    )
+/// Flush a completed section into the docstring.
+fn flush_section(
+    cursor: &LineCursor,
+    docstring: &mut GoogleDocstring,
+    header: GoogleSectionHeader,
+    body: GoogleSectionBody,
+) {
+    let header_start = header.range.start().raw() as usize;
+    let range = cursor.span_back_from_cursor(header_start);
+    docstring
+        .items
+        .push(GoogleDocstringItem::Section(GoogleSection {
+            range,
+            header,
+            body,
+        }));
 }
 
 // =============================================================================
@@ -827,95 +621,151 @@ pub fn parse_google(input: &str) -> GoogleDocstring {
         return docstring;
     }
 
-    // Cached section header found while parsing the previous region.
-    // Avoids redundant `try_parse_section_header` calls at boundaries.
-    let mut next_header: Option<GoogleSectionHeader>;
+    // Phase tracking for pre-section content.
+    //   summary_done  – true once a blank line or header terminates summary.
+    //   extended_done  – true once a header terminates extended summary.
+    let mut summary_done = false;
+    let mut extended_done = false;
+    let mut summary_first: Option<usize> = None;
+    let mut summary_last: usize = 0;
+    let mut ext_first: Option<usize> = None;
+    let mut ext_last: usize = 0;
 
-    // --- Summary ---
-    // `collect_text_range` returns the header it bumped into (if any).
-    {
-        let (range, nh) = collect_text_range(&mut line_cursor, true);
-        if !range.is_empty() {
-            docstring.summary = Some(range);
-        }
-        next_header = nh;
-        if next_header.is_none() {
-            line_cursor.skip_blanks();
-            if line_cursor.is_eof() {
-                docstring.range = line_cursor.full_range();
-                return docstring;
-            }
-        }
-    }
+    // Current section being parsed.
+    let mut current_header: Option<GoogleSectionHeader> = None;
+    let mut current_body: Option<GoogleSectionBody> = None;
+    let mut entry_indent: Option<usize> = None;
 
-    // --- Extended Summary ---
-    if next_header.is_none() {
-        let (range, nh) = collect_text_range(&mut line_cursor, false);
-        if !range.is_empty() {
-            docstring.extended_summary = Some(range);
-        }
-        next_header = nh;
-        if next_header.is_none() {
-            line_cursor.skip_blanks();
-            if line_cursor.is_eof() {
-                docstring.range = line_cursor.full_range();
-                return docstring;
-            }
-        }
-    }
-
-    // --- Sections ---
     while !line_cursor.is_eof() {
-        // Skip blank lines between sections
+        // --- Blank lines ---
         if line_cursor.current_trimmed().is_empty() {
+            // Blank line after summary content → finalise summary
+            if !summary_done && summary_first.is_some() {
+                docstring.summary = Some(build_content_range(
+                    &line_cursor,
+                    summary_first,
+                    summary_last,
+                ));
+                summary_done = true;
+            }
             line_cursor.advance();
             continue;
         }
 
-        // Detect section header (use cached or detect)
-        let header = next_header
-            .take()
-            .or_else(|| try_parse_section_header(&line_cursor));
+        // --- Detect section header ---
+        if let Some(header) = try_parse_section_header(&line_cursor) {
+            // Finalise any pending pre-section content
+            if !summary_done {
+                if summary_first.is_some() {
+                    docstring.summary = Some(build_content_range(
+                        &line_cursor,
+                        summary_first,
+                        summary_last,
+                    ));
+                }
+                summary_done = true;
+            }
+            if !extended_done {
+                if ext_first.is_some() {
+                    docstring.extended_summary =
+                        Some(build_content_range(&line_cursor, ext_first, ext_last));
+                }
+                extended_done = true;
+            }
 
-        let Some(header) = header else {
+            // Flush previous section
+            if let Some(prev_header) = current_header.take() {
+                flush_section(
+                    &line_cursor,
+                    &mut docstring,
+                    prev_header,
+                    current_body.take().unwrap(),
+                );
+            }
+
+            // Start new section
+            current_body = Some(GoogleSectionBody::new(header.kind));
+            current_header = Some(header);
+            entry_indent = None;
+            line_cursor.advance(); // skip header line
+            continue;
+        }
+
+        // --- Process line based on current state ---
+        if let Some(ref mut body) = current_body {
+            #[rustfmt::skip]
+            match body {
+                GoogleSectionBody::Args(_)                          => process_entry_line(&line_cursor, body, &mut entry_indent),
+                GoogleSectionBody::KeywordArgs(_)                   => process_entry_line(&line_cursor, body, &mut entry_indent),
+                GoogleSectionBody::OtherParameters(_)               => process_entry_line(&line_cursor, body, &mut entry_indent),
+                GoogleSectionBody::Receives(_)                      => process_entry_line(&line_cursor, body, &mut entry_indent),
+                GoogleSectionBody::Raises(_)                        => process_entry_line(&line_cursor, body, &mut entry_indent),
+                GoogleSectionBody::Warns(_)                         => process_entry_line(&line_cursor, body, &mut entry_indent),
+                GoogleSectionBody::Attributes(_)                    => process_entry_line(&line_cursor, body, &mut entry_indent),
+                GoogleSectionBody::Methods(_)                       => process_entry_line(&line_cursor, body, &mut entry_indent),
+                GoogleSectionBody::SeeAlso(_)                       => process_entry_line(&line_cursor, body, &mut entry_indent),
+                GoogleSectionBody::Returns(ret) => process_returns_line(&line_cursor, ret),
+                GoogleSectionBody::Yields(ret)  => process_returns_line(&line_cursor, ret),
+                GoogleSectionBody::Notes(r)         => process_freetext_line(&line_cursor, r),
+                GoogleSectionBody::Examples(r)      => process_freetext_line(&line_cursor, r),
+                GoogleSectionBody::Todo(r)          => process_freetext_line(&line_cursor, r),
+                GoogleSectionBody::References(r)    => process_freetext_line(&line_cursor, r),
+                GoogleSectionBody::Warnings(r)      => process_freetext_line(&line_cursor, r),
+                GoogleSectionBody::Attention(r)     => process_freetext_line(&line_cursor, r),
+                GoogleSectionBody::Caution(r)       => process_freetext_line(&line_cursor, r),
+                GoogleSectionBody::Danger(r)        => process_freetext_line(&line_cursor, r),
+                GoogleSectionBody::Error(r)         => process_freetext_line(&line_cursor, r),
+                GoogleSectionBody::Hint(r)          => process_freetext_line(&line_cursor, r),
+                GoogleSectionBody::Important(r)     => process_freetext_line(&line_cursor, r),
+                GoogleSectionBody::Tip(r)           => process_freetext_line(&line_cursor, r),
+                GoogleSectionBody::Unknown(r)       => process_freetext_line(&line_cursor, r),
+            };
+        } else if !summary_done {
+            // Summary content line
+            if summary_first.is_none() {
+                summary_first = Some(line_cursor.line);
+            }
+            summary_last = line_cursor.line;
+        } else if !extended_done {
+            // Extended summary content line
+            if ext_first.is_none() {
+                ext_first = Some(line_cursor.line);
+            }
+            ext_last = line_cursor.line;
+        } else {
             // Stray line (outside any section)
             docstring.items.push(GoogleDocstringItem::StrayLine(
                 line_cursor.current_trimmed_range(),
             ));
-            line_cursor.advance();
-            continue;
-        };
+        }
 
-        line_cursor.advance(); // skip header line
-        let header_start = header.range.start().raw() as usize;
-        let kind = header.kind;
-
-        // Parse section body (branching by kind)
-        #[rustfmt::skip]
-        let body = match kind {
-            GoogleSectionKind::Args            => parse_entry_body   (&mut line_cursor, kind, &mut next_header),
-            GoogleSectionKind::KeywordArgs     => parse_entry_body   (&mut line_cursor, kind, &mut next_header),
-            GoogleSectionKind::OtherParameters => parse_entry_body   (&mut line_cursor, kind, &mut next_header),
-            GoogleSectionKind::Receives        => parse_entry_body   (&mut line_cursor, kind, &mut next_header),
-            GoogleSectionKind::Raises          => parse_entry_body   (&mut line_cursor, kind, &mut next_header),
-            GoogleSectionKind::Warns           => parse_entry_body   (&mut line_cursor, kind, &mut next_header),
-            GoogleSectionKind::Attributes      => parse_entry_body   (&mut line_cursor, kind, &mut next_header),
-            GoogleSectionKind::Methods         => parse_entry_body   (&mut line_cursor, kind, &mut next_header),
-            GoogleSectionKind::SeeAlso         => parse_entry_body   (&mut line_cursor, kind, &mut next_header),
-            GoogleSectionKind::Returns         => parse_returns_body (&mut line_cursor, kind, &mut next_header),
-            GoogleSectionKind::Yields          => parse_returns_body (&mut line_cursor, kind, &mut next_header),
-            _                                  => parse_freetext_body(&mut line_cursor, kind, &mut next_header),
-        };
-
-        let range = line_cursor.span_back_from_cursor(header_start);
-        docstring
-            .items
-            .push(GoogleDocstringItem::Section(GoogleSection {
-                range,
-                header,
-                body,
-            }));
+        line_cursor.advance();
     }
+
+    // Flush final section
+    if let Some(header) = current_header.take() {
+        flush_section(
+            &line_cursor,
+            &mut docstring,
+            header,
+            current_body.take().unwrap(),
+        );
+    }
+
+    // Finalise at EOF
+    if !summary_done
+        && summary_first.is_some() {
+            docstring.summary = Some(build_content_range(
+                &line_cursor,
+                summary_first,
+                summary_last,
+            ));
+        }
+    if !extended_done
+        && ext_first.is_some() {
+            docstring.extended_summary =
+                Some(build_content_range(&line_cursor, ext_first, ext_last));
+        }
 
     // --- Docstring span ---
     docstring.range = line_cursor.full_range();

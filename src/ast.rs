@@ -145,6 +145,18 @@ impl TextRange {
             ""
         }
     }
+
+    /// Extend this range to include `other`.
+    ///
+    /// If `self` is empty, it is set to `other`.  Otherwise its end is
+    /// extended to `other.end()`.
+    pub fn extend(&mut self, other: TextRange) {
+        if self.is_empty() {
+            *self = other;
+        } else {
+            self.end = other.end;
+        }
+    }
 }
 
 // =============================================================================

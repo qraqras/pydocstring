@@ -290,6 +290,90 @@ pub enum GoogleSectionBody {
     Unknown(TextRange),
 }
 
+impl GoogleSectionBody {
+    /// Create an empty section body for the given kind.
+    #[rustfmt::skip]
+    pub fn new(kind: GoogleSectionKind) -> Self {
+        match kind {
+            GoogleSectionKind::Args            => Self::Args(Vec::new()),
+            GoogleSectionKind::KeywordArgs     => Self::KeywordArgs(Vec::new()),
+            GoogleSectionKind::OtherParameters => Self::OtherParameters(Vec::new()),
+            GoogleSectionKind::Receives        => Self::Receives(Vec::new()),
+            GoogleSectionKind::Raises          => Self::Raises(Vec::new()),
+            GoogleSectionKind::Warns           => Self::Warns(Vec::new()),
+            GoogleSectionKind::Attributes      => Self::Attributes(Vec::new()),
+            GoogleSectionKind::Methods         => Self::Methods(Vec::new()),
+            GoogleSectionKind::SeeAlso         => Self::SeeAlso(Vec::new()),
+            GoogleSectionKind::Returns         => Self::Returns(GoogleReturns { range: TextRange::empty(), return_type: None, colon: None, description: TextRange::empty() }),
+            GoogleSectionKind::Yields          => Self::Yields(GoogleReturns { range: TextRange::empty(), return_type: None, colon: None, description: TextRange::empty() }),
+            GoogleSectionKind::Notes           => Self::Notes(TextRange::empty()),
+            GoogleSectionKind::Examples        => Self::Examples(TextRange::empty()),
+            GoogleSectionKind::Todo            => Self::Todo(TextRange::empty()),
+            GoogleSectionKind::References      => Self::References(TextRange::empty()),
+            GoogleSectionKind::Warnings        => Self::Warnings(TextRange::empty()),
+            GoogleSectionKind::Attention       => Self::Attention(TextRange::empty()),
+            GoogleSectionKind::Caution         => Self::Caution(TextRange::empty()),
+            GoogleSectionKind::Danger          => Self::Danger(TextRange::empty()),
+            GoogleSectionKind::Error           => Self::Error(TextRange::empty()),
+            GoogleSectionKind::Hint            => Self::Hint(TextRange::empty()),
+            GoogleSectionKind::Important       => Self::Important(TextRange::empty()),
+            GoogleSectionKind::Tip             => Self::Tip(TextRange::empty()),
+            GoogleSectionKind::Unknown         => Self::Unknown(TextRange::empty()),
+        }
+    }
+
+    /// Extend the last entry's description and range with a continuation range.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called on a non-entry-based section body.
+    pub fn extend_last_description(&mut self, range: TextRange) {
+        match self {
+            Self::Args(v) | Self::KeywordArgs(v) | Self::OtherParameters(v) | Self::Receives(v) => {
+                if let Some(last) = v.last_mut() {
+                    last.description.extend(range);
+                    last.range = TextRange::new(last.range.start(), range.end());
+                }
+            }
+            Self::Raises(v) => {
+                if let Some(last) = v.last_mut() {
+                    last.description.extend(range);
+                    last.range = TextRange::new(last.range.start(), range.end());
+                }
+            }
+            Self::Warns(v) => {
+                if let Some(last) = v.last_mut() {
+                    last.description.extend(range);
+                    last.range = TextRange::new(last.range.start(), range.end());
+                }
+            }
+            Self::Attributes(v) => {
+                if let Some(last) = v.last_mut() {
+                    last.description.extend(range);
+                    last.range = TextRange::new(last.range.start(), range.end());
+                }
+            }
+            Self::Methods(v) => {
+                if let Some(last) = v.last_mut() {
+                    last.description.extend(range);
+                    last.range = TextRange::new(last.range.start(), range.end());
+                }
+            }
+            Self::SeeAlso(v) => {
+                if let Some(last) = v.last_mut() {
+                    if let Some(ref mut desc) = last.description {
+                        desc.extend(range);
+                    } else {
+                        last.description = Some(range);
+                    }
+                    last.range = TextRange::new(last.range.start(), range.end());
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// Google-style docstring.
 ///
 /// Supports sections with colons like:

@@ -279,7 +279,6 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
             continue;
         };
 
-        let header_col = cursor.current_indent();
         let header_indent = cursor.current_indent_columns();
         let section_kind = header.kind;
 
@@ -291,7 +290,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
             NumPySectionKind::Parameters      => NumPySectionBody::Parameters     (parse_parameters     (&mut cursor, header_indent)),
             NumPySectionKind::Returns         => NumPySectionBody::Returns        (parse_returns        (&mut cursor, header_indent)),
             NumPySectionKind::Raises          => NumPySectionBody::Raises         (parse_raises         (&mut cursor, header_indent)),
-            NumPySectionKind::Yields          => NumPySectionBody::Yields         (parse_returns        (&mut cursor, header_col)),
+            NumPySectionKind::Yields          => NumPySectionBody::Yields         (parse_returns        (&mut cursor, header_indent)),
             NumPySectionKind::Receives        => NumPySectionBody::Receives       (parse_parameters     (&mut cursor, header_indent)),
             NumPySectionKind::OtherParameters => NumPySectionBody::OtherParameters(parse_parameters     (&mut cursor, header_indent)),
             NumPySectionKind::Warns           => NumPySectionBody::Warns          (parse_warns          (&mut cursor, header_indent)),
