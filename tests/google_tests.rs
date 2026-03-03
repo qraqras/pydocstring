@@ -358,7 +358,13 @@ fn test_args_basic() {
         a[0].r#type.as_ref().unwrap().source_text(&result.source),
         "int"
     );
-    assert_eq!(a[0].description.source_text(&result.source), "The value.");
+    assert_eq!(
+        a[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
+        "The value."
+    );
 }
 
 #[test]
@@ -386,7 +392,13 @@ fn test_args_no_type() {
     let a = args(&result);
     assert_eq!(a[0].name.source_text(&result.source), "x");
     assert!(a[0].r#type.is_none());
-    assert_eq!(a[0].description.source_text(&result.source), "The value.");
+    assert_eq!(
+        a[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
+        "The value."
+    );
 }
 
 /// Colon with no space after it: `name:description`
@@ -396,7 +408,13 @@ fn test_args_no_space_after_colon() {
     let result = parse_google(docstring);
     let a = args(&result);
     assert_eq!(a[0].name.source_text(&result.source), "x");
-    assert_eq!(a[0].description.source_text(&result.source), "The value.");
+    assert_eq!(
+        a[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
+        "The value."
+    );
 }
 
 /// Colon with extra spaces: `name:   description`
@@ -406,7 +424,13 @@ fn test_args_extra_spaces_after_colon() {
     let result = parse_google(docstring);
     let a = args(&result);
     assert_eq!(a[0].name.source_text(&result.source), "x");
-    assert_eq!(a[0].description.source_text(&result.source), "The value.");
+    assert_eq!(
+        a[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
+        "The value."
+    );
 }
 
 /// Returns entry with no space after colon.
@@ -419,7 +443,10 @@ fn test_returns_no_space_after_colon() {
         r.return_type.as_ref().unwrap().source_text(&result.source),
         "int"
     );
-    assert_eq!(r.description.source_text(&result.source), "The result.");
+    assert_eq!(
+        r.description.as_ref().unwrap().source_text(&result.source),
+        "The result."
+    );
 }
 
 /// Returns entry with extra spaces after colon.
@@ -432,7 +459,10 @@ fn test_returns_extra_spaces_after_colon() {
         r.return_type.as_ref().unwrap().source_text(&result.source),
         "int"
     );
-    assert_eq!(r.description.source_text(&result.source), "The result.");
+    assert_eq!(
+        r.description.as_ref().unwrap().source_text(&result.source),
+        "The result."
+    );
 }
 
 /// Raises entry with no space after colon.
@@ -442,7 +472,13 @@ fn test_raises_no_space_after_colon() {
     let result = parse_google(docstring);
     let r = raises(&result);
     assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
-    assert_eq!(r[0].description.source_text(&result.source), "If invalid.");
+    assert_eq!(
+        r[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
+        "If invalid."
+    );
 }
 
 /// Raises entry with extra spaces after colon.
@@ -452,7 +488,13 @@ fn test_raises_extra_spaces_after_colon() {
     let result = parse_google(docstring);
     let r = raises(&result);
     assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
-    assert_eq!(r[0].description.source_text(&result.source), "If invalid.");
+    assert_eq!(
+        r[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
+        "If invalid."
+    );
 }
 
 #[test]
@@ -502,7 +544,11 @@ fn test_args_multiline_description() {
         "Summary.\n\nArgs:\n    x (int): First line.\n        Second line.\n        Third line.";
     let result = parse_google(docstring);
     assert_eq!(
-        args(&result)[0].description.source_text(&result.source),
+        args(&result)[0]
+            .description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "First line.\n        Second line.\n        Third line."
     );
 }
@@ -518,7 +564,10 @@ fn test_args_description_on_next_line() {
         "int"
     );
     assert_eq!(
-        a[0].description.source_text(&result.source),
+        a[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "The description."
     );
 }
@@ -531,12 +580,18 @@ fn test_args_varargs() {
     assert_eq!(a.len(), 2);
     assert_eq!(a[0].name.source_text(&result.source), "*args");
     assert_eq!(
-        a[0].description.source_text(&result.source),
+        a[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "Positional args."
     );
     assert_eq!(a[1].name.source_text(&result.source), "**kwargs");
     assert_eq!(
-        a[1].description.source_text(&result.source),
+        a[1].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "Keyword args."
     );
 }
@@ -620,7 +675,10 @@ fn test_args_square_bracket_type() {
             .source_text(&result.source),
         "]"
     );
-    assert_eq!(a.description.source_text(&result.source), "The value.");
+    assert_eq!(
+        a.description.as_ref().unwrap().source_text(&result.source),
+        "The value."
+    );
 }
 
 #[test]
@@ -644,7 +702,10 @@ fn test_args_curly_bracket_type() {
             .source_text(&result.source),
         "}"
     );
-    assert_eq!(a.description.source_text(&result.source), "The value.");
+    assert_eq!(
+        a.description.as_ref().unwrap().source_text(&result.source),
+        "The value."
+    );
 }
 
 #[test]
@@ -755,7 +816,10 @@ fn test_args_angle_bracket_type() {
             .source_text(&result.source),
         ">"
     );
-    assert_eq!(a.description.source_text(&result.source), "The value.");
+    assert_eq!(
+        a.description.as_ref().unwrap().source_text(&result.source),
+        "The value."
+    );
 }
 
 // =============================================================================
@@ -771,7 +835,10 @@ fn test_returns_with_type() {
         r.return_type.as_ref().unwrap().source_text(&result.source),
         "int"
     );
-    assert_eq!(r.description.source_text(&result.source), "The result.");
+    assert_eq!(
+        r.description.as_ref().unwrap().source_text(&result.source),
+        "The result."
+    );
 }
 
 #[test]
@@ -785,7 +852,7 @@ fn test_returns_multiple_lines() {
         "int"
     );
     assert_eq!(
-        r.description.source_text(&result.source),
+        r.description.as_ref().unwrap().source_text(&result.source),
         "The count.\n    str: The message."
     );
 }
@@ -797,7 +864,7 @@ fn test_returns_without_type() {
     let r = returns(&result).unwrap();
     assert!(r.return_type.is_none());
     assert_eq!(
-        r.description.source_text(&result.source),
+        r.description.as_ref().unwrap().source_text(&result.source),
         "The computed result."
     );
 }
@@ -810,6 +877,8 @@ fn test_returns_multiline_description() {
         returns(&result)
             .unwrap()
             .description
+            .as_ref()
+            .unwrap()
             .source_text(&result.source),
         "The result\n        of the computation."
     );
@@ -835,7 +904,10 @@ fn test_yields() {
         y.return_type.as_ref().unwrap().source_text(&result.source),
         "int"
     );
-    assert_eq!(y.description.source_text(&result.source), "The next value.");
+    assert_eq!(
+        y.description.as_ref().unwrap().source_text(&result.source),
+        "The next value."
+    );
 }
 
 #[test]
@@ -857,7 +929,10 @@ fn test_raises_single() {
     assert_eq!(r.len(), 1);
     assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
     assert_eq!(
-        r[0].description.source_text(&result.source),
+        r[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "If the input is invalid."
     );
 }
@@ -878,7 +953,11 @@ fn test_raises_multiline_description() {
     let docstring = "Summary.\n\nRaises:\n    ValueError: If the\n        input is invalid.";
     let result = parse_google(docstring);
     assert_eq!(
-        raises(&result)[0].description.source_text(&result.source),
+        raises(&result)[0]
+            .description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "If the\n        input is invalid."
     );
 }
@@ -1514,7 +1593,10 @@ fn test_warns_basic() {
         "DeprecationWarning"
     );
     assert_eq!(
-        w[0].description.source_text(&result.source),
+        w[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "If using old API."
     );
 }
@@ -1555,7 +1637,11 @@ fn test_warns_multiline_description() {
     let docstring = "Summary.\n\nWarns:\n    UserWarning: First line.\n        Second line.";
     let result = parse_google(docstring);
     assert_eq!(
-        warns(&result)[0].description.source_text(&result.source),
+        warns(&result)[0]
+            .description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "First line.\n        Second line."
     );
 }
@@ -1629,7 +1715,10 @@ fn test_methods_basic() {
     assert_eq!(m.len(), 2);
     assert_eq!(m[0].name.source_text(&result.source), "reset()");
     assert_eq!(
-        m[0].description.source_text(&result.source),
+        m[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "Reset the state."
     );
     assert_eq!(m[1].name.source_text(&result.source), "update(data)");
@@ -1643,7 +1732,10 @@ fn test_methods_without_parens() {
     assert_eq!(m.len(), 1);
     assert_eq!(m[0].name.source_text(&result.source), "do_stuff");
     assert_eq!(
-        m[0].description.source_text(&result.source),
+        m[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "Performs the operation."
     );
 }
@@ -2035,10 +2127,19 @@ fn test_tab_indented_args() {
     let a = args(&result);
     assert_eq!(a.len(), 2);
     assert_eq!(a[0].name.source_text(&result.source), "x");
-    assert_eq!(a[0].description.source_text(&result.source), "The value.");
+    assert_eq!(
+        a[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
+        "The value."
+    );
     assert_eq!(a[1].name.source_text(&result.source), "y");
     assert_eq!(
-        a[1].description.source_text(&result.source),
+        a[1].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "Another value."
     );
 }
@@ -2051,7 +2152,11 @@ fn test_tab_args_with_continuation() {
     let a = args(&result);
     assert_eq!(a.len(), 2);
     assert_eq!(a[0].name.source_text(&result.source), "x");
-    let desc = a[0].description.source_text(&result.source);
+    let desc = a[0]
+        .description
+        .as_ref()
+        .unwrap()
+        .source_text(&result.source);
     assert!(desc.contains("First line."), "desc = {:?}", desc);
     assert!(desc.contains("Continuation."), "desc = {:?}", desc);
 }
@@ -2065,7 +2170,10 @@ fn test_tab_indented_returns() {
     assert!(r.is_some());
     let r = r.unwrap();
     assert_eq!(r.return_type.unwrap().source_text(&result.source), "int");
-    assert_eq!(r.description.source_text(&result.source), "The result.");
+    assert_eq!(
+        r.description.as_ref().unwrap().source_text(&result.source),
+        "The result."
+    );
 }
 
 /// Raises section with tab-indented entries.

@@ -26,7 +26,7 @@ use crate::styles::numpy::ast::{
     NumPyMethod, NumPyParameter, NumPyReturns, NumPySection, NumPySectionBody, NumPySectionHeader,
     NumPySectionKind, NumPyWarning,
 };
-use crate::styles::utils::{find_entry_colon, split_comma_parts};
+use crate::styles::utils::{find_entry_colon, find_matching_close, split_comma_parts};
 
 // =============================================================================
 // Section detection
@@ -533,7 +533,7 @@ fn parse_name_and_type(
             .position(|b| matches!(b, b'(' | b'[' | b'{' | b'<'))
             .unwrap();
         let abs_open = type_abs_start + first_open_rel;
-        if let Some(abs_close) = cursor.find_matching_close(abs_open) {
+        if let Some(abs_close) = find_matching_close(cursor.source(), abs_open) {
             let close_line_idx = cursor.offset_to_line_col(abs_close).0;
             // Include everything from type start through end of close bracket's line
             let close_line_text = cursor.line_text(close_line_idx);
@@ -961,7 +961,7 @@ fn parse_references(cursor: &mut LineCursor) -> Vec<crate::styles::numpy::ast::N
             // Find actual positions of `[` and `]` — use bracket-aware matching
             let rel_open = trimmed.find('[').unwrap();
             let abs_open = cursor.substr_offset(trimmed) + rel_open;
-            if let Some(abs_close) = cursor.find_matching_close(abs_open) {
+            if let Some(abs_close) = find_matching_close(cursor.source(), abs_open) {
                 // `..` directive marker
                 current_directive_marker =
                     Some(cursor.make_range(cursor.line, col, cursor.line, col + 2));

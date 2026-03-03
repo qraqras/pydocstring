@@ -57,7 +57,7 @@ Raises:
             "  {} ({}): {}",
             arg.name.source_text(&doc.source),
             type_str,
-            arg.description.source_text(&doc.source)
+            arg.description.as_ref().unwrap().source_text(&doc.source)
         );
     }
 
@@ -77,7 +77,7 @@ Raises:
         println!(
             "\nReturns: {}: {}",
             type_str,
-            ret.description.source_text(&doc.source)
+            ret.description.as_ref().unwrap().source_text(&doc.source)
         );
     }
 
@@ -98,7 +98,7 @@ Raises:
         println!(
             "  {}: {}",
             exc.r#type.source_text(&doc.source),
-            exc.description.source_text(&doc.source)
+            exc.description.as_ref().unwrap().source_text(&doc.source)
         );
     }
 

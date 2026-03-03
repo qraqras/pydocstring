@@ -206,37 +206,6 @@ impl<'a> LineCursor<'a> {
     pub fn substr_offset(&self, inner: &str) -> usize {
         inner.as_ptr() as usize - self.source.as_ptr() as usize
     }
-
-    /// Find the matching closing bracket for an opening bracket at `open_pos`.
-    ///
-    /// Tracks bracket *kind* so that `(` is only closed by `)`, `[` by `]`,
-    /// `{` by `}`, and `<` by `>`.  Mismatched closing brackets are ignored.
-    pub fn find_matching_close(&self, open_pos: usize) -> Option<usize> {
-        let mut stack: Vec<char> = Vec::new();
-        for (i, c) in self.source[open_pos..].char_indices() {
-            match c {
-                '(' | '[' | '{' | '<' => stack.push(c),
-                ')' | ']' | '}' | '>' => {
-                    let expected_open = match c {
-                        ')' => '(',
-                        ']' => '[',
-                        '}' => '{',
-                        '>' => '<',
-                        _ => unreachable!(),
-                    };
-                    if stack.last() == Some(&expected_open) {
-                        stack.pop();
-                        if stack.is_empty() {
-                            return Some(open_pos + i);
-                        }
-                    }
-                    // Mismatched close bracket — skip it
-                }
-                _ => {}
-            }
-        }
-        None
-    }
 }
 
 // =============================================================================
@@ -333,43 +302,5 @@ mod tests {
         assert_eq!(indent_len("\thello"), 1);
         assert_eq!(indent_len("    hello"), 4);
         assert_eq!(indent_len("  \thello"), 3);
-    }
-
-    #[test]
-    fn test_find_matching_close_basic() {
-        let c = LineCursor::new("(abc)");
-        assert_eq!(c.find_matching_close(0), Some(4));
-    }
-
-    #[test]
-    fn test_find_matching_close_nested_same() {
-        let c = LineCursor::new("(a(b)c)");
-        assert_eq!(c.find_matching_close(0), Some(6));
-    }
-
-    #[test]
-    fn test_find_matching_close_nested_mixed() {
-        let c = LineCursor::new("(a[b]c)");
-        assert_eq!(c.find_matching_close(0), Some(6));
-    }
-
-    #[test]
-    fn test_find_matching_close_mismatched_ignored() {
-        // `(` should NOT be closed by `]` — the `]` is ignored and `)` closes it.
-        let c = LineCursor::new("(a]b)");
-        assert_eq!(c.find_matching_close(0), Some(4));
-    }
-
-    #[test]
-    fn test_find_matching_close_no_match() {
-        // Only mismatched closers — never finds a match
-        let c = LineCursor::new("(a]b}c");
-        assert_eq!(c.find_matching_close(0), None);
-    }
-
-    #[test]
-    fn test_find_matching_close_angle_brackets() {
-        let c = LineCursor::new("<int>");
-        assert_eq!(c.find_matching_close(0), Some(4));
     }
 }

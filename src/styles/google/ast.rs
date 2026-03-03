@@ -304,8 +304,8 @@ impl GoogleSectionBody {
             GoogleSectionKind::Attributes      => Self::Attributes(Vec::new()),
             GoogleSectionKind::Methods         => Self::Methods(Vec::new()),
             GoogleSectionKind::SeeAlso         => Self::SeeAlso(Vec::new()),
-            GoogleSectionKind::Returns         => Self::Returns(GoogleReturns { range: TextRange::empty(), return_type: None, colon: None, description: TextRange::empty() }),
-            GoogleSectionKind::Yields          => Self::Yields(GoogleReturns { range: TextRange::empty(), return_type: None, colon: None, description: TextRange::empty() }),
+            GoogleSectionKind::Returns         => Self::Returns(GoogleReturns { range: TextRange::empty(), return_type: None, colon: None, description: None }),
+            GoogleSectionKind::Yields          => Self::Yields(GoogleReturns { range: TextRange::empty(), return_type: None, colon: None, description: None }),
             GoogleSectionKind::Notes           => Self::Notes(TextRange::empty()),
             GoogleSectionKind::Examples        => Self::Examples(TextRange::empty()),
             GoogleSectionKind::Todo            => Self::Todo(TextRange::empty()),
@@ -319,57 +319,6 @@ impl GoogleSectionBody {
             GoogleSectionKind::Important       => Self::Important(TextRange::empty()),
             GoogleSectionKind::Tip             => Self::Tip(TextRange::empty()),
             GoogleSectionKind::Unknown         => Self::Unknown(TextRange::empty()),
-        }
-    }
-
-    /// Extend the last entry's description and range with a continuation range.
-    ///
-    /// # Panics
-    ///
-    /// Panics if called on a non-entry-based section body.
-    pub fn extend_last_description(&mut self, range: TextRange) {
-        match self {
-            Self::Args(v) | Self::KeywordArgs(v) | Self::OtherParameters(v) | Self::Receives(v) => {
-                if let Some(last) = v.last_mut() {
-                    last.description.extend(range);
-                    last.range = TextRange::new(last.range.start(), range.end());
-                }
-            }
-            Self::Raises(v) => {
-                if let Some(last) = v.last_mut() {
-                    last.description.extend(range);
-                    last.range = TextRange::new(last.range.start(), range.end());
-                }
-            }
-            Self::Warns(v) => {
-                if let Some(last) = v.last_mut() {
-                    last.description.extend(range);
-                    last.range = TextRange::new(last.range.start(), range.end());
-                }
-            }
-            Self::Attributes(v) => {
-                if let Some(last) = v.last_mut() {
-                    last.description.extend(range);
-                    last.range = TextRange::new(last.range.start(), range.end());
-                }
-            }
-            Self::Methods(v) => {
-                if let Some(last) = v.last_mut() {
-                    last.description.extend(range);
-                    last.range = TextRange::new(last.range.start(), range.end());
-                }
-            }
-            Self::SeeAlso(v) => {
-                if let Some(last) = v.last_mut() {
-                    if let Some(ref mut desc) = last.description {
-                        desc.extend(range);
-                    } else {
-                        last.description = Some(range);
-                    }
-                    last.range = TextRange::new(last.range.start(), range.end());
-                }
-            }
-            _ => unreachable!(),
         }
     }
 }
@@ -414,8 +363,8 @@ pub struct GoogleArg {
     pub close_bracket: Option<TextRange>,
     /// The colon (`:`) separating name/type from description, with its span, if present.
     pub colon: Option<TextRange>,
-    /// Argument description with its span.
-    pub description: TextRange,
+    /// Argument description with its span, if present.
+    pub description: Option<TextRange>,
     /// The `optional` marker, if present.
     /// `None` means not marked as optional.
     pub optional: Option<TextRange>,
@@ -430,8 +379,8 @@ pub struct GoogleReturns {
     pub return_type: Option<TextRange>,
     /// The colon (`:`) separating type and description, with its span, if present.
     pub colon: Option<TextRange>,
-    /// Description with its span.
-    pub description: TextRange,
+    /// Description with its span, if present.
+    pub description: Option<TextRange>,
 }
 
 /// Google-style exception.
@@ -443,8 +392,8 @@ pub struct GoogleException {
     pub r#type: TextRange,
     /// The colon (`:`) separating type from description, with its span, if present.
     pub colon: Option<TextRange>,
-    /// Description with its span.
-    pub description: TextRange,
+    /// Description with its span, if present.
+    pub description: Option<TextRange>,
 }
 
 /// Google-style warning (from Warns section).
@@ -458,8 +407,8 @@ pub struct GoogleWarning {
     pub warning_type: TextRange,
     /// The colon (`:`) separating type from description, with its span, if present.
     pub colon: Option<TextRange>,
-    /// Description of when the warning is issued, with its span.
-    pub description: TextRange,
+    /// Description of when the warning is issued, with its span, if present.
+    pub description: Option<TextRange>,
 }
 
 /// Google-style See Also item.
@@ -498,8 +447,8 @@ pub struct GoogleAttribute {
     pub close_bracket: Option<TextRange>,
     /// The colon (`:`) separating name/type from description, with its span, if present.
     pub colon: Option<TextRange>,
-    /// Description with its span.
-    pub description: TextRange,
+    /// Description with its span, if present.
+    pub description: Option<TextRange>,
 }
 
 /// Google-style method entry (from Methods section).
@@ -517,8 +466,8 @@ pub struct GoogleMethod {
     pub close_bracket: Option<TextRange>,
     /// The colon (`:`) separating name from description, with its span, if present.
     pub colon: Option<TextRange>,
-    /// Brief description with its span.
-    pub description: TextRange,
+    /// Brief description with its span, if present.
+    pub description: Option<TextRange>,
 }
 
 impl GoogleDocstring {

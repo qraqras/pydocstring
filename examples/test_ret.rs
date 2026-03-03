@@ -34,7 +34,7 @@ Returns:
                 );
                 if let GoogleSectionBody::Returns(ref ret) = s.body {
                     let type_str = ret.return_type.as_ref().map(|t| t.source_text(&doc.source));
-                    let d = &ret.description.source_text(&doc.source);
+                    let d = &ret.description.as_ref().unwrap().source_text(&doc.source);
                     println!("  type: {:?}", type_str);
                     println!("  desc: {:?}", if d.len() > 80 { &d[..80] } else { d });
                 }
