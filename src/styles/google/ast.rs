@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::ast::TextRange;
+use crate::text::TextRange;
 
 // =============================================================================
 // Google Style Types

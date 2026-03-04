@@ -4,7 +4,7 @@
 //! line position into a single struct, eliminating the need to thread
 //! `(source, &offsets, total_lines)` through every helper function.
 
-use crate::ast::{TextRange, TextSize};
+use crate::text::{TextRange, TextSize};
 
 // =============================================================================
 // LineCursor
@@ -135,12 +135,6 @@ impl<'a> LineCursor<'a> {
             return "";
         }
         &self.source[start..end]
-    }
-
-    /// Leading-whitespace byte count of line `idx`.
-    #[allow(dead_code)]
-    pub fn line_indent(&self, idx: usize) -> usize {
-        indent_len(self.line_text(idx))
     }
 
     // ── Span construction ──────────────────────────────────────────

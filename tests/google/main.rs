@@ -1,12 +1,12 @@
 //! Integration tests for Google-style docstring parser.
 
 pub use pydocstring::GoogleSectionBody;
+pub use pydocstring::TextSize;
 pub use pydocstring::google::parse_google;
 pub use pydocstring::google::{
     GoogleArg, GoogleAttribute, GoogleDocstring, GoogleDocstringItem, GoogleException,
     GoogleMethod, GoogleReturns, GoogleSection, GoogleSeeAlsoItem, GoogleWarning,
 };
-pub use pydocstring::{LineIndex, TextSize};
 
 mod args;
 mod edge_cases;

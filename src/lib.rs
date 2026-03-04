@@ -40,13 +40,12 @@
 //! - NumPy style: fully supported
 //! - Google style: fully supported
 
-pub mod ast;
 pub(crate) mod cursor;
-pub mod parser;
 pub mod styles;
+pub mod text;
 
-pub use ast::{LineIndex, Style, TextRange, TextSize};
-pub use parser::detect_style;
+pub use styles::Style;
+pub use styles::detect_style;
 pub use styles::google::{
     self, GoogleArg, GoogleAttribute, GoogleDocstring, GoogleDocstringItem, GoogleException,
     GoogleMethod, GoogleReturns, GoogleSection, GoogleSectionBody, GoogleSectionHeader,
@@ -57,3 +56,4 @@ pub use styles::numpy::{
     NumPyMethod, NumPyParameter, NumPyReference, NumPyReturns, NumPySection, NumPySectionBody,
     NumPySectionHeader, NumPySectionKind, NumPyWarning, SeeAlsoItem,
 };
+pub use text::{TextRange, TextSize};

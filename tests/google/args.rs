@@ -258,10 +258,8 @@ fn test_args_name_span() {
     let docstring = "Summary.\n\nArgs:\n    x (int): Value.";
     let result = parse_google(docstring);
     let arg = &args(&result)[0];
-    let index = LineIndex::from_source(&result.source);
-    let (line, col) = index.line_col(arg.name.start());
-    assert_eq!(line, 3);
-    assert_eq!(col, 4);
+    // "x" starts at byte offset 20 (line 3, col 4)
+    assert_eq!(arg.name.start(), TextSize::new(20));
     assert_eq!(arg.name.end(), TextSize::new(arg.name.start().raw() + 1));
     assert_eq!(arg.name.source_text(&result.source), "x");
 }
@@ -272,9 +270,8 @@ fn test_args_type_span() {
     let result = parse_google(docstring);
     let arg = &args(&result)[0];
     let type_span = arg.r#type.as_ref().unwrap();
-    let index = LineIndex::from_source(&result.source);
-    let (line, _col) = index.line_col(type_span.start());
-    assert_eq!(line, 3);
+    // "int" starts at byte offset 23 (line 3)
+    assert_eq!(type_span.start(), TextSize::new(23));
     assert_eq!(type_span.source_text(&result.source), "int");
 }
 

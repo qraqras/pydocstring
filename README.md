@@ -9,9 +9,9 @@ A fast, zero-dependency Rust parser for Python docstrings with full AST and sour
   - Google style — fully supported
   - NumPy style — fully supported
 - **Accurate source spans** (byte offsets) on every AST node
-- **Diagnostic-based error reporting** — partial results + diagnostics, never panics
+- **Always succeeds** — returns a best-effort AST for any input, never panics
 - **Style auto-detection** — automatically identifies NumPy or Google style
-- **Comprehensive test coverage** (140+ tests)
+- **Comprehensive test coverage** (260+ tests)
 
 ## Installation
 
@@ -120,32 +120,12 @@ let google_doc = "Summary.\n\nArgs:\n    x: Desc.";
 assert_eq!(detect_style(google_doc), Style::Google);
 ```
 
-## Diagnostic-Based Error Handling
-
-Parsers always return a result — even for malformed input. Diagnostics are collected alongside the best-effort AST:
-
-```rust
-use pydocstring::google::parse_google;
-
-let result = parse_google("Summary.\n\nArgs:\n    : missing name");
-
-if result.has_errors() {
-    for diag in result.errors() {
-        eprintln!("{}", diag); // e.g. "error at 14..28: ..."
-    }
-}
-
-// The AST is still available
-println!("Summary: {}", result.summary.as_ref().map_or("", |s| s.source_text(&result.source)));
-```
-
 ## Source Locations
 
 Every AST node carries a `TextRange` (byte offsets) so linters can report precise positions:
 
 ```rust
 use pydocstring::numpy::parse_numpy;
-use pydocstring::LineIndex;
 
 let docstring = "Summary.\n\nParameters\n----------\nx : int\n    Desc.";
 let result = parse_numpy(docstring);
@@ -158,11 +138,6 @@ for item in &result.items {
                 println!("Parameter '{}' at byte {}..{}",
                     name_range.source_text(&result.source),
                     name_range.start(), name_range.end());
-
-                // Convert to line/column if needed
-                let index = LineIndex::from_source(docstring);
-                let (line, col) = index.line_col(name_range.start());
-                println!("  line {}, col {}", line, col);
             }
         }
     }
@@ -173,47 +148,49 @@ for item in &result.items {
 
 ### NumPy Style
 
-| Section | Method | Return Type |
-|---------|--------|-------------|
-| Parameters | `parameters()` | `Vec<&NumPyParameter>` |
-| Other Parameters | `other_parameters()` | `Vec<&NumPyParameter>` |
-| Returns | `returns()` | `Vec<&NumPyReturns>` |
-| Yields | `yields()` | `Vec<&NumPyReturns>` |
-| Receives | `receives()` | `Vec<&NumPyParameter>` |
-| Raises | `raises()` | `Vec<&NumPyException>` |
-| Warns | `warns()` | `Vec<&NumPyWarning>` |
-| Warnings | `warnings()` | `Option<&TextRange>` |
-| See Also | `see_also()` | `Vec<&SeeAlsoItem>` |
-| Notes | `notes()` | `Option<&TextRange>` |
-| References | `references()` | `Vec<&NumPyReference>` |
-| Examples | `examples()` | `Option<&TextRange>` |
-| Attributes | `attributes()` | `Vec<&NumPyAttribute>` |
-| Methods | `methods()` | `Vec<&NumPyMethod>` |
+| Section | Body variant | Body type |
+|---------|-------------|-----------|
+| Parameters | `Parameters(...)` | `Vec<NumPyParameter>` |
+| Other Parameters | `OtherParameters(...)` | `Vec<NumPyParameter>` |
+| Receives | `Receives(...)` | `Vec<NumPyParameter>` |
+| Returns | `Returns(...)` | `Vec<NumPyReturns>` |
+| Yields | `Yields(...)` | `Vec<NumPyReturns>` |
+| Raises | `Raises(...)` | `Vec<NumPyException>` |
+| Warns | `Warns(...)` | `Vec<NumPyWarning>` |
+| See Also | `SeeAlso(...)` | `Vec<SeeAlsoItem>` |
+| Attributes | `Attributes(...)` | `Vec<NumPyAttribute>` |
+| Methods | `Methods(...)` | `Vec<NumPyMethod>` |
+| References | `References(...)` | `Vec<NumPyReference>` |
+| Warnings | `Warnings(...)` | `Option<TextRange>` |
+| Notes | `Notes(...)` | `Option<TextRange>` |
+| Examples | `Examples(...)` | `Option<TextRange>` |
 
 Additionally, `NumPyDocstring` has fields: `summary`, `deprecation`, `extended_summary`.
 
 ### Google Style
 
-| Section | Method | Return Type |
-|---------|--------|-------------|
-| Args | `args()` | `Vec<&GoogleArgument>` |
-| Keyword Args | `keyword_args()` | `Vec<&GoogleArgument>` |
-| Other Parameters | `other_parameters()` | `Vec<&GoogleArgument>` |
-| Returns | `returns()` | `Vec<&GoogleReturns>` |
-| Yields | `yields()` | `Vec<&GoogleReturns>` |
-| Receives | `receives()` | `Vec<&GoogleArgument>` |
-| Raises | `raises()` | `Vec<&GoogleException>` |
-| Warns | `warns()` | `Vec<&GoogleWarning>` |
-| Warnings | `warnings()` | `Option<&TextRange>` |
-| See Also | `see_also()` | `Vec<&GoogleSeeAlsoItem>` |
-| Notes | `notes()` | `Option<&TextRange>` |
-| References | `references()` | `Option<&TextRange>` |
-| Examples | `examples()` | `Option<&TextRange>` |
-| Attributes | `attributes()` | `Vec<&GoogleAttribute>` |
-| Methods | `methods()` | `Vec<&GoogleMethod>` |
-| Todo | `todo()` | `Option<&TextRange>` |
+| Section | Body variant | Body type |
+|---------|-------------|-----------|
+| Args | `Args(...)` | `Vec<GoogleArg>` |
+| Keyword Args | `KeywordArgs(...)` | `Vec<GoogleArg>` |
+| Other Parameters | `OtherParameters(...)` | `Vec<GoogleArg>` |
+| Receives | `Receives(...)` | `Vec<GoogleArg>` |
+| Returns | `Returns(...)` | `GoogleReturns` |
+| Yields | `Yields(...)` | `GoogleReturns` |
+| Raises | `Raises(...)` | `Vec<GoogleException>` |
+| Warns | `Warns(...)` | `Vec<GoogleWarning>` |
+| See Also | `SeeAlso(...)` | `Vec<GoogleSeeAlsoItem>` |
+| Attributes | `Attributes(...)` | `Vec<GoogleAttribute>` |
+| Methods | `Methods(...)` | `Vec<GoogleMethod>` |
+| Notes | `Notes(...)` | `TextRange` |
+| Examples | `Examples(...)` | `TextRange` |
+| Todo | `Todo(...)` | `TextRange` |
+| References | `References(...)` | `TextRange` |
+| Warnings | `Warnings(...)` | `TextRange` |
 
-Additionally, `GoogleDocstring` has fields: `summary`, `description`, and admonition sections (Attention, Caution, Danger, etc.).
+Admonition sections (Attention, Caution, Danger, Error, Hint, Important, Tip) are also supported as `TextRange` bodies.
+
+Additionally, `GoogleDocstring` has fields: `summary`, `extended_summary`.
 
 ## Development
 

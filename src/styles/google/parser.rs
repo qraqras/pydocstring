@@ -17,7 +17,6 @@
 //!     ValueError: If the input is invalid.
 //! ```
 
-use crate::ast::TextRange;
 use crate::cursor::{LineCursor, indent_len};
 use crate::styles::google::ast::{
     GoogleArg, GoogleAttribute, GoogleDocstring, GoogleDocstringItem, GoogleException,
@@ -25,6 +24,7 @@ use crate::styles::google::ast::{
     GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning,
 };
 use crate::styles::utils::{find_entry_colon, find_matching_close, split_comma_parts};
+use crate::text::TextRange;
 
 // =============================================================================
 // Section detection

@@ -19,7 +19,6 @@
 //!     Description of return value.
 //! ```
 
-use crate::ast::TextRange;
 use crate::cursor::{LineCursor, indent_columns, indent_len};
 use crate::styles::numpy::ast::{
     NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyDocstringItem, NumPyException,
@@ -27,6 +26,7 @@ use crate::styles::numpy::ast::{
     NumPySectionHeader, NumPySectionKind, NumPyWarning, SeeAlsoItem,
 };
 use crate::styles::utils::{find_entry_colon, find_matching_close, split_comma_parts};
+use crate::text::TextRange;
 
 // =============================================================================
 // Section detection
