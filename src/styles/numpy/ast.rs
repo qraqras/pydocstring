@@ -198,21 +198,29 @@ pub enum NumPySectionBody {
     /// Warns section.
     Warns(Vec<NumPyWarning>),
     /// Warnings section (free text).
-    Warnings(TextRange),
+    ///
+    /// `None` when the section body is empty (no content lines).
+    Warnings(Option<TextRange>),
     /// See Also section.
     SeeAlso(Vec<SeeAlsoItem>),
     /// Notes section (free text).
-    Notes(TextRange),
+    ///
+    /// `None` when the section body is empty (no content lines).
+    Notes(Option<TextRange>),
     /// References section.
     References(Vec<NumPyReference>),
     /// Examples section (free text, doctest format).
-    Examples(TextRange),
+    ///
+    /// `None` when the section body is empty (no content lines).
+    Examples(Option<TextRange>),
     /// Attributes section.
     Attributes(Vec<NumPyAttribute>),
     /// Methods section.
     Methods(Vec<NumPyMethod>),
     /// Unknown / unrecognized section (free text).
-    Unknown(TextRange),
+    ///
+    /// `None` when the section body is empty (no content lines).
+    Unknown(Option<TextRange>),
 }
 
 /// NumPy-style docstring.
@@ -363,7 +371,9 @@ pub struct NumPyReference {
     /// Opening bracket (`[`) enclosing the reference number, with its span, if present.
     pub open_bracket: Option<TextRange>,
     /// Reference number (e.g., "1", "2", "3") with its span.
-    pub number: TextRange,
+    ///
+    /// `None` for non-RST (plain text) references or empty brackets.
+    pub number: Option<TextRange>,
     /// Closing bracket (`]`) enclosing the reference number, with its span, if present.
     pub close_bracket: Option<TextRange>,
     /// Reference content (author, title, etc) with its span.
@@ -409,14 +419,14 @@ impl NumPySectionBody {
             NumPySectionKind::OtherParameters => Self::OtherParameters(Vec::new()),
             NumPySectionKind::Raises => Self::Raises(Vec::new()),
             NumPySectionKind::Warns => Self::Warns(Vec::new()),
-            NumPySectionKind::Warnings => Self::Warnings(TextRange::empty()),
+            NumPySectionKind::Warnings => Self::Warnings(None),
             NumPySectionKind::SeeAlso => Self::SeeAlso(Vec::new()),
-            NumPySectionKind::Notes => Self::Notes(TextRange::empty()),
+            NumPySectionKind::Notes => Self::Notes(None),
             NumPySectionKind::References => Self::References(Vec::new()),
-            NumPySectionKind::Examples => Self::Examples(TextRange::empty()),
+            NumPySectionKind::Examples => Self::Examples(None),
             NumPySectionKind::Attributes => Self::Attributes(Vec::new()),
             NumPySectionKind::Methods => Self::Methods(Vec::new()),
-            NumPySectionKind::Unknown => Self::Unknown(TextRange::empty()),
+            NumPySectionKind::Unknown => Self::Unknown(None),
         }
     }
 }

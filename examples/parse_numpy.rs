@@ -108,11 +108,11 @@ Examples
                     );
                 }
             }
-            NumPySectionBody::Notes(text) => {
+            NumPySectionBody::Notes(Some(text)) => {
                 println!("\nNotes:");
                 println!("  {}", text.source_text(&doc.source));
             }
-            NumPySectionBody::Examples(text) => {
+            NumPySectionBody::Examples(Some(text)) => {
                 println!("\nExamples:");
                 println!("{}", text.source_text(&doc.source));
             }

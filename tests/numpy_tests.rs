@@ -92,7 +92,7 @@ fn references(doc: &NumPyDocstring) -> Vec<&NumPyReference> {
 
 fn notes(doc: &NumPyDocstring) -> Option<&pydocstring::TextRange> {
     sections(doc).iter().find_map(|s| match &s.body {
-        NumPySectionBody::Notes(v) => Some(v),
+        NumPySectionBody::Notes(v) => v.as_ref(),
         _ => None,
     })
 }
@@ -100,7 +100,7 @@ fn notes(doc: &NumPyDocstring) -> Option<&pydocstring::TextRange> {
 #[allow(dead_code)]
 fn examples(doc: &NumPyDocstring) -> Option<&pydocstring::TextRange> {
     sections(doc).iter().find_map(|s| match &s.body {
-        NumPySectionBody::Examples(v) => Some(v),
+        NumPySectionBody::Examples(v) => v.as_ref(),
         _ => None,
     })
 }
@@ -687,7 +687,10 @@ References
     let result = parse_numpy(docstring);
     let refs = references(&result);
     assert_eq!(refs.len(), 2);
-    assert_eq!(refs[0].number.source_text(&result.source), "1");
+    assert_eq!(
+        refs[0].number.as_ref().unwrap().source_text(&result.source),
+        "1"
+    );
     assert!(
         refs[0]
             .content
@@ -696,7 +699,10 @@ References
             .source_text(&result.source)
             .contains("Author A")
     );
-    assert_eq!(refs[1].number.source_text(&result.source), "2");
+    assert_eq!(
+        refs[1].number.as_ref().unwrap().source_text(&result.source),
+        "2"
+    );
     assert!(
         refs[1]
             .content

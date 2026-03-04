@@ -80,19 +80,19 @@ fn try_parse_numpy_header(cursor: &LineCursor) -> Option<NumPySectionHeader> {
 /// Collect indented description lines starting at `cursor.line`.
 ///
 /// Preserves blank lines between paragraphs. Stops at non-empty lines at or
-/// below `entry_indent`, section headers, or EOF.
+/// below `entry_indent_cols` visual columns, section headers, or EOF.
 ///
 /// On return, `cursor.line` points to the first unconsumed line.
 ///
 /// NOTE: This is used **only** for the deprecation directive body, which needs
 /// eager multi-line collection. Section body parsing uses per-line functions.
-fn collect_description(cursor: &mut LineCursor, entry_indent: usize) -> Option<TextRange> {
+fn collect_description(cursor: &mut LineCursor, entry_indent_cols: usize) -> Option<TextRange> {
     let mut first_content_line: Option<usize> = None;
     let mut last_content_line = cursor.line;
 
     while !cursor.is_eof() {
         let line = cursor.current_line_text();
-        if !line.trim().is_empty() && indent_columns(line) <= entry_indent {
+        if !line.trim().is_empty() && indent_columns(line) <= entry_indent_cols {
             break;
         }
         if !line.trim().is_empty() {
@@ -192,7 +192,7 @@ pub fn parse_numpy(input: &str) -> NumPyDocstring {
             cursor.advance();
 
             // Collect indented body lines
-            let desc_spanned = collect_description(&mut cursor, col);
+            let desc_spanned = collect_description(&mut cursor, indent_columns(line));
 
             // Compute deprecation span
             let (dep_end_line, dep_end_col) = match &desc_spanned {
@@ -377,12 +377,7 @@ fn parse_name_and_type(
     cursor: &LineCursor,
 ) -> ParamHeaderParts {
     // Find the first colon not inside brackets
-    let (name_str, colon_span, colon_rel) = if let Some(colon_pos) = find_entry_colon(text) {
-        let before = text[..colon_pos].trim_end();
-        let colon_col = col_base + colon_pos;
-        let colon = Some(cursor.make_line_range(line_idx, colon_col, 1));
-        (before, colon, Some(colon_pos))
-    } else {
+    let Some(colon_pos) = find_entry_colon(text) else {
         // No separator — whole text is the name
         let names = parse_name_list(text, line_idx, col_base, cursor);
         return ParamHeaderParts {
@@ -396,10 +391,12 @@ fn parse_name_and_type(
         };
     };
 
+    let name_str = text[..colon_pos].trim_end();
+    let colon_col = col_base + colon_pos;
+    let colon_span = Some(cursor.make_line_range(line_idx, colon_col, 1));
     let names = parse_name_list(name_str, line_idx, col_base, cursor);
 
-    let colon_rel = colon_rel.unwrap();
-    let after_colon = &text[colon_rel + 1..];
+    let after_colon = &text[colon_pos + 1..];
     let after_trimmed = after_colon.trim();
 
     if after_trimmed.is_empty() {
@@ -907,9 +904,9 @@ fn process_reference_line(
             let num_str = num_raw.trim();
             let number = if !num_str.is_empty() {
                 let num_abs = cursor.substr_offset(num_str);
-                TextRange::from_offset_len(num_abs, num_str.len())
+                Some(TextRange::from_offset_len(num_abs, num_str.len()))
             } else {
-                TextRange::empty()
+                None
             };
             // Content after `]` on this line
             let line_end_offset =
@@ -939,20 +936,27 @@ fn process_reference_line(
     }
 
     // Plain text reference / non-RST
-    let num_col = col;
     refs.push(NumPyReference {
         range: cursor.current_trimmed_range(),
         directive_marker: None,
         open_bracket: None,
-        number: cursor.make_range(cursor.line, num_col, cursor.line, num_col),
+        number: None,
         close_bracket: None,
         content: Some(cursor.current_trimmed_range()),
     });
 }
 
 /// Process one content line for a free-text section (Notes, Examples, etc.).
-fn process_freetext_line(cursor: &LineCursor, content: &mut TextRange) {
-    content.extend(cursor.current_trimmed_range());
+///
+/// Only called for non-blank lines (blanks are skipped by the main loop).
+/// Blank lines between content lines are implicitly included in the
+/// resulting range because `extend` spans across them.
+fn process_freetext_line(cursor: &LineCursor, content: &mut Option<TextRange>) {
+    let range = cursor.current_trimmed_range();
+    match content {
+        Some(c) => c.extend(range),
+        None => *content = Some(range),
+    }
 }
 
 // =============================================================================
@@ -1006,7 +1010,8 @@ mod tests {
 
     // -- param header detection --
 
-    /// Check whether `trimmed` looks like a parameter header line.\n    /// A parameter header contains a colon (not inside brackets).
+    /// Check whether `trimmed` looks like a parameter header line.
+    /// A parameter header contains a colon (not inside brackets).
     fn is_param_header(trimmed: &str) -> bool {
         find_entry_colon(trimmed).is_some()
     }
