@@ -72,7 +72,13 @@ Examples
                         names,
                         param.r#type.as_ref().map(|t| t.source_text(&doc.source))
                     );
-                    println!("    {}", param.description.source_text(&doc.source));
+                    println!(
+                        "    {}",
+                        param
+                            .description
+                            .as_ref()
+                            .map_or("", |d| d.source_text(&doc.source))
+                    );
                 }
             }
             NumPySectionBody::Returns(rets) => {
@@ -82,7 +88,12 @@ Examples
                         "  Type: {:?}",
                         ret.return_type.as_ref().map(|t| t.source_text(&doc.source))
                     );
-                    println!("  {}", ret.description.source_text(&doc.source));
+                    println!(
+                        "  {}",
+                        ret.description
+                            .as_ref()
+                            .map_or("", |d| d.source_text(&doc.source))
+                    );
                 }
             }
             NumPySectionBody::Raises(excs) => {
@@ -91,7 +102,9 @@ Examples
                     println!(
                         "  - {}: {}",
                         exc.r#type.source_text(&doc.source),
-                        exc.description.source_text(&doc.source)
+                        exc.description
+                            .as_ref()
+                            .map_or("", |d| d.source_text(&doc.source))
                     );
                 }
             }

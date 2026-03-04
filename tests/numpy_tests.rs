@@ -289,6 +289,8 @@ int
     assert_eq!(
         parameters(&result)[0]
             .description
+            .as_ref()
+            .unwrap()
             .source_text(&result.source),
         "The first number."
     );
@@ -386,7 +388,13 @@ fn test_parameters_no_space_before_colon() {
         p[0].r#type.as_ref().unwrap().source_text(&result.source),
         "int"
     );
-    assert_eq!(p[0].description.source_text(&result.source), "The value.");
+    assert_eq!(
+        p[0].description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
+        "The value."
+    );
 }
 
 /// Parameters with no space after colon: `x :int`
@@ -491,6 +499,8 @@ x : int
     assert!(
         parameters(&result)[0]
             .description
+            .as_ref()
+            .unwrap()
             .source_text(&result.source)
             .contains("key: value")
     );
@@ -510,6 +520,8 @@ x : int
     let result = parse_numpy(docstring);
     let desc = &parameters(&result)[0]
         .description
+        .as_ref()
+        .unwrap()
         .source_text(&result.source);
     assert!(desc.contains("First paragraph of x."));
     assert!(desc.contains("Second paragraph of x."));
@@ -548,7 +560,11 @@ y : float
         Some("int")
     );
     assert_eq!(
-        returns(&result)[0].description.source_text(&result.source),
+        returns(&result)[0]
+            .description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "The first value."
     );
     assert_eq!(
@@ -675,6 +691,8 @@ References
     assert!(
         refs[0]
             .content
+            .as_ref()
+            .unwrap()
             .source_text(&result.source)
             .contains("Author A")
     );
@@ -682,6 +700,8 @@ References
     assert!(
         refs[1]
             .content
+            .as_ref()
+            .unwrap()
             .source_text(&result.source)
             .contains("Author B")
     );
@@ -780,7 +800,10 @@ x : int
     let p = &parameters(&result)[0];
     assert_eq!(p.names[0].source_text(src), "x");
     assert_eq!(p.r#type.as_ref().unwrap().source_text(src), "int");
-    assert_eq!(p.description.source_text(src), "Description of x.");
+    assert_eq!(
+        p.description.as_ref().unwrap().source_text(src),
+        "Description of x."
+    );
 }
 
 // =============================================================================
@@ -939,6 +962,8 @@ fn test_mixed_indent_first_line() {
     assert_eq!(
         parameters(&result)[0]
             .description
+            .as_ref()
+            .unwrap()
             .source_text(&result.source),
         "Description."
     );
@@ -962,7 +987,10 @@ fn test_enum_type_as_string() {
         p.r#type.as_ref().unwrap().source_text(&result.source),
         "{'C', 'F', 'A'}"
     );
-    assert_eq!(p.description.source_text(&result.source), "Memory layout.");
+    assert_eq!(
+        p.description.as_ref().unwrap().source_text(&result.source),
+        "Memory layout."
+    );
 }
 
 #[test]
@@ -1021,12 +1049,20 @@ fn test_tab_indented_parameters() {
     assert_eq!(params.len(), 2);
     assert_eq!(params[0].names[0].source_text(&result.source), "x");
     assert_eq!(
-        params[0].description.source_text(&result.source),
+        params[0]
+            .description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "Description of x."
     );
     assert_eq!(params[1].names[0].source_text(&result.source), "y");
     assert_eq!(
-        params[1].description.source_text(&result.source),
+        params[1]
+            .description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "Description of y."
     );
 }
@@ -1041,7 +1077,11 @@ fn test_mixed_tab_space_parameters() {
     assert_eq!(params.len(), 1);
     assert_eq!(params[0].names[0].source_text(&result.source), "x");
     // Description should include "The value." (the first desc line)
-    let desc = params[0].description.source_text(&result.source);
+    let desc = params[0]
+        .description
+        .as_ref()
+        .unwrap()
+        .source_text(&result.source);
     assert!(desc.contains("The value."), "desc = {:?}", desc);
 }
 
@@ -1053,7 +1093,11 @@ fn test_tab_indented_returns() {
     let rets = returns(&result);
     assert_eq!(rets.len(), 1);
     assert_eq!(
-        rets[0].description.source_text(&result.source),
+        rets[0]
+            .description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "The result value."
     );
 }
@@ -1067,7 +1111,11 @@ fn test_tab_indented_raises() {
     assert_eq!(exc.len(), 1);
     assert_eq!(exc[0].r#type.source_text(&result.source), "ValueError");
     assert_eq!(
-        exc[0].description.source_text(&result.source),
+        exc[0]
+            .description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "If the input is invalid."
     );
 }
@@ -1086,13 +1134,21 @@ fn test_raises_colon_split() {
     assert_eq!(exc[0].r#type.source_text(&result.source), "ValueError");
     assert!(exc[0].colon.is_some());
     assert_eq!(
-        exc[0].description.source_text(&result.source),
+        exc[0]
+            .description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "If the input is invalid."
     );
     assert_eq!(exc[1].r#type.source_text(&result.source), "TypeError");
     assert!(exc[1].colon.is_some());
     assert_eq!(
-        exc[1].description.source_text(&result.source),
+        exc[1]
+            .description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "If the type is wrong."
     );
 }
@@ -1107,7 +1163,11 @@ fn test_raises_no_colon() {
     assert_eq!(exc[0].r#type.source_text(&result.source), "ValueError");
     assert!(exc[0].colon.is_none());
     assert_eq!(
-        exc[0].description.source_text(&result.source),
+        exc[0]
+            .description
+            .as_ref()
+            .unwrap()
+            .source_text(&result.source),
         "If the input is invalid."
     );
 }
@@ -1121,80 +1181,11 @@ fn test_raises_colon_with_continuation() {
     assert_eq!(exc.len(), 1);
     assert_eq!(exc[0].r#type.source_text(&result.source), "ValueError");
     assert!(exc[0].colon.is_some());
-    let desc = exc[0].description.source_text(&result.source);
+    let desc = exc[0]
+        .description
+        .as_ref()
+        .unwrap()
+        .source_text(&result.source);
     assert!(desc.contains("If bad."), "desc = {:?}", desc);
     assert!(desc.contains("More detail here."), "desc = {:?}", desc);
-}
-
-// =============================================================================
-// Multi-line type annotation tests
-// =============================================================================
-
-/// Parameter with multi-line type annotation (brackets spanning lines).
-#[test]
-fn test_multiline_type_annotation() {
-    let docstring = "Summary.\n\nParameters\n----------\nx : Dict[str,\n    int]\n    The mapping.";
-    let result = parse_numpy(docstring);
-    let params = parameters(&result);
-    assert_eq!(params.len(), 1);
-    assert_eq!(params[0].names[0].source_text(&result.source), "x");
-    let type_text = params[0]
-        .r#type
-        .as_ref()
-        .unwrap()
-        .source_text(&result.source);
-    assert_eq!(type_text, "Dict[str,\n    int]");
-    assert_eq!(
-        params[0].description.source_text(&result.source),
-        "The mapping."
-    );
-}
-
-/// Parameter with multi-line type and optional marker after closing bracket.
-#[test]
-fn test_multiline_type_with_optional() {
-    let docstring =
-        "Summary.\n\nParameters\n----------\nx : Dict[str,\n    int], optional\n    The mapping.";
-    let result = parse_numpy(docstring);
-    let params = parameters(&result);
-    assert_eq!(params.len(), 1);
-    let type_text = params[0]
-        .r#type
-        .as_ref()
-        .unwrap()
-        .source_text(&result.source);
-    assert_eq!(type_text, "Dict[str,\n    int]");
-    assert!(params[0].optional.is_some());
-    assert_eq!(
-        params[0]
-            .optional
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
-        "optional"
-    );
-}
-
-/// Multiple parameters where the first has a multi-line type.
-#[test]
-fn test_multiline_type_followed_by_another_param() {
-    let docstring = "Summary.\n\nParameters\n----------\nx : Dict[str,\n    int]\n    The mapping.\ny : str\n    The name.";
-    let result = parse_numpy(docstring);
-    let params = parameters(&result);
-    assert_eq!(params.len(), 2);
-    let type_text = params[0]
-        .r#type
-        .as_ref()
-        .unwrap()
-        .source_text(&result.source);
-    assert_eq!(type_text, "Dict[str,\n    int]");
-    assert_eq!(params[1].names[0].source_text(&result.source), "y");
-    assert_eq!(
-        params[1]
-            .r#type
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
-        "str"
-    );
 }

@@ -277,7 +277,7 @@ pub struct NumPyParameter {
     /// Type is optional for parameters but required for returns.
     pub r#type: Option<TextRange>,
     /// Parameter description with its span.
-    pub description: TextRange,
+    pub description: Option<TextRange>,
     /// The `optional` marker, if present.
     /// `None` means not marked as optional.
     pub optional: Option<TextRange>,
@@ -303,7 +303,7 @@ pub struct NumPyReturns {
     /// Return type with its span.
     pub return_type: Option<TextRange>,
     /// Description with its span.
-    pub description: TextRange,
+    pub description: Option<TextRange>,
 }
 
 /// NumPy-style exception.
@@ -316,7 +316,7 @@ pub struct NumPyException {
     /// The colon (`:`) separating type from description, with its span, if present.
     pub colon: Option<TextRange>,
     /// Description of when raised, with its span.
-    pub description: TextRange,
+    pub description: Option<TextRange>,
 }
 
 /// NumPy-style warning (from Warns section).
@@ -329,7 +329,7 @@ pub struct NumPyWarning {
     /// The colon (`:`) separating type from description, with its span, if present.
     pub colon: Option<TextRange>,
     /// When the warning is issued, with its span.
-    pub description: TextRange,
+    pub description: Option<TextRange>,
 }
 
 /// See Also item.
@@ -367,7 +367,7 @@ pub struct NumPyReference {
     /// Closing bracket (`]`) enclosing the reference number, with its span, if present.
     pub close_bracket: Option<TextRange>,
     /// Reference content (author, title, etc) with its span.
-    pub content: TextRange,
+    pub content: Option<TextRange>,
 }
 
 /// NumPy-style attribute.
@@ -382,7 +382,7 @@ pub struct NumPyAttribute {
     /// Attribute type with its span.
     pub r#type: Option<TextRange>,
     /// Description with its span.
-    pub description: TextRange,
+    pub description: Option<TextRange>,
 }
 
 /// NumPy-style method (for classes).
@@ -395,7 +395,30 @@ pub struct NumPyMethod {
     /// The colon (`:`) separating name from description, with its span, if present.
     pub colon: Option<TextRange>,
     /// Brief description with its span.
-    pub description: TextRange,
+    pub description: Option<TextRange>,
+}
+
+impl NumPySectionBody {
+    /// Create a new empty section body for the given section kind.
+    pub fn new(kind: NumPySectionKind) -> Self {
+        match kind {
+            NumPySectionKind::Parameters => Self::Parameters(Vec::new()),
+            NumPySectionKind::Returns => Self::Returns(Vec::new()),
+            NumPySectionKind::Yields => Self::Yields(Vec::new()),
+            NumPySectionKind::Receives => Self::Receives(Vec::new()),
+            NumPySectionKind::OtherParameters => Self::OtherParameters(Vec::new()),
+            NumPySectionKind::Raises => Self::Raises(Vec::new()),
+            NumPySectionKind::Warns => Self::Warns(Vec::new()),
+            NumPySectionKind::Warnings => Self::Warnings(TextRange::empty()),
+            NumPySectionKind::SeeAlso => Self::SeeAlso(Vec::new()),
+            NumPySectionKind::Notes => Self::Notes(TextRange::empty()),
+            NumPySectionKind::References => Self::References(Vec::new()),
+            NumPySectionKind::Examples => Self::Examples(TextRange::empty()),
+            NumPySectionKind::Attributes => Self::Attributes(Vec::new()),
+            NumPySectionKind::Methods => Self::Methods(Vec::new()),
+            NumPySectionKind::Unknown => Self::Unknown(TextRange::empty()),
+        }
+    }
 }
 
 impl NumPyDocstring {
