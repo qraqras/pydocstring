@@ -6,7 +6,7 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use pydocstring::numpy::parse_numpy;
+//! use pydocstring::numpy::{parse_numpy, nodes::NumPyDocstring};
 //!
 //! let docstring = r#"
 //! Brief description.
@@ -18,7 +18,8 @@
 //! "#;
 //!
 //! let result = parse_numpy(docstring);
-//! assert_eq!(result.summary.as_ref().unwrap().source_text(&result.source), "Brief description.");
+//! let doc = NumPyDocstring::cast(result.root()).unwrap();
+//! assert_eq!(doc.summary().unwrap().text(result.source()), "Brief description.");
 //! ```
 //!
 //! ## Style Auto-Detection
@@ -40,20 +41,14 @@
 //! - NumPy style: fully supported
 //! - Google style: fully supported
 
-pub mod ast;
 pub(crate) mod cursor;
-pub mod parser;
 pub mod styles;
+pub mod syntax;
+pub mod text;
 
-pub use ast::{LineIndex, Style, TextRange, TextSize};
-pub use parser::detect_style;
-pub use styles::google::{
-    self, GoogleArg, GoogleAttribute, GoogleDocstring, GoogleDocstringItem, GoogleException,
-    GoogleMethod, GoogleReturns, GoogleSection, GoogleSectionBody, GoogleSectionHeader,
-    GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning,
-};
-pub use styles::numpy::{
-    self, NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyDocstringItem, NumPyException,
-    NumPyMethod, NumPyParameter, NumPyReference, NumPyReturns, NumPySection, NumPySectionBody,
-    NumPySectionHeader, NumPySectionKind, NumPyWarning, SeeAlsoItem,
-};
+pub use styles::Style;
+pub use styles::detect_style;
+pub use styles::google::{self, GoogleSectionKind};
+pub use styles::numpy::{self, NumPySectionKind};
+pub use syntax::{Parsed, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken, Visitor, walk};
+pub use text::{TextRange, TextSize};

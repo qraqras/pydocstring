@@ -2,12 +2,9 @@
 //!
 //! This module contains the AST types and parser for NumPy-style docstrings.
 
-pub mod ast;
+pub mod kind;
+pub mod nodes;
 pub mod parser;
 
-pub use ast::{
-    NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyDocstringItem, NumPyException,
-    NumPyMethod, NumPyParameter, NumPyReference, NumPyReturns, NumPySection, NumPySectionBody,
-    NumPySectionHeader, NumPySectionKind, NumPyWarning, SeeAlsoItem,
-};
+pub use kind::NumPySectionKind;
 pub use parser::parse_numpy;

@@ -41,6 +41,36 @@ pub(crate) fn split_comma_parts(text: &str) -> Vec<(usize, &str)> {
     parts
 }
 
+/// Find the matching closing bracket for an opening bracket at `open_pos`.
+///
+/// Only tracks the *same* bracket kind: `(` is matched by `)`, `[` by `]`,
+/// `{` by `}`, and `<` by `>`.  Other bracket kinds are ignored.
+///
+/// Returns `Some(close_pos)` on success, `None` if unmatched.
+pub(crate) fn find_matching_close(s: &str, open_pos: usize) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let open = bytes[open_pos];
+    let close = match open {
+        b'(' => b')',
+        b'[' => b']',
+        b'{' => b'}',
+        b'<' => b'>',
+        _ => return None,
+    };
+    let mut depth: u32 = 1;
+    for (i, &b) in bytes[open_pos + 1..].iter().enumerate() {
+        if b == open {
+            depth += 1;
+        } else if b == close {
+            depth -= 1;
+            if depth == 0 {
+                return Some(open_pos + 1 + i);
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -81,5 +111,36 @@ mod tests {
         let parts = split_comma_parts("int, optional");
         assert_eq!(parts[0].0, 0);
         assert_eq!(parts[1].0, 4);
+    }
+
+    #[test]
+    fn test_find_matching_close_basic() {
+        assert_eq!(find_matching_close("(abc)", 0), Some(4));
+    }
+
+    #[test]
+    fn test_find_matching_close_nested_same() {
+        assert_eq!(find_matching_close("(a(b)c)", 0), Some(6));
+    }
+
+    #[test]
+    fn test_find_matching_close_nested_mixed() {
+        assert_eq!(find_matching_close("(a[b]c)", 0), Some(6));
+    }
+
+    #[test]
+    fn test_find_matching_close_mismatched_ignored() {
+        // `]` is not `)`, so it is ignored — `)` closes the `(`.
+        assert_eq!(find_matching_close("(a]b)", 0), Some(4));
+    }
+
+    #[test]
+    fn test_find_matching_close_no_match() {
+        assert_eq!(find_matching_close("(abc", 0), None);
+    }
+
+    #[test]
+    fn test_find_matching_close_angle_brackets() {
+        assert_eq!(find_matching_close("<int>", 0), Some(4));
     }
 }
