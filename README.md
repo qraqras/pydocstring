@@ -1,8 +1,8 @@
 # pydocstring
 
-![Crates.io Version](https://img.shields.io/crates/v/pydocstring?color=CC6688)
-![Crates.io MSRV](https://img.shields.io/crates/msrv/pydocstring?color=CC6688)
-![Crates.io License](https://img.shields.io/crates/l/pydocstring?color=CC6688)
+[![Crates.io Version](https://img.shields.io/crates/v/pydocstring?color=EE88AA)](https://crates.io/crates/pydocstring)
+[![Crates.io MSRV](https://img.shields.io/crates/msrv/pydocstring?color=EE88AA)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0)
+[![Crates.io License](https://img.shields.io/crates/l/pydocstring?color=EE88AA)](https://choosealicense.com/licenses/mit)
 
 A zero-dependency Rust parser for Python docstrings (Google / NumPy style).
 
@@ -11,11 +11,12 @@ Produces a **unified syntax tree** with **byte-precise source locations** on eve
 
 ## Features
 
-- **Byte-precise source locations** — every token carries a `TextRange` (byte offset pair) for exact diagnostic positions
-- **Unified syntax tree** — both styles produce the same `SyntaxNode` / `SyntaxToken` tree, enabling style-agnostic traversal via `Visitor` + `walk`
-- **Zero dependencies** — pure Rust, no external crates
-- **Never panics** — always returns a best-effort tree for any input
-- **Style auto-detection** — `detect_style()` identifies the docstring convention automatically
+- **Full syntax tree** — builds a complete AST, not just extracted fields; traverse it with the built-in `Visitor` + `walk`
+- **Typed nodes per style** — style-specific accessors like `GoogleArg`, `NumPyParameter` with full type safety
+- **Byte-precise source locations** — every token carries its exact byte range for pinpoint diagnostics
+- **Zero dependencies** — pure Rust, no external crates, no regex
+- **Error-resilient** — never panics; malformed input still yields a best-effort tree
+- **Style auto-detection** — hand it a docstring, it tells you the convention
 
 ## Installation
 
