@@ -19,11 +19,11 @@ TypeError
 
     assert_eq!(raises(&result).len(), 2);
     assert_eq!(
-        raises(&result)[0].r#type.source_text(&result.source),
+        raises(&result)[0].r#type().text(result.source()),
         "ValueError"
     );
     assert_eq!(
-        raises(&result)[1].r#type.source_text(&result.source),
+        raises(&result)[1].r#type().text(result.source()),
         "TypeError"
     );
 }
@@ -42,11 +42,11 @@ TypeError
     let result = parse_numpy(docstring);
     assert_eq!(raises(&result).len(), 2);
     assert_eq!(
-        raises(&result)[0].r#type.source_text(&result.source),
+        raises(&result)[0].r#type().text(result.source()),
         "ValueError"
     );
     assert_eq!(
-        raises(&result)[1].r#type.source_text(&result.source),
+        raises(&result)[1].r#type().text(result.source()),
         "TypeError"
     );
 }
@@ -62,24 +62,16 @@ fn test_raises_colon_split() {
     let result = parse_numpy(docstring);
     let exc = raises(&result);
     assert_eq!(exc.len(), 2);
-    assert_eq!(exc[0].r#type.source_text(&result.source), "ValueError");
-    assert!(exc[0].colon.is_some());
+    assert_eq!(exc[0].r#type().text(result.source()), "ValueError");
+    assert!(exc[0].colon().is_some());
     assert_eq!(
-        exc[0]
-            .description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        exc[0].description().unwrap().text(result.source()),
         "If the input is invalid."
     );
-    assert_eq!(exc[1].r#type.source_text(&result.source), "TypeError");
-    assert!(exc[1].colon.is_some());
+    assert_eq!(exc[1].r#type().text(result.source()), "TypeError");
+    assert!(exc[1].colon().is_some());
     assert_eq!(
-        exc[1]
-            .description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        exc[1].description().unwrap().text(result.source()),
         "If the type is wrong."
     );
 }
@@ -91,14 +83,10 @@ fn test_raises_no_colon() {
     let result = parse_numpy(docstring);
     let exc = raises(&result);
     assert_eq!(exc.len(), 1);
-    assert_eq!(exc[0].r#type.source_text(&result.source), "ValueError");
-    assert!(exc[0].colon.is_none());
+    assert_eq!(exc[0].r#type().text(result.source()), "ValueError");
+    assert!(exc[0].colon().is_none());
     assert_eq!(
-        exc[0]
-            .description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        exc[0].description().unwrap().text(result.source()),
         "If the input is invalid."
     );
 }
@@ -110,13 +98,9 @@ fn test_raises_colon_with_continuation() {
     let result = parse_numpy(docstring);
     let exc = raises(&result);
     assert_eq!(exc.len(), 1);
-    assert_eq!(exc[0].r#type.source_text(&result.source), "ValueError");
-    assert!(exc[0].colon.is_some());
-    let desc = exc[0]
-        .description
-        .as_ref()
-        .unwrap()
-        .source_text(&result.source);
+    assert_eq!(exc[0].r#type().text(result.source()), "ValueError");
+    assert!(exc[0].colon().is_some());
+    let desc = exc[0].description().unwrap().text(result.source());
     assert!(desc.contains("If bad."), "desc = {:?}", desc);
     assert!(desc.contains("More detail here."), "desc = {:?}", desc);
 }
@@ -129,10 +113,16 @@ fn test_raise_alias() {
     let exc = raises(&result);
     assert_eq!(exc.len(), 1);
     assert_eq!(
-        sections(&result)[0].header.name.source_text(&result.source),
+        all_sections(&result)[0]
+            .header()
+            .name()
+            .text(result.source()),
         "Raise"
     );
-    assert_eq!(sections(&result)[0].header.kind, NumPySectionKind::Raises);
+    assert_eq!(
+        all_sections(&result)[0].section_kind(result.source()),
+        NumPySectionKind::Raises
+    );
 }
 
 // =============================================================================
@@ -145,15 +135,9 @@ fn test_warns_basic() {
     let result = parse_numpy(docstring);
     let w = warns(&result);
     assert_eq!(w.len(), 1);
+    assert_eq!(w[0].r#type().text(result.source()), "DeprecationWarning");
     assert_eq!(
-        w[0].r#type.source_text(&result.source),
-        "DeprecationWarning"
-    );
-    assert_eq!(
-        w[0].description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        w[0].description().unwrap().text(result.source()),
         "If the old API is used."
     );
 }
@@ -165,11 +149,8 @@ fn test_warns_multiple() {
     let result = parse_numpy(docstring);
     let w = warns(&result);
     assert_eq!(w.len(), 2);
-    assert_eq!(
-        w[0].r#type.source_text(&result.source),
-        "DeprecationWarning"
-    );
-    assert_eq!(w[1].r#type.source_text(&result.source), "UserWarning");
+    assert_eq!(w[0].r#type().text(result.source()), "DeprecationWarning");
+    assert_eq!(w[1].r#type().text(result.source()), "UserWarning");
 }
 
 /// Warns with colon separating type and description on the same line.
@@ -179,13 +160,10 @@ fn test_warns_colon_split() {
     let result = parse_numpy(docstring);
     let w = warns(&result);
     assert_eq!(w.len(), 1);
-    assert_eq!(w[0].r#type.source_text(&result.source), "UserWarning");
-    assert!(w[0].colon.is_some());
+    assert_eq!(w[0].r#type().text(result.source()), "UserWarning");
+    assert!(w[0].colon().is_some());
     assert_eq!(
-        w[0].description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        w[0].description().unwrap().text(result.source()),
         "If input is unusual."
     );
 }
@@ -198,10 +176,16 @@ fn test_warn_alias() {
     let w = warns(&result);
     assert_eq!(w.len(), 1);
     assert_eq!(
-        sections(&result)[0].header.name.source_text(&result.source),
+        all_sections(&result)[0]
+            .header()
+            .name()
+            .text(result.source()),
         "Warn"
     );
-    assert_eq!(sections(&result)[0].header.kind, NumPySectionKind::Warns);
+    assert_eq!(
+        all_sections(&result)[0].section_kind(result.source()),
+        NumPySectionKind::Warns
+    );
 }
 
 /// Warns section body variant check.
@@ -209,10 +193,8 @@ fn test_warn_alias() {
 fn test_warns_section_body_variant() {
     let docstring = "Summary.\n\nWarns\n-----\nUserWarning\n    Bad.\n";
     let result = parse_numpy(docstring);
-    match &sections(&result)[0].body {
-        NumPySectionBody::Warns(items) => {
-            assert_eq!(items.len(), 1);
-        }
-        other => panic!("Expected Warns section body, got {:?}", other),
-    }
+    let s = &all_sections(&result)[0];
+    assert_eq!(s.section_kind(result.source()), NumPySectionKind::Warns);
+    let items: Vec<_> = s.warnings().collect();
+    assert_eq!(items.len(), 1);
 }

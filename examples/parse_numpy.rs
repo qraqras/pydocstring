@@ -1,7 +1,8 @@
 //! Example: Parsing NumPy-style docstrings
+//!
+//! Shows the raw docstring text, then the detailed parsed AST.
 
-use pydocstring::NumPySectionBody;
-use pydocstring::numpy::parse_numpy;
+use pydocstring::numpy::{nodes::NumPyDocstring, parse_numpy};
 
 fn main() {
     let docstring = r#"
@@ -33,90 +34,18 @@ Examples
 15.0
 "#;
 
-    let result = parse_numpy(docstring);
-    let doc = &result;
+    let parsed = parse_numpy(docstring);
+    let doc = NumPyDocstring::cast(parsed.root()).unwrap();
 
-    println!(
-        "Summary: {}",
-        doc.summary
-            .as_ref()
-            .map_or("", |s| s.source_text(&doc.source))
-    );
-    println!(
-        "\nExtended Summary: {}",
-        doc.extended_summary
-            .as_ref()
-            .map(|s| s.source_text(&doc.source))
-            .unwrap_or_default()
-    );
+    // Display: raw source text
+    println!("╔══════════════════════════════════════════════════╗");
+    println!("║          NumPy-style Docstring Example           ║");
+    println!("╚══════════════════════════════════════════════════╝");
+    println!();
+    println!("── Display (raw text) ─────────────────────────────");
+    println!("{}", doc.syntax().range().source_text(parsed.source()));
 
-    for item in &doc.items {
-        let section = match item {
-            pydocstring::NumPyDocstringItem::Section(s) => s,
-            pydocstring::NumPyDocstringItem::StrayLine(line) => {
-                println!("\nStray line: {}", line.source_text(&doc.source));
-                continue;
-            }
-        };
-        match &section.body {
-            NumPySectionBody::Parameters(params) => {
-                println!("\nParameters:");
-                for param in params {
-                    let names: Vec<&str> = param
-                        .names
-                        .iter()
-                        .map(|n| n.source_text(&doc.source))
-                        .collect();
-                    println!(
-                        "  - {:?}: {:?}",
-                        names,
-                        param.r#type.as_ref().map(|t| t.source_text(&doc.source))
-                    );
-                    println!(
-                        "    {}",
-                        param
-                            .description
-                            .as_ref()
-                            .map_or("", |d| d.source_text(&doc.source))
-                    );
-                }
-            }
-            NumPySectionBody::Returns(rets) => {
-                println!("\nReturns:");
-                for ret in rets {
-                    println!(
-                        "  Type: {:?}",
-                        ret.return_type.as_ref().map(|t| t.source_text(&doc.source))
-                    );
-                    println!(
-                        "  {}",
-                        ret.description
-                            .as_ref()
-                            .map_or("", |d| d.source_text(&doc.source))
-                    );
-                }
-            }
-            NumPySectionBody::Raises(excs) => {
-                println!("\nRaises:");
-                for exc in excs {
-                    println!(
-                        "  - {}: {}",
-                        exc.r#type.source_text(&doc.source),
-                        exc.description
-                            .as_ref()
-                            .map_or("", |d| d.source_text(&doc.source))
-                    );
-                }
-            }
-            NumPySectionBody::Notes(Some(text)) => {
-                println!("\nNotes:");
-                println!("  {}", text.source_text(&doc.source));
-            }
-            NumPySectionBody::Examples(Some(text)) => {
-                println!("\nExamples:");
-                println!("{}", text.source_text(&doc.source));
-            }
-            _ => {}
-        }
-    }
+    // pretty_print: structured AST
+    println!("── pretty_print (parsed AST) ──────────────────────");
+    print!("{}", parsed.pretty_print());
 }

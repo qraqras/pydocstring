@@ -10,49 +10,40 @@ fn test_indented_docstring() {
     let result = parse_numpy(docstring);
 
     assert_eq!(
-        result.summary.as_ref().unwrap().source_text(&result.source),
+        doc(&result).summary().unwrap().text(result.source()),
         "Summary line."
     );
     assert_eq!(parameters(&result).len(), 2);
-    assert_eq!(
-        parameters(&result)[0].names[0].source_text(&result.source),
-        "x"
-    );
+    let names0: Vec<_> = parameters(&result)[0].names().collect();
+    assert_eq!(names0[0].text(result.source()), "x");
     assert_eq!(
         parameters(&result)[0]
-            .r#type
-            .as_ref()
-            .map(|t| t.source_text(&result.source)),
+            .r#type()
+            .map(|t| t.text(result.source())),
         Some("int")
     );
-    assert_eq!(
-        parameters(&result)[1].names[0].source_text(&result.source),
-        "y"
-    );
-    assert!(parameters(&result)[1].optional.is_some());
+    let names1: Vec<_> = parameters(&result)[1].names().collect();
+    assert_eq!(names1[0].text(result.source()), "y");
+    assert!(parameters(&result)[1].optional().is_some());
     assert_eq!(returns(&result).len(), 1);
     assert_eq!(
         returns(&result)[0]
-            .return_type
-            .as_ref()
-            .map(|t| t.source_text(&result.source)),
+            .return_type()
+            .map(|t| t.text(result.source())),
         Some("bool")
     );
 
     assert_eq!(
-        result.summary.as_ref().unwrap().source_text(&result.source),
+        doc(&result).summary().unwrap().text(result.source()),
         "Summary line."
     );
-    assert_eq!(
-        parameters(&result)[0].names[0].source_text(&result.source),
-        "x"
-    );
+    let names0b: Vec<_> = parameters(&result)[0].names().collect();
+    assert_eq!(names0b[0].text(result.source()), "x");
     assert_eq!(
         parameters(&result)[0]
-            .r#type
-            .as_ref()
+            .r#type()
             .unwrap()
-            .source_text(&result.source),
+            .text(result.source()),
         "int"
     );
 }
@@ -63,21 +54,19 @@ fn test_deeply_indented_docstring() {
     let result = parse_numpy(docstring);
 
     assert_eq!(
-        result.summary.as_ref().unwrap().source_text(&result.source),
+        doc(&result).summary().unwrap().text(result.source()),
         "Brief."
     );
     assert_eq!(parameters(&result).len(), 1);
-    assert_eq!(
-        parameters(&result)[0].names[0].source_text(&result.source),
-        "a"
-    );
+    let names: Vec<_> = parameters(&result)[0].names().collect();
+    assert_eq!(names[0].text(result.source()), "a");
     assert_eq!(raises(&result).len(), 1);
     assert_eq!(
-        raises(&result)[0].r#type.source_text(&result.source),
+        raises(&result)[0].r#type().text(result.source()),
         "ValueError"
     );
     assert_eq!(
-        raises(&result)[0].r#type.source_text(&result.source),
+        raises(&result)[0].r#type().text(result.source()),
         "ValueError"
     );
 }
@@ -88,24 +77,20 @@ fn test_indented_with_deprecation() {
     let result = parse_numpy(docstring);
 
     assert_eq!(
-        result.summary.as_ref().unwrap().source_text(&result.source),
+        doc(&result).summary().unwrap().text(result.source()),
         "Summary."
     );
-    let dep = result
-        .deprecation
-        .as_ref()
-        .expect("should have deprecation");
-    assert_eq!(dep.version.source_text(&result.source), "2.0.0");
+    let dep = doc(&result).deprecation().expect("should have deprecation");
+    assert_eq!(dep.version().text(result.source()), "2.0.0");
     assert!(
-        dep.description
-            .source_text(&result.source)
+        dep.description()
+            .unwrap()
+            .text(result.source())
             .contains("new_func")
     );
     assert_eq!(parameters(&result).len(), 1);
-    assert_eq!(
-        parameters(&result)[0].names[0].source_text(&result.source),
-        "x"
-    );
+    let names: Vec<_> = parameters(&result)[0].names().collect();
+    assert_eq!(names[0].text(result.source()), "x");
 }
 
 #[test]
@@ -115,20 +100,17 @@ fn test_mixed_indent_first_line() {
     let result = parse_numpy(docstring);
 
     assert_eq!(
-        result.summary.as_ref().unwrap().source_text(&result.source),
+        doc(&result).summary().unwrap().text(result.source()),
         "Summary."
     );
     assert_eq!(parameters(&result).len(), 1);
-    assert_eq!(
-        parameters(&result)[0].names[0].source_text(&result.source),
-        "x"
-    );
+    let names: Vec<_> = parameters(&result)[0].names().collect();
+    assert_eq!(names[0].text(result.source()), "x");
     assert_eq!(
         parameters(&result)[0]
-            .description
-            .as_ref()
+            .description()
             .unwrap()
-            .source_text(&result.source),
+            .text(result.source()),
         "Description."
     );
 }
@@ -144,22 +126,16 @@ fn test_tab_indented_parameters() {
     let result = parse_numpy(docstring);
     let params = parameters(&result);
     assert_eq!(params.len(), 2);
-    assert_eq!(params[0].names[0].source_text(&result.source), "x");
+    let names0: Vec<_> = params[0].names().collect();
+    assert_eq!(names0[0].text(result.source()), "x");
     assert_eq!(
-        params[0]
-            .description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        params[0].description().unwrap().text(result.source()),
         "Description of x."
     );
-    assert_eq!(params[1].names[0].source_text(&result.source), "y");
+    let names1: Vec<_> = params[1].names().collect();
+    assert_eq!(names1[0].text(result.source()), "y");
     assert_eq!(
-        params[1]
-            .description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        params[1].description().unwrap().text(result.source()),
         "Description of y."
     );
 }
@@ -171,12 +147,9 @@ fn test_mixed_tab_space_parameters() {
     let result = parse_numpy(docstring);
     let params = parameters(&result);
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].names[0].source_text(&result.source), "x");
-    let desc = params[0]
-        .description
-        .as_ref()
-        .unwrap()
-        .source_text(&result.source);
+    let names: Vec<_> = params[0].names().collect();
+    assert_eq!(names[0].text(result.source()), "x");
+    let desc = params[0].description().unwrap().text(result.source());
     assert!(desc.contains("The value."), "desc = {:?}", desc);
 }
 
@@ -188,11 +161,7 @@ fn test_tab_indented_returns() {
     let rets = returns(&result);
     assert_eq!(rets.len(), 1);
     assert_eq!(
-        rets[0]
-            .description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        rets[0].description().unwrap().text(result.source()),
         "The result value."
     );
 }
@@ -204,13 +173,9 @@ fn test_tab_indented_raises() {
     let result = parse_numpy(docstring);
     let exc = raises(&result);
     assert_eq!(exc.len(), 1);
-    assert_eq!(exc[0].r#type.source_text(&result.source), "ValueError");
+    assert_eq!(exc[0].r#type().text(result.source()), "ValueError");
     assert_eq!(
-        exc[0]
-            .description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        exc[0].description().unwrap().text(result.source()),
         "If the input is invalid."
     );
 }

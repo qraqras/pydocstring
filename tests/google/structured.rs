@@ -10,12 +10,9 @@ fn test_attributes() {
     let result = parse_google(docstring);
     let a = attributes(&result);
     assert_eq!(a.len(), 2);
-    assert_eq!(a[0].name.source_text(&result.source), "name");
-    assert_eq!(
-        a[0].r#type.as_ref().unwrap().source_text(&result.source),
-        "str"
-    );
-    assert_eq!(a[1].name.source_text(&result.source), "age");
+    assert_eq!(a[0].name().text(result.source()), "name");
+    assert_eq!(a[0].r#type().unwrap().text(result.source()), "str");
+    assert_eq!(a[1].name().text(result.source()), "age");
 }
 
 #[test]
@@ -23,8 +20,8 @@ fn test_attributes_no_type() {
     let docstring = "Summary.\n\nAttributes:\n    name: The name.";
     let result = parse_google(docstring);
     let a = attributes(&result);
-    assert_eq!(a[0].name.source_text(&result.source), "name");
-    assert!(a[0].r#type.is_none());
+    assert_eq!(a[0].name().text(result.source()), "name");
+    assert!(a[0].r#type().is_none());
 }
 
 #[test]
@@ -33,13 +30,10 @@ fn test_attribute_singular_alias() {
     let result = parse_google(docstring);
     assert_eq!(attributes(&result).len(), 1);
     assert_eq!(
-        all_sections(&result)
-            .into_iter()
-            .next()
-            .unwrap()
-            .header
-            .name
-            .source_text(&result.source),
+        all_sections(&result)[0]
+            .header()
+            .name()
+            .text(result.source()),
         "Attribute"
     );
 }
@@ -54,15 +48,12 @@ fn test_methods_basic() {
     let result = parse_google(docstring);
     let m = methods(&result);
     assert_eq!(m.len(), 2);
-    assert_eq!(m[0].name.source_text(&result.source), "reset()");
+    assert_eq!(m[0].name().text(result.source()), "reset()");
     assert_eq!(
-        m[0].description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        m[0].description().unwrap().text(result.source()),
         "Reset the state."
     );
-    assert_eq!(m[1].name.source_text(&result.source), "update(data)");
+    assert_eq!(m[1].name().text(result.source()), "update(data)");
 }
 
 #[test]
@@ -71,12 +62,9 @@ fn test_methods_without_parens() {
     let result = parse_google(docstring);
     let m = methods(&result);
     assert_eq!(m.len(), 1);
-    assert_eq!(m[0].name.source_text(&result.source), "do_stuff");
+    assert_eq!(m[0].name().text(result.source()), "do_stuff");
     assert_eq!(
-        m[0].description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        m[0].description().unwrap().text(result.source()),
         "Performs the operation."
     );
 }
@@ -85,12 +73,12 @@ fn test_methods_without_parens() {
 fn test_methods_section_body_variant() {
     let docstring = "Summary.\n\nMethods:\n    foo(): Does bar.";
     let result = parse_google(docstring);
-    match &all_sections(&result).into_iter().next().unwrap().body {
-        GoogleSectionBody::Methods(methods) => {
-            assert_eq!(methods.len(), 1);
-        }
-        _ => panic!("Expected Methods section body"),
-    }
+    let sections = all_sections(&result);
+    assert_eq!(
+        sections[0].section_kind(result.source()),
+        GoogleSectionKind::Methods
+    );
+    assert_eq!(sections[0].methods().count(), 1);
 }
 
 // =============================================================================
@@ -103,14 +91,11 @@ fn test_see_also_basic() {
     let result = parse_google(docstring);
     let sa = see_also(&result);
     assert_eq!(sa.len(), 1);
-    assert_eq!(sa[0].names.len(), 1);
-    assert_eq!(sa[0].names[0].source_text(&result.source), "other_func");
+    let names: Vec<_> = sa[0].names().collect();
+    assert_eq!(names.len(), 1);
+    assert_eq!(names[0].text(result.source()), "other_func");
     assert_eq!(
-        sa[0]
-            .description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        sa[0].description().unwrap().text(result.source()),
         "Does something else."
     );
 }
@@ -121,11 +106,12 @@ fn test_see_also_multiple_names() {
     let result = parse_google(docstring);
     let sa = see_also(&result);
     assert_eq!(sa.len(), 1);
-    assert_eq!(sa[0].names.len(), 3);
-    assert_eq!(sa[0].names[0].source_text(&result.source), "func_a");
-    assert_eq!(sa[0].names[1].source_text(&result.source), "func_b");
-    assert_eq!(sa[0].names[2].source_text(&result.source), "func_c");
-    assert!(sa[0].description.is_none());
+    let names: Vec<_> = sa[0].names().collect();
+    assert_eq!(names.len(), 3);
+    assert_eq!(names[0].text(result.source()), "func_a");
+    assert_eq!(names[1].text(result.source()), "func_b");
+    assert_eq!(names[2].text(result.source()), "func_c");
+    assert!(sa[0].description().is_none());
 }
 
 #[test]
@@ -134,20 +120,22 @@ fn test_see_also_mixed() {
     let result = parse_google(docstring);
     let sa = see_also(&result);
     assert_eq!(sa.len(), 2);
-    assert_eq!(sa[0].names[0].source_text(&result.source), "func_a");
-    assert!(sa[0].description.is_some());
-    assert_eq!(sa[1].names.len(), 2);
-    assert!(sa[1].description.is_none());
+    let names0: Vec<_> = sa[0].names().collect();
+    assert_eq!(names0[0].text(result.source()), "func_a");
+    assert!(sa[0].description().is_some());
+    let names1: Vec<_> = sa[1].names().collect();
+    assert_eq!(names1.len(), 2);
+    assert!(sa[1].description().is_none());
 }
 
 #[test]
 fn test_see_also_section_body_variant() {
     let docstring = "Summary.\n\nSee Also:\n    func_a: Desc.";
     let result = parse_google(docstring);
-    match &all_sections(&result).into_iter().next().unwrap().body {
-        GoogleSectionBody::SeeAlso(items) => {
-            assert_eq!(items.len(), 1);
-        }
-        _ => panic!("Expected SeeAlso section body"),
-    }
+    let sections = all_sections(&result);
+    assert_eq!(
+        sections[0].section_kind(result.source()),
+        GoogleSectionKind::SeeAlso
+    );
+    assert_eq!(sections[0].see_also_items().count(), 1);
 }

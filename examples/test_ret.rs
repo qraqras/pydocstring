@@ -1,8 +1,12 @@
-use pydocstring::GoogleSectionBody;
+//! Example: Parsing a Returns-only Google-style docstring
+//!
+//! Demonstrates how pydocstring handles a docstring that starts
+//! directly with a section header (no summary line).
+
 use pydocstring::google::parse_google;
 
 fn main() {
-    let input = "\
+    let docstring = "\
 Returns:
   A dict mapping keys to the corresponding table row data
   fetched. Each row is represented as a tuple of strings. For
@@ -16,32 +20,18 @@ Returns:
   missing from the dictionary, then that row was not found in the
   table (and require_all_keys must have been False).
 ";
-    let doc = parse_google(input);
-    println!(
-        "Summary: {:?}",
-        doc.summary
-            .as_ref()
-            .map_or("", |s| s.source_text(&doc.source))
-    );
-    println!("Items: {}", doc.items.len());
-    for (idx, item) in doc.items.iter().enumerate() {
-        match item {
-            pydocstring::GoogleDocstringItem::Section(s) => {
-                println!(
-                    "Item {}: Section {:?}",
-                    idx,
-                    s.header.name.source_text(&doc.source)
-                );
-                if let GoogleSectionBody::Returns(ref ret) = s.body {
-                    let type_str = ret.return_type.as_ref().map(|t| t.source_text(&doc.source));
-                    let d = &ret.description.as_ref().unwrap().source_text(&doc.source);
-                    println!("  type: {:?}", type_str);
-                    println!("  desc: {:?}", if d.len() > 80 { &d[..80] } else { d });
-                }
-            }
-            pydocstring::GoogleDocstringItem::StrayLine(s) => {
-                println!("Item {}: StrayLine {:?}", idx, s.source_text(&doc.source));
-            }
-        }
-    }
+
+    let parsed = parse_google(docstring);
+
+    // Display: raw source text
+    println!("╔══════════════════════════════════════════════════╗");
+    println!("║     Returns-only Google Docstring Example        ║");
+    println!("╚══════════════════════════════════════════════════╝");
+    println!();
+    println!("── Display (raw text) ─────────────────────────────");
+    println!("{}", parsed.source());
+
+    // pretty_print: structured AST
+    println!("── pretty_print (parsed AST) ──────────────────────");
+    print!("{}", parsed.pretty_print());
 }

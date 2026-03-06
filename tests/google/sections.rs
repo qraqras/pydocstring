@@ -29,10 +29,10 @@ Note:
 
     let result = parse_google(docstring);
     assert_eq!(
-        result.summary.as_ref().unwrap().source_text(&result.source),
+        doc(&result).summary().unwrap().text(result.source()),
         "Calculate the sum."
     );
-    assert!(result.extended_summary.is_some());
+    assert!(doc(&result).extended_summary().is_some());
     assert_eq!(args(&result).len(), 2);
     assert!(returns(&result).is_some());
     assert_eq!(raises(&result).len(), 1);
@@ -56,13 +56,10 @@ fn test_sections_with_blank_lines() {
 fn test_section_order() {
     let docstring = "Summary.\n\nReturns:\n    int: Value.\n\nArgs:\n    x: Input.";
     let result = parse_google(docstring);
-    let sections: Vec<_> = all_sections(&result);
+    let sections = all_sections(&result);
     assert_eq!(sections.len(), 2);
-    assert_eq!(
-        sections[0].header.name.source_text(&result.source),
-        "Returns"
-    );
-    assert_eq!(sections[1].header.name.source_text(&result.source), "Args");
+    assert_eq!(sections[0].header().name().text(result.source()), "Returns");
+    assert_eq!(sections[1].header().name().text(result.source()), "Args");
 }
 
 // =============================================================================
@@ -73,19 +70,21 @@ fn test_section_order() {
 fn test_section_header_span() {
     let docstring = "Summary.\n\nArgs:\n    x: Value.";
     let result = parse_google(docstring);
-    let header = &all_sections(&result).into_iter().next().unwrap().header;
-    assert_eq!(header.name.source_text(&result.source), "Args");
-    assert_eq!(header.name.source_text(&result.source), "Args");
-    assert_eq!(header.range.source_text(&result.source), "Args:");
+    let header = all_sections(&result)[0].header();
+    assert_eq!(header.name().text(result.source()), "Args");
+    assert_eq!(
+        header.syntax().range().source_text(result.source()),
+        "Args:"
+    );
 }
 
 #[test]
 fn test_section_span() {
     let docstring = "Summary.\n\nArgs:\n    x: Value.";
     let result = parse_google(docstring);
-    let section = all_sections(&result).into_iter().next().unwrap();
+    let section = &all_sections(&result)[0];
     assert_eq!(
-        section.range.source_text(&result.source),
+        section.syntax().range().source_text(result.source()),
         "Args:\n    x: Value."
     );
 }
@@ -98,18 +97,17 @@ fn test_section_span() {
 fn test_unknown_section_preserved() {
     let docstring = "Summary.\n\nCustom:\n    Some custom content.";
     let result = parse_google(docstring);
-    let sections: Vec<_> = all_sections(&result);
+    let sections = all_sections(&result);
     assert_eq!(sections.len(), 1);
+    assert_eq!(sections[0].header().name().text(result.source()), "Custom");
     assert_eq!(
-        sections[0].header.name.source_text(&result.source),
-        "Custom"
+        sections[0].section_kind(result.source()),
+        GoogleSectionKind::Unknown
     );
-    match &sections[0].body {
-        GoogleSectionBody::Unknown(text) => {
-            assert_eq!(text.source_text(&result.source), "Some custom content.");
-        }
-        _ => panic!("Expected Unknown section body"),
-    }
+    assert_eq!(
+        sections[0].body_text().unwrap().text(result.source()),
+        "Some custom content."
+    );
 }
 
 #[test]
@@ -117,17 +115,11 @@ fn test_unknown_section_with_known() {
     let docstring =
         "Summary.\n\nArgs:\n    x: Value.\n\nCustom:\n    Content.\n\nReturns:\n    int: Result.";
     let result = parse_google(docstring);
-    let sections: Vec<_> = all_sections(&result);
+    let sections = all_sections(&result);
     assert_eq!(sections.len(), 3);
-    assert_eq!(sections[0].header.name.source_text(&result.source), "Args");
-    assert_eq!(
-        sections[1].header.name.source_text(&result.source),
-        "Custom"
-    );
-    assert_eq!(
-        sections[2].header.name.source_text(&result.source),
-        "Returns"
-    );
+    assert_eq!(sections[0].header().name().text(result.source()), "Args");
+    assert_eq!(sections[1].header().name().text(result.source()), "Custom");
+    assert_eq!(sections[2].header().name().text(result.source()), "Returns");
     assert_eq!(args(&result).len(), 1);
     assert!(returns(&result).is_some());
 }
@@ -136,14 +128,14 @@ fn test_unknown_section_with_known() {
 fn test_multiple_unknown_sections() {
     let docstring = "Summary.\n\nCustom One:\n    First.\n\nCustom Two:\n    Second.";
     let result = parse_google(docstring);
-    let sections: Vec<_> = all_sections(&result);
+    let sections = all_sections(&result);
     assert_eq!(sections.len(), 2);
     assert_eq!(
-        sections[0].header.name.source_text(&result.source),
+        sections[0].header().name().text(result.source()),
         "Custom One"
     );
     assert_eq!(
-        sections[1].header.name.source_text(&result.source),
+        sections[1].header().name().text(result.source()),
         "Custom Two"
     );
 }
@@ -203,10 +195,10 @@ Example:
 
     let result = parse_google(docstring);
     assert_eq!(
-        result.summary.as_ref().unwrap().source_text(&result.source),
+        doc(&result).summary().unwrap().text(result.source()),
         "Calculate something."
     );
-    assert!(result.extended_summary.is_some());
+    assert!(doc(&result).extended_summary().is_some());
     assert_eq!(args(&result).len(), 1);
     assert_eq!(keyword_args(&result).len(), 1);
     assert!(returns(&result).is_some());
@@ -227,25 +219,20 @@ fn test_span_source_text_round_trip() {
     let result = parse_google(docstring);
 
     assert_eq!(
-        result.summary.as_ref().unwrap().source_text(&result.source),
+        doc(&result).summary().unwrap().text(result.source()),
         "Summary."
     );
-    assert_eq!(args(&result)[0].name.source_text(&result.source), "x");
+    assert_eq!(args(&result)[0].name().text(result.source()), "x");
     assert_eq!(
-        args(&result)[0]
-            .r#type
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        args(&result)[0].r#type().unwrap().text(result.source()),
         "int"
     );
     assert_eq!(
         returns(&result)
             .unwrap()
-            .return_type
-            .as_ref()
+            .return_type()
             .unwrap()
-            .source_text(&result.source),
+            .text(result.source()),
         "bool"
     );
 }

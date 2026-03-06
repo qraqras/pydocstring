@@ -10,12 +10,9 @@ fn test_raises_single() {
     let result = parse_google(docstring);
     let r = raises(&result);
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
+    assert_eq!(r[0].r#type().text(result.source()), "ValueError");
     assert_eq!(
-        r[0].description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        r[0].description().unwrap().text(result.source()),
         "If the input is invalid."
     );
 }
@@ -27,8 +24,8 @@ fn test_raises_multiple() {
     let result = parse_google(docstring);
     let r = raises(&result);
     assert_eq!(r.len(), 2);
-    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
-    assert_eq!(r[1].r#type.source_text(&result.source), "TypeError");
+    assert_eq!(r[0].r#type().text(result.source()), "ValueError");
+    assert_eq!(r[1].r#type().text(result.source()), "TypeError");
 }
 
 #[test]
@@ -37,10 +34,9 @@ fn test_raises_multiline_description() {
     let result = parse_google(docstring);
     assert_eq!(
         raises(&result)[0]
-            .description
-            .as_ref()
+            .description()
             .unwrap()
-            .source_text(&result.source),
+            .text(result.source()),
         "If the\n        input is invalid."
     );
 }
@@ -50,7 +46,7 @@ fn test_raises_exception_type_span() {
     let docstring = "Summary.\n\nRaises:\n    ValueError: If bad.";
     let result = parse_google(docstring);
     assert_eq!(
-        raises(&result)[0].r#type.source_text(&result.source),
+        raises(&result)[0].r#type().text(result.source()),
         "ValueError"
     );
 }
@@ -61,12 +57,9 @@ fn test_raises_no_space_after_colon() {
     let docstring = "Summary.\n\nRaises:\n    ValueError:If invalid.";
     let result = parse_google(docstring);
     let r = raises(&result);
-    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
+    assert_eq!(r[0].r#type().text(result.source()), "ValueError");
     assert_eq!(
-        r[0].description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        r[0].description().unwrap().text(result.source()),
         "If invalid."
     );
 }
@@ -77,12 +70,9 @@ fn test_raises_extra_spaces_after_colon() {
     let docstring = "Summary.\n\nRaises:\n    ValueError:   If invalid.";
     let result = parse_google(docstring);
     let r = raises(&result);
-    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
+    assert_eq!(r[0].r#type().text(result.source()), "ValueError");
     assert_eq!(
-        r[0].description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        r[0].description().unwrap().text(result.source()),
         "If invalid."
     );
 }
@@ -93,15 +83,12 @@ fn test_raise_alias() {
     let result = parse_google(docstring);
     let r = raises(&result);
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
+    assert_eq!(r[0].r#type().text(result.source()), "ValueError");
     assert_eq!(
-        all_sections(&result)
-            .into_iter()
-            .next()
-            .unwrap()
-            .header
-            .name
-            .source_text(&result.source),
+        all_sections(&result)[0]
+            .header()
+            .name()
+            .text(result.source()),
         "Raise"
     );
 }
@@ -112,7 +99,7 @@ fn test_docstring_like_raises() {
     let result = parse_google(docstring);
     let r = raises(&result);
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
+    assert_eq!(r[0].r#type().text(result.source()), "ValueError");
 }
 
 // =============================================================================
@@ -126,14 +113,11 @@ fn test_warns_basic() {
     let w = warns(&result);
     assert_eq!(w.len(), 1);
     assert_eq!(
-        w[0].warning_type.source_text(&result.source),
+        w[0].warning_type().text(result.source()),
         "DeprecationWarning"
     );
     assert_eq!(
-        w[0].description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        w[0].description().unwrap().text(result.source()),
         "If using old API."
     );
 }
@@ -146,10 +130,10 @@ fn test_warns_multiple() {
     let w = warns(&result);
     assert_eq!(w.len(), 2);
     assert_eq!(
-        w[0].warning_type.source_text(&result.source),
+        w[0].warning_type().text(result.source()),
         "DeprecationWarning"
     );
-    assert_eq!(w[1].warning_type.source_text(&result.source), "UserWarning");
+    assert_eq!(w[1].warning_type().text(result.source()), "UserWarning");
 }
 
 #[test]
@@ -158,13 +142,10 @@ fn test_warn_alias() {
     let result = parse_google(docstring);
     assert_eq!(warns(&result).len(), 1);
     assert_eq!(
-        all_sections(&result)
-            .into_iter()
-            .next()
-            .unwrap()
-            .header
-            .name
-            .source_text(&result.source),
+        all_sections(&result)[0]
+            .header()
+            .name()
+            .text(result.source()),
         "Warn"
     );
 }
@@ -175,10 +156,9 @@ fn test_warns_multiline_description() {
     let result = parse_google(docstring);
     assert_eq!(
         warns(&result)[0]
-            .description
-            .as_ref()
+            .description()
             .unwrap()
-            .source_text(&result.source),
+            .text(result.source()),
         "First line.\n        Second line."
     );
 }
@@ -187,12 +167,12 @@ fn test_warns_multiline_description() {
 fn test_warns_section_body_variant() {
     let docstring = "Summary.\n\nWarns:\n    UserWarning: Desc.";
     let result = parse_google(docstring);
-    match &all_sections(&result).into_iter().next().unwrap().body {
-        GoogleSectionBody::Warns(warns) => {
-            assert_eq!(warns.len(), 1);
-        }
-        _ => panic!("Expected Warns section body"),
-    }
+    let sections = all_sections(&result);
+    assert_eq!(
+        sections[0].section_kind(result.source()),
+        GoogleSectionKind::Warns
+    );
+    assert_eq!(sections[0].warnings().count(), 1);
 }
 
 // =============================================================================
@@ -204,17 +184,14 @@ fn test_warning_singular_alias() {
     let docstring = "Summary.\n\nWarning:\n    This is deprecated.";
     let result = parse_google(docstring);
     assert_eq!(
-        warnings(&result).unwrap().source_text(&result.source),
+        warnings(&result).unwrap().text(result.source()),
         "This is deprecated."
     );
     assert_eq!(
-        all_sections(&result)
-            .into_iter()
-            .next()
-            .unwrap()
-            .header
-            .name
-            .source_text(&result.source),
+        all_sections(&result)[0]
+            .header()
+            .name()
+            .text(result.source()),
         "Warning"
     );
 }

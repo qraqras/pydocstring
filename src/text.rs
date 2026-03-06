@@ -1,19 +1,19 @@
-//! Source location primitives.
+//! Source location types (offset-only).
 //!
-//! This module provides [`TextSize`] and [`TextRange`] for offset-based
-//! source location tracking (inspired by ruff's `text-size` crate).
+//! This module provides [`TextSize`] (a byte offset) and [`TextRange`]
+//! (a half-open byte range) for tracking source positions.
+//! Inspired by ruff / rust-analyzer's `text-size` crate.
 
 use core::fmt;
 use core::ops;
 
 // =============================================================================
-// Source location types (ruff-style, offset-only)
+// TextSize
 // =============================================================================
 
 /// A byte offset in the source text.
 ///
 /// Newtype over `u32` for type safety (prevents mixing with line numbers, etc.).
-/// Inspired by ruff's `TextSize` (from the `text-size` crate).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct TextSize(u32);
 
@@ -73,9 +73,13 @@ impl fmt::Display for TextSize {
     }
 }
 
+// =============================================================================
+// TextRange
+// =============================================================================
+
 /// A range in the source text `[start, end)`, represented as byte offsets.
 ///
-/// Stores only offsets. Inspired by ruff's `TextRange`.
+/// Stores only offsets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct TextRange {
     start: TextSize,
@@ -152,5 +156,11 @@ impl TextRange {
         } else {
             self.end = other.end;
         }
+    }
+}
+
+impl fmt::Display for TextRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}..{}", self.start, self.end)
     }
 }

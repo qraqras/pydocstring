@@ -9,28 +9,23 @@ fn test_indented_docstring() {
     let docstring = "    Summary.\n\n    Args:\n        x (int): Value.";
     let result = parse_google(docstring);
     assert_eq!(
-        result.summary.as_ref().unwrap().source_text(&result.source),
+        doc(&result).summary().unwrap().text(result.source()),
         "Summary."
     );
     let a = args(&result);
     assert_eq!(a.len(), 1);
-    assert_eq!(a[0].name.source_text(&result.source), "x");
-    assert_eq!(
-        a[0].r#type.as_ref().unwrap().source_text(&result.source),
-        "int"
-    );
+    assert_eq!(a[0].name().text(result.source()), "x");
+    assert_eq!(a[0].r#type().unwrap().text(result.source()), "int");
 }
 
 #[test]
 fn test_indented_summary_span() {
     let docstring = "    Summary.";
     let result = parse_google(docstring);
-    assert_eq!(result.summary.as_ref().unwrap().start(), TextSize::new(4));
-    assert_eq!(result.summary.as_ref().unwrap().end(), TextSize::new(12));
-    assert_eq!(
-        result.summary.as_ref().unwrap().source_text(&result.source),
-        "Summary."
-    );
+    let s = doc(&result).summary().unwrap();
+    assert_eq!(s.range().start(), TextSize::new(4));
+    assert_eq!(s.range().end(), TextSize::new(12));
+    assert_eq!(s.text(result.source()), "Summary.");
 }
 
 // =============================================================================
@@ -42,30 +37,18 @@ fn test_indented_summary_span() {
 fn test_section_header_space_before_colon() {
     let input = "Summary.\n\nArgs :\n    x (int): The value.";
     let result = parse_google(input);
-    let doc = &result;
-    let a = args(doc);
+    let a = args(&result);
     assert_eq!(a.len(), 1, "expected 1 arg from 'Args :'");
-    assert_eq!(a[0].name.source_text(&result.source), "x");
+    assert_eq!(a[0].name().text(result.source()), "x");
 
     assert_eq!(
-        all_sections(doc)
-            .into_iter()
-            .next()
-            .unwrap()
-            .header
-            .name
-            .source_text(&result.source),
+        all_sections(&result)[0]
+            .header()
+            .name()
+            .text(result.source()),
         "Args"
     );
-    assert!(
-        all_sections(doc)
-            .into_iter()
-            .next()
-            .unwrap()
-            .header
-            .colon
-            .is_some()
-    );
+    assert!(all_sections(&result)[0].header().colon().is_some());
 }
 
 /// `Returns :` with space before colon.
@@ -73,12 +56,8 @@ fn test_section_header_space_before_colon() {
 fn test_returns_space_before_colon() {
     let input = "Summary.\n\nReturns :\n    int: The result.";
     let result = parse_google(input);
-    let doc = &result;
-    let r = returns(doc).unwrap();
-    assert_eq!(
-        r.return_type.as_ref().unwrap().source_text(&result.source),
-        "int"
-    );
+    let r = returns(&result).unwrap();
+    assert_eq!(r.return_type().unwrap().text(result.source()), "int");
 }
 
 /// Colonless `Args` should be parsed as Args section.
@@ -86,30 +65,18 @@ fn test_returns_space_before_colon() {
 fn test_section_header_no_colon() {
     let input = "Summary.\n\nArgs\n    x (int): The value.";
     let result = parse_google(input);
-    let doc = &result;
-    let a = args(doc);
+    let a = args(&result);
     assert_eq!(a.len(), 1, "expected 1 arg from colonless 'Args'");
-    assert_eq!(a[0].name.source_text(&result.source), "x");
+    assert_eq!(a[0].name().text(result.source()), "x");
 
     assert_eq!(
-        all_sections(doc)
-            .into_iter()
-            .next()
-            .unwrap()
-            .header
-            .name
-            .source_text(&result.source),
+        all_sections(&result)[0]
+            .header()
+            .name()
+            .text(result.source()),
         "Args"
     );
-    assert!(
-        all_sections(doc)
-            .into_iter()
-            .next()
-            .unwrap()
-            .header
-            .colon
-            .is_none()
-    );
+    assert!(all_sections(&result)[0].header().colon().is_none());
 }
 
 /// Colonless `Returns` should be parsed as Returns section.
@@ -117,12 +84,8 @@ fn test_section_header_no_colon() {
 fn test_returns_no_colon() {
     let input = "Summary.\n\nReturns\n    int: The result.";
     let result = parse_google(input);
-    let doc = &result;
-    let r = returns(doc).unwrap();
-    assert_eq!(
-        r.return_type.as_ref().unwrap().source_text(&result.source),
-        "int"
-    );
+    let r = returns(&result).unwrap();
+    assert_eq!(r.return_type().unwrap().text(result.source()), "int");
 }
 
 /// Colonless `Raises` should be parsed as Raises section.
@@ -130,10 +93,9 @@ fn test_returns_no_colon() {
 fn test_raises_no_colon() {
     let input = "Summary.\n\nRaises\n    ValueError: If invalid.";
     let result = parse_google(input);
-    let doc = &result;
-    let r = raises(doc);
+    let r = raises(&result);
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
+    assert_eq!(r[0].r#type().text(result.source()), "ValueError");
 }
 
 /// Unknown names without colon should NOT be treated as headers.
@@ -141,9 +103,8 @@ fn test_raises_no_colon() {
 fn test_unknown_name_without_colon_not_header() {
     let input = "Summary.\n\nSomeWord\n    x (int): value.";
     let result = parse_google(input);
-    let doc = &result;
     assert!(
-        all_sections(doc).is_empty(),
+        all_sections(&result).is_empty(),
         "unknown colonless name should not become a section"
     );
 }
@@ -153,10 +114,9 @@ fn test_unknown_name_without_colon_not_header() {
 fn test_mixed_colon_styles() {
     let input = "Summary.\n\nArgs:\n    x: value.\n\nReturns\n    int: result.\n\nRaises :\n    ValueError: If bad.";
     let result = parse_google(input);
-    let doc = &result;
-    assert_eq!(args(doc).len(), 1);
-    assert!(returns(doc).is_some());
-    assert_eq!(raises(doc).len(), 1);
+    assert_eq!(args(&result).len(), 1);
+    assert!(returns(&result).is_some());
+    assert_eq!(raises(&result).len(), 1);
 }
 
 // =============================================================================
@@ -170,20 +130,14 @@ fn test_tab_indented_args() {
     let result = parse_google(input);
     let a = args(&result);
     assert_eq!(a.len(), 2);
-    assert_eq!(a[0].name.source_text(&result.source), "x");
+    assert_eq!(a[0].name().text(result.source()), "x");
     assert_eq!(
-        a[0].description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        a[0].description().unwrap().text(result.source()),
         "The value."
     );
-    assert_eq!(a[1].name.source_text(&result.source), "y");
+    assert_eq!(a[1].name().text(result.source()), "y");
     assert_eq!(
-        a[1].description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        a[1].description().unwrap().text(result.source()),
         "Another value."
     );
 }
@@ -195,12 +149,8 @@ fn test_tab_args_with_continuation() {
     let result = parse_google(input);
     let a = args(&result);
     assert_eq!(a.len(), 2);
-    assert_eq!(a[0].name.source_text(&result.source), "x");
-    let desc = a[0]
-        .description
-        .as_ref()
-        .unwrap()
-        .source_text(&result.source);
+    assert_eq!(a[0].name().text(result.source()), "x");
+    let desc = a[0].description().unwrap().text(result.source());
     assert!(desc.contains("First line."), "desc = {:?}", desc);
     assert!(desc.contains("Continuation."), "desc = {:?}", desc);
 }
@@ -213,9 +163,9 @@ fn test_tab_indented_returns() {
     let r = returns(&result);
     assert!(r.is_some());
     let r = r.unwrap();
-    assert_eq!(r.return_type.unwrap().source_text(&result.source), "int");
+    assert_eq!(r.return_type().unwrap().text(result.source()), "int");
     assert_eq!(
-        r.description.as_ref().unwrap().source_text(&result.source),
+        r.description().unwrap().text(result.source()),
         "The result."
     );
 }
@@ -227,8 +177,8 @@ fn test_tab_indented_raises() {
     let result = parse_google(input);
     let r = raises(&result);
     assert_eq!(r.len(), 2);
-    assert_eq!(r[0].r#type.source_text(&result.source), "ValueError");
-    assert_eq!(r[1].r#type.source_text(&result.source), "TypeError");
+    assert_eq!(r[0].r#type().text(result.source()), "ValueError");
+    assert_eq!(r[1].r#type().text(result.source()), "TypeError");
 }
 
 /// Section header detection with tab indentation matches.
@@ -238,5 +188,5 @@ fn test_tab_indented_section_header() {
     let result = parse_google(input);
     let a = args(&result);
     assert_eq!(a.len(), 1);
-    assert_eq!(a[0].name.source_text(&result.source), "x");
+    assert_eq!(a[0].name().text(result.source()), "x");
 }

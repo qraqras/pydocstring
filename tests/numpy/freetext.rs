@@ -18,7 +18,7 @@ This is an important note about the function.
     assert!(
         notes(&result)
             .unwrap()
-            .source_text(&result.source)
+            .text(result.source())
             .contains("important note")
     );
 }
@@ -30,10 +30,16 @@ fn test_note_alias() {
     let result = parse_numpy(docstring);
     assert!(notes(&result).is_some());
     assert_eq!(
-        sections(&result)[0].header.name.source_text(&result.source),
+        all_sections(&result)[0]
+            .header()
+            .name()
+            .text(result.source()),
         "Note"
     );
-    assert_eq!(sections(&result)[0].header.kind, NumPySectionKind::Notes);
+    assert_eq!(
+        all_sections(&result)[0].section_kind(result.source()),
+        NumPySectionKind::Notes
+    );
 }
 
 /// Notes with multi-paragraph content.
@@ -41,7 +47,7 @@ fn test_note_alias() {
 fn test_notes_multi_paragraph() {
     let docstring = "Summary.\n\nNotes\n-----\nFirst paragraph.\n\nSecond paragraph.\n";
     let result = parse_numpy(docstring);
-    let n = notes(&result).unwrap().source_text(&result.source);
+    let n = notes(&result).unwrap().text(result.source());
     assert!(n.contains("First paragraph."));
     assert!(n.contains("Second paragraph."));
 }
@@ -55,7 +61,7 @@ fn test_warnings_section() {
     let docstring = "Summary.\n\nWarnings\n--------\nThis function is deprecated.\n";
     let result = parse_numpy(docstring);
     assert_eq!(
-        warnings_text(&result).unwrap().source_text(&result.source),
+        warnings_text(&result).unwrap().text(result.source()),
         "This function is deprecated."
     );
 }
@@ -67,10 +73,16 @@ fn test_warning_alias() {
     let result = parse_numpy(docstring);
     assert!(warnings_text(&result).is_some());
     assert_eq!(
-        sections(&result)[0].header.name.source_text(&result.source),
+        all_sections(&result)[0]
+            .header()
+            .name()
+            .text(result.source()),
         "Warning"
     );
-    assert_eq!(sections(&result)[0].header.kind, NumPySectionKind::Warnings);
+    assert_eq!(
+        all_sections(&result)[0].section_kind(result.source()),
+        NumPySectionKind::Warnings
+    );
 }
 
 /// Warnings section body variant check.
@@ -78,12 +90,9 @@ fn test_warning_alias() {
 fn test_warnings_section_body_variant() {
     let docstring = "Summary.\n\nWarnings\n--------\nDo not use.\n";
     let result = parse_numpy(docstring);
-    match &sections(&result)[0].body {
-        NumPySectionBody::Warnings(text) => {
-            assert!(text.is_some());
-        }
-        other => panic!("Expected Warnings section body, got {:?}", other),
-    }
+    let s = &all_sections(&result)[0];
+    assert_eq!(s.section_kind(result.source()), NumPySectionKind::Warnings);
+    assert!(s.body_text().is_some());
 }
 
 // =============================================================================
@@ -94,7 +103,7 @@ fn test_warnings_section_body_variant() {
 fn test_examples_basic() {
     let docstring = "Summary.\n\nExamples\n--------\n>>> func(1)\n1\n";
     let result = parse_numpy(docstring);
-    let ex = examples(&result).unwrap().source_text(&result.source);
+    let ex = examples(&result).unwrap().text(result.source());
     assert!(ex.contains(">>> func(1)"));
     assert!(ex.contains("1"));
 }
@@ -106,10 +115,16 @@ fn test_example_alias() {
     let result = parse_numpy(docstring);
     assert!(examples(&result).is_some());
     assert_eq!(
-        sections(&result)[0].header.name.source_text(&result.source),
+        all_sections(&result)[0]
+            .header()
+            .name()
+            .text(result.source()),
         "Example"
     );
-    assert_eq!(sections(&result)[0].header.kind, NumPySectionKind::Examples);
+    assert_eq!(
+        all_sections(&result)[0].section_kind(result.source()),
+        NumPySectionKind::Examples
+    );
 }
 
 /// Examples with narrative text and doctest.
@@ -117,7 +132,7 @@ fn test_example_alias() {
 fn test_examples_with_narrative() {
     let docstring = "Summary.\n\nExamples\n--------\nHere is an example:\n\n>>> func(2)\n4\n";
     let result = parse_numpy(docstring);
-    let ex = examples(&result).unwrap().source_text(&result.source);
+    let ex = examples(&result).unwrap().text(result.source());
     assert!(ex.contains("Here is an example:"));
     assert!(ex.contains(">>> func(2)"));
 }
@@ -127,12 +142,9 @@ fn test_examples_with_narrative() {
 fn test_examples_section_body_variant() {
     let docstring = "Summary.\n\nExamples\n--------\n>>> pass\n";
     let result = parse_numpy(docstring);
-    match &sections(&result)[0].body {
-        NumPySectionBody::Examples(text) => {
-            assert!(text.is_some());
-        }
-        other => panic!("Expected Examples section body, got {:?}", other),
-    }
+    let s = &all_sections(&result)[0];
+    assert_eq!(s.section_kind(result.source()), NumPySectionKind::Examples);
+    assert!(s.body_text().is_some());
 }
 
 // =============================================================================
@@ -151,17 +163,16 @@ func_b, func_c
     let result = parse_numpy(docstring);
     let items = see_also(&result);
     assert_eq!(items.len(), 2);
-    assert_eq!(items[0].names[0].source_text(&result.source), "func_a");
+    let names0: Vec<_> = items[0].names().collect();
+    assert_eq!(names0[0].text(result.source()), "func_a");
     assert_eq!(
-        items[0]
-            .description
-            .as_ref()
-            .map(|d| d.source_text(&result.source)),
+        items[0].description().map(|d| d.text(result.source())),
         Some("Does something.")
     );
-    assert_eq!(items[1].names.len(), 2);
-    assert_eq!(items[1].names[0].source_text(&result.source), "func_b");
-    assert_eq!(items[1].names[1].source_text(&result.source), "func_c");
+    assert_eq!(items[1].names().count(), 2);
+    let names1: Vec<_> = items[1].names().collect();
+    assert_eq!(names1[0].text(result.source()), "func_b");
+    assert_eq!(names1[1].text(result.source()), "func_c");
 }
 
 /// See Also with no space before colon.
@@ -171,13 +182,13 @@ fn test_see_also_no_space_before_colon() {
     let result = parse_numpy(docstring);
     let sa = see_also(&result);
     assert_eq!(sa.len(), 1);
-    assert_eq!(sa[0].names[0].source_text(&result.source), "func_a");
+    let names: Vec<_> = sa[0].names().collect();
+    assert_eq!(names[0].text(result.source()), "func_a");
     assert!(
         sa[0]
-            .description
-            .as_ref()
+            .description()
             .unwrap()
-            .source_text(&result.source)
+            .text(result.source())
             .contains("Description")
     );
 }
@@ -190,16 +201,14 @@ fn test_see_also_multiple_with_descriptions() {
     let result = parse_numpy(docstring);
     let sa = see_also(&result);
     assert_eq!(sa.len(), 2);
-    assert_eq!(sa[0].names[0].source_text(&result.source), "func_a");
+    let names0: Vec<_> = sa[0].names().collect();
+    assert_eq!(names0[0].text(result.source()), "func_a");
     assert_eq!(
-        sa[0]
-            .description
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        sa[0].description().unwrap().text(result.source()),
         "First function."
     );
-    assert_eq!(sa[1].names[0].source_text(&result.source), "func_b");
+    let names1: Vec<_> = sa[1].names().collect();
+    assert_eq!(names1[0].text(result.source()), "func_b");
 }
 
 /// See Also section body variant check.
@@ -207,12 +216,10 @@ fn test_see_also_multiple_with_descriptions() {
 fn test_see_also_section_body_variant() {
     let docstring = "Summary.\n\nSee Also\n--------\nfunc_a : Desc.\n";
     let result = parse_numpy(docstring);
-    match &sections(&result)[0].body {
-        NumPySectionBody::SeeAlso(items) => {
-            assert_eq!(items.len(), 1);
-        }
-        other => panic!("Expected SeeAlso section body, got {:?}", other),
-    }
+    let s = &all_sections(&result)[0];
+    assert_eq!(s.section_kind(result.source()), NumPySectionKind::SeeAlso);
+    let items: Vec<_> = s.see_also_items().collect();
+    assert_eq!(items.len(), 1);
 }
 
 // =============================================================================
@@ -231,28 +238,20 @@ References
     let result = parse_numpy(docstring);
     let refs = references(&result);
     assert_eq!(refs.len(), 2);
-    assert_eq!(
-        refs[0].number.as_ref().unwrap().source_text(&result.source),
-        "1"
-    );
+    assert_eq!(refs[0].number().unwrap().text(result.source()), "1");
     assert!(
         refs[0]
-            .content
-            .as_ref()
+            .content()
             .unwrap()
-            .source_text(&result.source)
+            .text(result.source())
             .contains("Author A")
     );
-    assert_eq!(
-        refs[1].number.as_ref().unwrap().source_text(&result.source),
-        "2"
-    );
+    assert_eq!(refs[1].number().unwrap().text(result.source()), "2");
     assert!(
         refs[1]
-            .content
-            .as_ref()
+            .content()
             .unwrap()
-            .source_text(&result.source)
+            .text(result.source())
             .contains("Author B")
     );
 }
@@ -264,15 +263,11 @@ fn test_references_directive_markers() {
     let result = parse_numpy(docstring);
     let refs = references(&result);
     assert_eq!(refs.len(), 1);
-    assert!(refs[0].directive_marker.is_some());
+    assert!(refs[0].directive_marker().is_some());
     assert_eq!(
-        refs[0]
-            .directive_marker
-            .as_ref()
-            .unwrap()
-            .source_text(&result.source),
+        refs[0].directive_marker().unwrap().text(result.source()),
         ".."
     );
-    assert!(refs[0].open_bracket.is_some());
-    assert!(refs[0].close_bracket.is_some());
+    assert!(refs[0].open_bracket().is_some());
+    assert!(refs[0].close_bracket().is_some());
 }

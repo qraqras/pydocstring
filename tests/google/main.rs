@@ -1,12 +1,12 @@
 //! Integration tests for Google-style docstring parser.
 
-pub use pydocstring::GoogleSectionBody;
-pub use pydocstring::TextSize;
-pub use pydocstring::google::parse_google;
+pub use pydocstring::Parsed;
 pub use pydocstring::google::{
-    GoogleArg, GoogleAttribute, GoogleDocstring, GoogleDocstringItem, GoogleException,
-    GoogleMethod, GoogleReturns, GoogleSection, GoogleSeeAlsoItem, GoogleWarning,
+    GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturns,
+    GoogleSection, GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning, parse_google,
 };
+pub use pydocstring::syntax::SyntaxToken;
+pub use pydocstring::text::TextSize;
 
 mod args;
 mod edge_cases;
@@ -21,223 +21,152 @@ mod summary;
 // Shared helpers
 // =============================================================================
 
-pub fn all_sections(doc: &GoogleDocstring) -> Vec<&GoogleSection> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => Some(s),
-            _ => None,
-        })
+/// Get the typed GoogleDocstring wrapper from a Parsed result.
+pub fn doc(result: &Parsed) -> GoogleDocstring<'_> {
+    GoogleDocstring::cast(result.root()).unwrap()
+}
+
+pub fn all_sections<'a>(result: &'a Parsed) -> Vec<GoogleSection<'a>> {
+    doc(result).sections().collect()
+}
+
+pub fn args<'a>(result: &'a Parsed) -> Vec<GoogleArg<'a>> {
+    doc(result)
+        .sections()
+        .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Args))
+        .flat_map(|s| s.args().collect::<Vec<_>>())
         .collect()
 }
 
-pub fn args(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => match &s.body {
-                GoogleSectionBody::Args(v) => Some(v.iter()),
-                _ => None,
-            },
-            _ => None,
-        })
-        .flatten()
+pub fn returns<'a>(result: &'a Parsed) -> Option<GoogleReturns<'a>> {
+    doc(result)
+        .sections()
+        .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Returns))
+        .find_map(|s| s.returns())
+}
+
+pub fn yields<'a>(result: &'a Parsed) -> Option<GoogleReturns<'a>> {
+    doc(result)
+        .sections()
+        .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Yields))
+        .find_map(|s| s.returns())
+}
+
+pub fn raises<'a>(result: &'a Parsed) -> Vec<GoogleException<'a>> {
+    doc(result)
+        .sections()
+        .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Raises))
+        .flat_map(|s| s.exceptions().collect::<Vec<_>>())
         .collect()
 }
 
-pub fn returns(doc: &GoogleDocstring) -> Option<&GoogleReturns> {
-    doc.items.iter().find_map(|item| match item {
-        GoogleDocstringItem::Section(s) => match &s.body {
-            GoogleSectionBody::Returns(r) => Some(r),
-            _ => None,
-        },
-        _ => None,
-    })
-}
-
-pub fn yields(doc: &GoogleDocstring) -> Option<&GoogleReturns> {
-    doc.items.iter().find_map(|item| match item {
-        GoogleDocstringItem::Section(s) => match &s.body {
-            GoogleSectionBody::Yields(r) => Some(r),
-            _ => None,
-        },
-        _ => None,
-    })
-}
-
-pub fn raises(doc: &GoogleDocstring) -> Vec<&GoogleException> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => match &s.body {
-                GoogleSectionBody::Raises(v) => Some(v.iter()),
-                _ => None,
-            },
-            _ => None,
+pub fn attributes<'a>(result: &'a Parsed) -> Vec<GoogleAttribute<'a>> {
+    doc(result)
+        .sections()
+        .filter(|s| {
+            matches!(
+                s.section_kind(result.source()),
+                GoogleSectionKind::Attributes
+            )
         })
-        .flatten()
+        .flat_map(|s| s.attributes().collect::<Vec<_>>())
         .collect()
 }
 
-pub fn attributes(doc: &GoogleDocstring) -> Vec<&GoogleAttribute> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => match &s.body {
-                GoogleSectionBody::Attributes(v) => Some(v.iter()),
-                _ => None,
-            },
-            _ => None,
+pub fn keyword_args<'a>(result: &'a Parsed) -> Vec<GoogleArg<'a>> {
+    doc(result)
+        .sections()
+        .filter(|s| {
+            matches!(
+                s.section_kind(result.source()),
+                GoogleSectionKind::KeywordArgs
+            )
         })
-        .flatten()
+        .flat_map(|s| s.args().collect::<Vec<_>>())
         .collect()
 }
 
-pub fn keyword_args(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => match &s.body {
-                GoogleSectionBody::KeywordArgs(v) => Some(v.iter()),
-                _ => None,
-            },
-            _ => None,
+pub fn other_parameters<'a>(result: &'a Parsed) -> Vec<GoogleArg<'a>> {
+    doc(result)
+        .sections()
+        .filter(|s| {
+            matches!(
+                s.section_kind(result.source()),
+                GoogleSectionKind::OtherParameters
+            )
         })
-        .flatten()
+        .flat_map(|s| s.args().collect::<Vec<_>>())
         .collect()
 }
 
-pub fn other_parameters(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => match &s.body {
-                GoogleSectionBody::OtherParameters(v) => Some(v.iter()),
-                _ => None,
-            },
-            _ => None,
-        })
-        .flatten()
+pub fn receives<'a>(result: &'a Parsed) -> Vec<GoogleArg<'a>> {
+    doc(result)
+        .sections()
+        .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Receives))
+        .flat_map(|s| s.args().collect::<Vec<_>>())
         .collect()
 }
 
-pub fn receives(doc: &GoogleDocstring) -> Vec<&GoogleArg> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => match &s.body {
-                GoogleSectionBody::Receives(v) => Some(v.iter()),
-                _ => None,
-            },
-            _ => None,
-        })
-        .flatten()
+pub fn warns<'a>(result: &'a Parsed) -> Vec<GoogleWarning<'a>> {
+    doc(result)
+        .sections()
+        .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Warns))
+        .flat_map(|s| s.warnings().collect::<Vec<_>>())
         .collect()
 }
 
-pub fn warns(doc: &GoogleDocstring) -> Vec<&GoogleWarning> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => match &s.body {
-                GoogleSectionBody::Warns(v) => Some(v.iter()),
-                _ => None,
-            },
-            _ => None,
-        })
-        .flatten()
+pub fn see_also<'a>(result: &'a Parsed) -> Vec<GoogleSeeAlsoItem<'a>> {
+    doc(result)
+        .sections()
+        .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::SeeAlso))
+        .flat_map(|s| s.see_also_items().collect::<Vec<_>>())
         .collect()
 }
 
-pub fn see_also(doc: &GoogleDocstring) -> Vec<&GoogleSeeAlsoItem> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => match &s.body {
-                GoogleSectionBody::SeeAlso(v) => Some(v.iter()),
-                _ => None,
-            },
-            _ => None,
-        })
-        .flatten()
+pub fn methods<'a>(result: &'a Parsed) -> Vec<GoogleMethod<'a>> {
+    doc(result)
+        .sections()
+        .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Methods))
+        .flat_map(|s| s.methods().collect::<Vec<_>>())
         .collect()
 }
 
-pub fn methods(doc: &GoogleDocstring) -> Vec<&GoogleMethod> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => match &s.body {
-                GoogleSectionBody::Methods(v) => Some(v.iter()),
-                _ => None,
-            },
-            _ => None,
-        })
-        .flatten()
-        .collect()
+pub fn notes(result: &Parsed) -> Option<&SyntaxToken> {
+    doc(result)
+        .sections()
+        .find(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Notes))
+        .and_then(|s| s.body_text())
 }
 
-pub fn notes(doc: &GoogleDocstring) -> Option<&pydocstring::TextRange> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => Some(s),
-            _ => None,
-        })
-        .find_map(|s| match &s.body {
-            GoogleSectionBody::Notes(v) => Some(v),
-            _ => None,
-        })
+pub fn examples(result: &Parsed) -> Option<&SyntaxToken> {
+    doc(result)
+        .sections()
+        .find(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Examples))
+        .and_then(|s| s.body_text())
 }
 
-pub fn examples(doc: &GoogleDocstring) -> Option<&pydocstring::TextRange> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => Some(s),
-            _ => None,
-        })
-        .find_map(|s| match &s.body {
-            GoogleSectionBody::Examples(v) => Some(v),
-            _ => None,
-        })
+pub fn todo(result: &Parsed) -> Option<&SyntaxToken> {
+    doc(result)
+        .sections()
+        .find(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Todo))
+        .and_then(|s| s.body_text())
 }
 
-pub fn todo(doc: &GoogleDocstring) -> Option<&pydocstring::TextRange> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => Some(s),
-            _ => None,
+pub fn references(result: &Parsed) -> Option<&SyntaxToken> {
+    doc(result)
+        .sections()
+        .find(|s| {
+            matches!(
+                s.section_kind(result.source()),
+                GoogleSectionKind::References
+            )
         })
-        .find_map(|s| match &s.body {
-            GoogleSectionBody::Todo(v) => Some(v),
-            _ => None,
-        })
+        .and_then(|s| s.body_text())
 }
 
-pub fn references(doc: &GoogleDocstring) -> Option<&pydocstring::TextRange> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => Some(s),
-            _ => None,
-        })
-        .find_map(|s| match &s.body {
-            GoogleSectionBody::References(v) => Some(v),
-            _ => None,
-        })
-}
-
-pub fn warnings(doc: &GoogleDocstring) -> Option<&pydocstring::TextRange> {
-    doc.items
-        .iter()
-        .filter_map(|item| match item {
-            GoogleDocstringItem::Section(s) => Some(s),
-            _ => None,
-        })
-        .find_map(|s| match &s.body {
-            GoogleSectionBody::Warnings(v) => Some(v),
-            _ => None,
-        })
+pub fn warnings(result: &Parsed) -> Option<&SyntaxToken> {
+    doc(result)
+        .sections()
+        .find(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Warnings))
+        .and_then(|s| s.body_text())
 }

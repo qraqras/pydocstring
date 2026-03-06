@@ -24,18 +24,22 @@ Some notes here.
 "#;
     let result = parse_numpy(docstring);
     assert_eq!(parameters(&result).len(), 1);
-    assert_eq!(
-        parameters(&result)[0].names[0].source_text(&result.source),
-        "x"
-    );
+    let names: Vec<_> = parameters(&result)[0].names().collect();
+    assert_eq!(names[0].text(result.source()), "x");
     assert_eq!(returns(&result).len(), 1);
     assert!(notes(&result).is_some());
     assert_eq!(
-        sections(&result)[0].header.name.source_text(&result.source),
+        all_sections(&result)[0]
+            .header()
+            .name()
+            .text(result.source()),
         "parameters"
     );
     assert_eq!(
-        sections(&result)[2].header.name.source_text(&result.source),
+        all_sections(&result)[2]
+            .header()
+            .name()
+            .text(result.source()),
         "NOTES"
     );
 }
@@ -54,9 +58,9 @@ x : int
     Desc.
 "#;
     let result = parse_numpy(docstring);
-    let hdr = &sections(&result)[0].header;
-    assert_eq!(hdr.name.source_text(&result.source), "Parameters");
-    assert_eq!(hdr.underline.source_text(&result.source), "----------");
+    let hdr = all_sections(&result)[0].header();
+    assert_eq!(hdr.name().text(result.source()), "Parameters");
+    assert_eq!(hdr.underline().text(result.source()), "----------");
 }
 
 // =============================================================================
@@ -73,29 +77,24 @@ x : int
     Description of x.
 "#;
     let result = parse_numpy(docstring);
-    let src = &result.source;
+    let src = result.source();
 
+    assert_eq!(doc(&result).summary().unwrap().text(src), "Summary line.");
     assert_eq!(
-        result.summary.as_ref().unwrap().source_text(src),
-        "Summary line."
-    );
-    assert_eq!(
-        sections(&result)[0].header.name.source_text(src),
+        all_sections(&result)[0].header().name().text(src),
         "Parameters"
     );
-    let underline = &sections(&result)[0]
-        .header
-        .underline
-        .source_text(&result.source);
+    let underline = all_sections(&result)[0]
+        .header()
+        .underline()
+        .text(result.source());
     assert!(underline.chars().all(|c| c == '-'));
 
     let p = &parameters(&result)[0];
-    assert_eq!(p.names[0].source_text(src), "x");
-    assert_eq!(p.r#type.as_ref().unwrap().source_text(src), "int");
-    assert_eq!(
-        p.description.as_ref().unwrap().source_text(src),
-        "Description of x."
-    );
+    let names: Vec<_> = p.names().collect();
+    assert_eq!(names[0].text(src), "x");
+    assert_eq!(p.r#type().unwrap().text(src), "int");
+    assert_eq!(p.description().unwrap().text(src), "Description of x.");
 }
 
 // =============================================================================
@@ -115,16 +114,15 @@ x : int
     Desc.
 "#;
     let result = parse_numpy(docstring);
-    let dep = result
-        .deprecation
-        .as_ref()
+    let dep = doc(&result)
+        .deprecation()
         .expect("deprecation should be parsed");
-    assert_eq!(dep.version.source_text(&result.source), "1.6.0");
+    assert_eq!(dep.version().text(result.source()), "1.6.0");
     assert_eq!(
-        dep.description.source_text(&result.source),
+        dep.description().unwrap().text(result.source()),
         "Use `new_func` instead."
     );
-    assert_eq!(dep.version.source_text(&result.source), "1.6.0");
+    assert_eq!(dep.version().text(result.source()), "1.6.0");
 }
 
 // =============================================================================
@@ -155,12 +153,18 @@ Notes
 Some notes.
 "#;
     let result = parse_numpy(docstring);
-    let s = sections(&result);
+    let s = all_sections(&result);
     assert_eq!(s.len(), 4);
-    assert_eq!(s[0].header.kind, NumPySectionKind::Parameters);
-    assert_eq!(s[1].header.kind, NumPySectionKind::Returns);
-    assert_eq!(s[2].header.kind, NumPySectionKind::Raises);
-    assert_eq!(s[3].header.kind, NumPySectionKind::Notes);
+    assert_eq!(
+        s[0].section_kind(result.source()),
+        NumPySectionKind::Parameters
+    );
+    assert_eq!(
+        s[1].section_kind(result.source()),
+        NumPySectionKind::Returns
+    );
+    assert_eq!(s[2].section_kind(result.source()), NumPySectionKind::Raises);
+    assert_eq!(s[3].section_kind(result.source()), NumPySectionKind::Notes);
 }
 
 #[test]
@@ -222,8 +226,9 @@ fn test_section_kind_display() {
 fn test_docstring_display() {
     let docstring = "My summary.";
     let result = parse_numpy(docstring);
+    // The root node covers the full source text
     assert_eq!(
-        format!("{}", result),
-        "NumPyDocstring(summary: My summary.)"
+        doc(&result).syntax().range().source_text(result.source()),
+        "My summary."
     );
 }
