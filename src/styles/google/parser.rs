@@ -439,7 +439,7 @@ fn build_content_range(cursor: &LineCursor, first: Option<usize>, last: usize) -
 // =============================================================================
 
 /// Extend the DESCRIPTION token of the last child node, or add one.
-fn extend_last_node_description(nodes: &mut Vec<SyntaxElement>, cont: TextRange) {
+fn extend_last_node_description(nodes: &mut [SyntaxElement], cont: TextRange) {
     if let Some(SyntaxElement::Node(node)) = nodes.last_mut() {
         // Find or add description token, extend range
         let mut found_desc = false;

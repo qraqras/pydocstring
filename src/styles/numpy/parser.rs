@@ -474,7 +474,7 @@ fn build_reference_node_plain(content: TextRange, range: TextRange) -> SyntaxNod
 // Per-line section body processors
 // =============================================================================
 
-fn extend_last_node_description(nodes: &mut Vec<SyntaxElement>, cont: TextRange) {
+fn extend_last_node_description(nodes: &mut [SyntaxElement], cont: TextRange) {
     if let Some(SyntaxElement::Node(node)) = nodes.last_mut() {
         let mut found_desc = false;
         for child in node.children_mut() {
@@ -497,7 +497,7 @@ fn extend_last_node_description(nodes: &mut Vec<SyntaxElement>, cont: TextRange)
 }
 
 /// Extend `content` field on a reference node.
-fn extend_last_ref_content(nodes: &mut Vec<SyntaxElement>, cont: TextRange) {
+fn extend_last_ref_content(nodes: &mut [SyntaxElement], cont: TextRange) {
     if let Some(SyntaxElement::Node(node)) = nodes.last_mut() {
         let mut found_content = false;
         for child in node.children_mut() {
