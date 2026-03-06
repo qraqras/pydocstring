@@ -37,15 +37,19 @@ Examples
     let parsed = parse_numpy(docstring);
     let doc = NumPyDocstring::cast(parsed.root()).unwrap();
 
-    // Display: raw source text
     println!("╔══════════════════════════════════════════════════╗");
     println!("║          NumPy-style Docstring Example           ║");
     println!("╚══════════════════════════════════════════════════╝");
+
     println!();
-    println!("── Display (raw text) ─────────────────────────────");
+
+    // Display: raw source text
+    println!("── raw text ────────────────────────────────────────");
     println!("{}", doc.syntax().range().source_text(parsed.source()));
 
+    println!();
+
     // pretty_print: structured AST
-    println!("── pretty_print (parsed AST) ──────────────────────");
+    println!("── parsed AST ──────────────────────────────────────");
     print!("{}", parsed.pretty_print());
 }

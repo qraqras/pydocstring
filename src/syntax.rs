@@ -319,9 +319,11 @@ impl SyntaxNode {
         })
     }
 
-    /// Write a Biome-style pretty-printed tree representation.
+    /// Write a pretty-printed tree representation.
     pub fn pretty_fmt(&self, src: &str, indent: usize, out: &mut String) {
-        pad(out, indent);
+        for _ in 0..indent {
+            out.push_str("  ");
+        }
         let _ = writeln!(out, "{}@{} {{", self.kind.name(), self.range);
         for child in &self.children {
             match child {
@@ -329,7 +331,9 @@ impl SyntaxNode {
                 SyntaxElement::Token(t) => t.pretty_fmt(src, indent + 1, out),
             }
         }
-        pad(out, indent);
+        for _ in 0..indent {
+            out.push_str("  ");
+        }
         out.push_str("}\n");
     }
 }
@@ -369,9 +373,11 @@ impl SyntaxToken {
         self.range.extend(other);
     }
 
-    /// Write a Biome-style pretty-printed token line.
+    /// Write a pretty-printed token line.
     pub fn pretty_fmt(&self, src: &str, indent: usize, out: &mut String) {
-        pad(out, indent);
+        for _ in 0..indent {
+            out.push_str("  ");
+        }
         let _ = writeln!(
             out,
             "{}: {:?}@{}",
@@ -472,17 +478,6 @@ pub fn walk(node: &SyntaxNode, visitor: &mut dyn Visitor) {
         }
     }
     visitor.leave(node);
-}
-
-// =============================================================================
-// Pretty-print helper
-// =============================================================================
-
-/// Write indentation (4 spaces per level).
-fn pad(out: &mut String, indent: usize) {
-    for _ in 0..indent {
-        out.push_str("    ");
-    }
 }
 
 // =============================================================================

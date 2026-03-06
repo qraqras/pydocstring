@@ -24,15 +24,19 @@ Raises:
 
     let parsed = parse_google(docstring);
 
-    // Display: raw source text
     println!("╔══════════════════════════════════════════════════╗");
     println!("║          Google-style Docstring Example          ║");
     println!("╚══════════════════════════════════════════════════╝");
+
     println!();
-    println!("── Display (raw text) ─────────────────────────────");
+
+    // Display: raw source text
+    println!("── raw text ────────────────────────────────────────");
     println!("{}", parsed.source());
 
+    println!();
+
     // pretty_print: structured AST
-    println!("── pretty_print (parsed AST) ──────────────────────");
+    println!("── parsed AST ──────────────────────────────────────");
     print!("{}", parsed.pretty_print());
 }

@@ -1,167 +1,88 @@
 # pydocstring
 
-A fast, zero-dependency Rust parser for Python docstrings.
-Parses Google and NumPy style docstrings into a **unified syntax tree** with **byte-precise source locations** on every token.
+![Crates.io Version](https://img.shields.io/crates/v/pydocstring?color=CC6688)
+![Crates.io MSRV](https://img.shields.io/crates/msrv/pydocstring?color=CC6688)
+![Crates.io License](https://img.shields.io/crates/l/pydocstring?color=CC6688)
 
-## Why pydocstring?
+A zero-dependency Rust parser for Python docstrings (Google / NumPy style).
 
-Existing Python docstring parsers (docstring_parser, griffe, etc.) return flat lists of extracted values with no positional information. pydocstring is designed as **infrastructure for linters and formatters**:
+Produces a **unified syntax tree** with **byte-precise source locations** on every token — designed as infrastructure for linters and formatters.
 
-- **Byte-precise source locations** — every `SyntaxToken` carries a `TextRange` (byte offset pair), so tools can emit diagnostics pointing to exact positions in the original text
-- **Uniform syntax tree** — Google and NumPy styles produce the same `SyntaxNode` / `SyntaxToken` tree structure (inspired by [Biome](https://biomejs.dev/)), enabling style-agnostic tree traversal via `Visitor` + `walk`
-- **Zero dependencies, never panics** — pure Rust with no external crates; always returns a best-effort tree for any input
-- **Native performance** — suitable for embedding in Rust-based toolchains like Ruff
+
+## Features
+
+- **Byte-precise source locations** — every token carries a `TextRange` (byte offset pair) for exact diagnostic positions
+- **Unified syntax tree** — both styles produce the same `SyntaxNode` / `SyntaxToken` tree, enabling style-agnostic traversal via `Visitor` + `walk`
+- **Zero dependencies** — pure Rust, no external crates
+- **Never panics** — always returns a best-effort tree for any input
+- **Style auto-detection** — `detect_style()` identifies the docstring convention automatically
 
 ## Installation
 
-Add to your `Cargo.toml`:
-
 ```toml
 [dependencies]
-pydocstring = "0.0.1"
+pydocstring = "0.0.2"
 ```
 
-## Quick Start
+## Usage
 
-### NumPy Style
-
-```rust
-use pydocstring::numpy::{parse_numpy, nodes::NumPyDocstring};
-use pydocstring::NumPySectionKind;
-
-let docstring = "\
-Calculate the area of a rectangle.
-
-Parameters
-----------
-width : float
-    The width of the rectangle.
-height : float
-    The height of the rectangle.
-
-Returns
--------
-float
-    The area of the rectangle.
-";
-
-let result = parse_numpy(docstring);
-let doc = NumPyDocstring::cast(result.root()).unwrap();
-
-// Summary
-println!("{}", doc.summary().unwrap().text(result.source()));
-
-// Iterate sections
-for section in doc.sections() {
-    match section.section_kind(result.source()) {
-        NumPySectionKind::Parameters => {
-            for param in section.parameters() {
-                let names: Vec<&str> = param.names()
-                    .map(|n| n.text(result.source()))
-                    .collect();
-                let ty = param.r#type().map(|t| t.text(result.source()));
-                println!("  {:?}: {:?}", names, ty);
-            }
-        }
-        NumPySectionKind::Returns => {
-            for ret in section.returns() {
-                let ty = ret.return_type().map(|t| t.text(result.source()));
-                println!("  -> {:?}", ty);
-            }
-        }
-        _ => {}
-    }
-}
-```
-
-### Google Style
+### Parsing
 
 ```rust
 use pydocstring::google::{parse_google, nodes::GoogleDocstring};
 use pydocstring::GoogleSectionKind;
 
-let docstring = "\
-Calculate the area of a rectangle.
-
-Args:
-    width (float): The width of the rectangle.
-    height (float): The height of the rectangle.
-
-Returns:
-    float: The area of the rectangle.
-
-Raises:
-    ValueError: If width or height is negative.
-";
-
-let result = parse_google(docstring);
+let input = "Summary.\n\nArgs:\n    x (int): The value.\n    y (int): Another value.";
+let result = parse_google(input);
 let doc = GoogleDocstring::cast(result.root()).unwrap();
 
-// Summary
 println!("{}", doc.summary().unwrap().text(result.source()));
 
-// Iterate sections
 for section in doc.sections() {
-    match section.section_kind(result.source()) {
-        GoogleSectionKind::Args => {
-            for arg in section.args() {
-                println!("  {} ({:?}): {:?}",
-                    arg.name().text(result.source()),
-                    arg.r#type().map(|t| t.text(result.source())),
-                    arg.description().map(|d| d.text(result.source())));
-            }
+    if section.section_kind(result.source()) == GoogleSectionKind::Args {
+        for arg in section.args() {
+            println!("{}: {}",
+                arg.name().text(result.source()),
+                arg.r#type().map(|t| t.text(result.source())).unwrap_or(""));
         }
-        GoogleSectionKind::Raises => {
-            for exc in section.exceptions() {
-                println!("  {}: {:?}",
-                    exc.r#type().text(result.source()),
-                    exc.description().map(|d| d.text(result.source())));
-            }
-        }
-        _ => {}
     }
 }
 ```
+
+NumPy style works the same way — use `parse_numpy` / `NumPyDocstring` instead.
 
 ### Style Auto-Detection
 
 ```rust
 use pydocstring::{detect_style, Style};
 
-let numpy_doc = "Summary.\n\nParameters\n----------\nx : int\n    Desc.";
-assert_eq!(detect_style(numpy_doc), Style::NumPy);
-
-let google_doc = "Summary.\n\nArgs:\n    x: Desc.";
-assert_eq!(detect_style(google_doc), Style::Google);
+assert_eq!(detect_style("Summary.\n\nArgs:\n    x: Desc."), Style::Google);
+assert_eq!(detect_style("Summary.\n\nParameters\n----------\nx : int"), Style::NumPy);
 ```
 
-## Source Locations
+### Source Locations
 
-Every token carries a `TextRange` (byte offsets), so linters can report precise positions:
+Every token carries byte offsets for precise diagnostics:
 
 ```rust
-use pydocstring::numpy::{parse_numpy, nodes::NumPyDocstring};
-use pydocstring::NumPySectionKind;
+use pydocstring::google::{parse_google, nodes::GoogleDocstring};
+use pydocstring::GoogleSectionKind;
 
-let docstring = "Summary.\n\nParameters\n----------\nx : int\n    The value.";
-let result = parse_numpy(docstring);
-let doc = NumPyDocstring::cast(result.root()).unwrap();
+let result = parse_google("Summary.\n\nArgs:\n    x (int): The value.");
+let doc = GoogleDocstring::cast(result.root()).unwrap();
 
 for section in doc.sections() {
-    if section.section_kind(result.source()) == NumPySectionKind::Parameters {
-        for param in section.parameters() {
-            let name = param.names().next().unwrap();
-            println!("Parameter '{}' at byte {}..{}",
-                name.text(result.source()),
-                name.range().start(),
-                name.range().end());
-            // => Parameter 'x' at byte 31..32
+    if section.section_kind(result.source()) == GoogleSectionKind::Args {
+        for arg in section.args() {
+            let name = arg.name();
+            println!("'{}' at byte {}..{}",
+                name.text(result.source()), name.range().start(), name.range().end());
         }
     }
 }
 ```
 
-## Syntax Tree
+### Syntax Tree
 
 The parse result is a tree of `SyntaxNode` (branches) and `SyntaxToken` (leaves), each tagged with a `SyntaxKind`. Use `pretty_print()` to visualize:
 
@@ -172,24 +93,23 @@ let result = parse_google("Summary.\n\nArgs:\n    x (int): The value.");
 println!("{}", result.pretty_print());
 ```
 
-Output:
-```
+```text
 GOOGLE_DOCSTRING@0..42 {
-    SUMMARY: "Summary."@0..8
-    GOOGLE_SECTION@10..42 {
-        GOOGLE_SECTION_HEADER@10..15 {
-            NAME: "Args"@10..14
-            COLON: ":"@14..15
-        }
-        GOOGLE_ARG@20..42 {
-            NAME: "x"@20..21
-            OPEN_BRACKET: "("@22..23
-            TYPE: "int"@23..26
-            CLOSE_BRACKET: ")"@26..27
-            COLON: ":"@27..28
-            DESCRIPTION: "The value."@29..39
-        }
+  SUMMARY: "Summary."@0..8
+  GOOGLE_SECTION@10..42 {
+    GOOGLE_SECTION_HEADER@10..15 {
+      NAME: "Args"@10..14
+      COLON: ":"@14..15
     }
+    GOOGLE_ARG@20..42 {
+      NAME: "x"@20..21
+      OPEN_BRACKET: "("@22..23
+      TYPE: "int"@23..26
+      CLOSE_BRACKET: ")"@26..27
+      COLON: ":"@27..28
+      DESCRIPTION: "The value."@29..39
+    }
+  }
 }
 ```
 
@@ -198,7 +118,7 @@ GOOGLE_DOCSTRING@0..42 {
 Walk the tree with the `Visitor` trait for style-agnostic analysis:
 
 ```rust
-use pydocstring::{Visitor, walk, SyntaxNode, SyntaxToken, SyntaxKind};
+use pydocstring::{Visitor, walk, SyntaxToken, SyntaxKind};
 use pydocstring::google::parse_google;
 
 struct NameCollector<'a> {
@@ -222,47 +142,26 @@ assert_eq!(collector.names, vec!["Args", "x", "y"]);
 
 ## Supported Sections
 
-### NumPy Style
+Both styles support the following section categories. Typed accessor methods are available on each style's section node.
 
-| Section | Typed accessor | Entry type |
-|---------|---------------|------------|
-| Parameters / Other Parameters / Receives | `parameters()` | `NumPyParameter` |
-| Returns / Yields | `returns()` | `NumPyReturns` |
-| Raises | `exceptions()` | `NumPyException` |
-| Warns | `warnings()` | `NumPyWarning` |
-| See Also | `see_also_items()` | `NumPySeeAlsoItem` |
-| References | `references()` | `NumPyReference` |
-| Attributes | `attributes()` | `NumPyAttribute` |
-| Methods | `methods()` | `NumPyMethod` |
-| Notes / Examples / Warnings | `body_text()` | Free text |
+| Category                          | Google                                   | NumPy                                   |
+|-----------------------------------|------------------------------------------|-----------------------------------------|
+| Parameters                        | `args()` → `GoogleArg`                   | `parameters()` → `NumPyParameter`       |
+| Returns / Yields                  | `returns()` → `GoogleReturns`            | `returns()` → `NumPyReturns`            |
+| Raises                            | `exceptions()` → `GoogleException`       | `exceptions()` → `NumPyException`       |
+| Warns                             | `warnings()` → `GoogleWarning`           | `warnings()` → `NumPyWarning`           |
+| See Also                          | `see_also_items()` → `GoogleSeeAlsoItem` | `see_also_items()` → `NumPySeeAlsoItem` |
+| Attributes                        | `attributes()` → `GoogleAttribute`       | `attributes()` → `NumPyAttribute`       |
+| Methods                           | `methods()` → `GoogleMethod`             | `methods()` → `NumPyMethod`             |
+| Free text (Notes, Examples, etc.) | `body_text()`                            | `body_text()`                           |
 
-Additional root-level elements: `summary()`, `extended_summary()`, `deprecation()`.
-
-### Google Style
-
-| Section | Typed accessor | Entry type |
-|---------|---------------|------------|
-| Args / Keyword Args / Other Parameters / Receives | `args()` | `GoogleArg` |
-| Returns / Yields | `returns()` | `GoogleReturns` |
-| Raises | `exceptions()` | `GoogleException` |
-| Warns | `warnings()` | `GoogleWarning` |
-| See Also | `see_also_items()` | `GoogleSeeAlsoItem` |
-| Attributes | `attributes()` | `GoogleAttribute` |
-| Methods | `methods()` | `GoogleMethod` |
-| Notes / Examples / Todo / References / Warnings | `body_text()` | Free text |
-| Admonitions (Attention, Caution, Danger, ...) | `body_text()` | Free text |
-
-Additional root-level elements: `summary()`, `extended_summary()`.
+Root-level accessors: `summary()`, `extended_summary()` (NumPy also has `deprecation()`).
 
 ## Development
 
 ```bash
-cargo build          # Build
-cargo test           # Run all 270+ tests
-cargo run --example parse_numpy
+cargo build
+cargo test
 cargo run --example parse_google
+cargo run --example parse_numpy
 ```
-
-## License
-
-MIT

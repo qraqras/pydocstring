@@ -1,15 +1,15 @@
 [package]
 name = "pydocstring"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 authors = ["Ryuma Asai"]
-description = "A fast, zero-dependency Rust parser for Python docstrings (NumPy and Google styles) with a unified syntax tree and byte-precise source locations"
+description = "A zero-dependency Rust parser for Python docstrings (Google and NumPy styles) with a unified syntax tree and byte-precise source locations"
 license = "MIT"
 repository = "https://github.com/qraqras/pydocstring"
 homepage = "https://github.com/qraqras/pydocstring"
 documentation = "https://docs.rs/pydocstring"
 readme = "README.md"
-keywords = ["python", "docstring", "parser", "numpy", "google"]
+keywords = ["python", "docstring", "parser", "google", "numpy"]
 categories = ["parser-implementations", "development-tools"]
 rust-version = "1.85"
 exclude = ["target/", "tests/", ".github/", ".devcontainer/"]
