@@ -12,14 +12,17 @@ use crate::syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 
 macro_rules! define_node {
     ($name:ident, $kind:ident) => {
+        #[doc = concat!("Typed wrapper for `", stringify!($kind), "` syntax nodes.")]
         #[derive(Debug)]
         pub struct $name<'a>(pub(crate) &'a SyntaxNode);
 
         impl<'a> $name<'a> {
+            /// Try to cast a `SyntaxNode` reference into this typed wrapper.
             pub fn cast(node: &'a SyntaxNode) -> Option<Self> {
                 (node.kind() == SyntaxKind::$kind).then(|| Self(node))
             }
 
+            /// Access the underlying `SyntaxNode`.
             pub fn syntax(&self) -> &'a SyntaxNode {
                 self.0
             }
@@ -212,30 +215,37 @@ impl<'a> NumPyParameter<'a> {
         self.0.tokens(SyntaxKind::NAME)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Type annotation token, if present.
     pub fn r#type(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::TYPE)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }
 
+    /// `optional` marker token, if present.
     pub fn optional(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::OPTIONAL)
     }
 
+    /// `default` keyword token, if present.
     pub fn default_keyword(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DEFAULT_KEYWORD)
     }
 
+    /// Default value separator token (`=` or `:`), if present.
     pub fn default_separator(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DEFAULT_SEPARATOR)
     }
 
+    /// Default value text token, if present.
     pub fn default_value(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DEFAULT_VALUE)
     }
@@ -248,18 +258,22 @@ impl<'a> NumPyParameter<'a> {
 define_node!(NumPyReturns, NUMPY_RETURNS);
 
 impl<'a> NumPyReturns<'a> {
+    /// Return name token, if present.
     pub fn name(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::NAME)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Return type annotation token, if present.
     pub fn return_type(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::RETURN_TYPE)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }
@@ -272,14 +286,17 @@ impl<'a> NumPyReturns<'a> {
 define_node!(NumPyException, NUMPY_EXCEPTION);
 
 impl<'a> NumPyException<'a> {
+    /// Exception type name token.
     pub fn r#type(&self) -> &'a SyntaxToken {
         self.0.required_token(SyntaxKind::TYPE)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }
@@ -292,14 +309,17 @@ impl<'a> NumPyException<'a> {
 define_node!(NumPyWarning, NUMPY_WARNING);
 
 impl<'a> NumPyWarning<'a> {
+    /// Warning type name token.
     pub fn r#type(&self) -> &'a SyntaxToken {
         self.0.required_token(SyntaxKind::TYPE)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }
@@ -317,10 +337,12 @@ impl<'a> NumPySeeAlsoItem<'a> {
         self.0.tokens(SyntaxKind::NAME)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }
@@ -333,22 +355,27 @@ impl<'a> NumPySeeAlsoItem<'a> {
 define_node!(NumPyReference, NUMPY_REFERENCE);
 
 impl<'a> NumPyReference<'a> {
+    /// RST directive marker (`..`), if present.
     pub fn directive_marker(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DIRECTIVE_MARKER)
     }
 
+    /// Opening bracket token, if present.
     pub fn open_bracket(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::OPEN_BRACKET)
     }
 
+    /// Reference number token, if present.
     pub fn number(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::NUMBER)
     }
 
+    /// Closing bracket token, if present.
     pub fn close_bracket(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::CLOSE_BRACKET)
     }
 
+    /// Reference content text token, if present.
     pub fn content(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::CONTENT)
     }
@@ -361,18 +388,22 @@ impl<'a> NumPyReference<'a> {
 define_node!(NumPyAttribute, NUMPY_ATTRIBUTE);
 
 impl<'a> NumPyAttribute<'a> {
+    /// Attribute name token.
     pub fn name(&self) -> &'a SyntaxToken {
         self.0.required_token(SyntaxKind::NAME)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Type annotation token, if present.
     pub fn r#type(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::TYPE)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }
@@ -385,14 +416,17 @@ impl<'a> NumPyAttribute<'a> {
 define_node!(NumPyMethod, NUMPY_METHOD);
 
 impl<'a> NumPyMethod<'a> {
+    /// Method name token.
     pub fn name(&self) -> &'a SyntaxToken {
         self.0.required_token(SyntaxKind::NAME)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }

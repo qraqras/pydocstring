@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+
 //! # pydocstring
 //!
 //! A fast, zero-dependency Rust parser for Python docstrings with full AST and

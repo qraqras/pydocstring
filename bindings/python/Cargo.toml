@@ -1,0 +1,16 @@
+[package]
+name = "pydocstring-python"
+version = "0.0.3"
+edition = "2024"
+authors = ["Ryuma Asai"]
+description = "Python bindings for pydocstring — a fast docstring parser for Google and NumPy styles"
+license = "MIT"
+publish = false
+
+[lib]
+name = "pydocstring"
+crate-type = ["cdylib"]
+
+[dependencies]
+pydocstring_core = { package = "pydocstring", version = "0.0.3", path = "../.." }
+pyo3 = { version = "0.24", features = ["extension-module"] }

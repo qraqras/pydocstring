@@ -13,6 +13,7 @@ use crate::syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 /// Define a typed node wrapper that casts from `&SyntaxNode`.
 macro_rules! define_node {
     ($name:ident, $kind:ident) => {
+        #[doc = concat!("Typed wrapper for `", stringify!($kind), "` syntax nodes.")]
         #[derive(Debug)]
         pub struct $name<'a>(pub(crate) &'a SyntaxNode);
 
@@ -163,30 +164,37 @@ impl<'a> GoogleSectionHeader<'a> {
 define_node!(GoogleArg, GOOGLE_ARG);
 
 impl<'a> GoogleArg<'a> {
+    /// Argument name token.
     pub fn name(&self) -> &'a SyntaxToken {
         self.0.required_token(SyntaxKind::NAME)
     }
 
+    /// Opening bracket token (e.g. `(`), if present.
     pub fn open_bracket(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::OPEN_BRACKET)
     }
 
+    /// Type annotation token, if present.
     pub fn r#type(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::TYPE)
     }
 
+    /// Closing bracket token (e.g. `)`), if present.
     pub fn close_bracket(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::CLOSE_BRACKET)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }
 
+    /// `optional` marker token, if present.
     pub fn optional(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::OPTIONAL)
     }
@@ -199,14 +207,17 @@ impl<'a> GoogleArg<'a> {
 define_node!(GoogleReturns, GOOGLE_RETURNS);
 
 impl<'a> GoogleReturns<'a> {
+    /// Return type annotation token, if present.
     pub fn return_type(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::RETURN_TYPE)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }
@@ -219,14 +230,17 @@ impl<'a> GoogleReturns<'a> {
 define_node!(GoogleException, GOOGLE_EXCEPTION);
 
 impl<'a> GoogleException<'a> {
+    /// Exception type name token.
     pub fn r#type(&self) -> &'a SyntaxToken {
         self.0.required_token(SyntaxKind::TYPE)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }
@@ -239,14 +253,17 @@ impl<'a> GoogleException<'a> {
 define_node!(GoogleWarning, GOOGLE_WARNING);
 
 impl<'a> GoogleWarning<'a> {
+    /// Warning type name token (e.g. `UserWarning`).
     pub fn warning_type(&self) -> &'a SyntaxToken {
         self.0.required_token(SyntaxKind::WARNING_TYPE)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }
@@ -264,10 +281,12 @@ impl<'a> GoogleSeeAlsoItem<'a> {
         self.0.tokens(SyntaxKind::NAME)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }
@@ -280,26 +299,32 @@ impl<'a> GoogleSeeAlsoItem<'a> {
 define_node!(GoogleAttribute, GOOGLE_ATTRIBUTE);
 
 impl<'a> GoogleAttribute<'a> {
+    /// Attribute name token.
     pub fn name(&self) -> &'a SyntaxToken {
         self.0.required_token(SyntaxKind::NAME)
     }
 
+    /// Opening bracket token (e.g. `(`), if present.
     pub fn open_bracket(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::OPEN_BRACKET)
     }
 
+    /// Type annotation token, if present.
     pub fn r#type(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::TYPE)
     }
 
+    /// Closing bracket token (e.g. `)`), if present.
     pub fn close_bracket(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::CLOSE_BRACKET)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }
@@ -312,26 +337,32 @@ impl<'a> GoogleAttribute<'a> {
 define_node!(GoogleMethod, GOOGLE_METHOD);
 
 impl<'a> GoogleMethod<'a> {
+    /// Method name token.
     pub fn name(&self) -> &'a SyntaxToken {
         self.0.required_token(SyntaxKind::NAME)
     }
 
+    /// Opening bracket token (e.g. `(`), if present.
     pub fn open_bracket(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::OPEN_BRACKET)
     }
 
+    /// Type annotation token, if present.
     pub fn r#type(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::TYPE)
     }
 
+    /// Closing bracket token (e.g. `)`), if present.
     pub fn close_bracket(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::CLOSE_BRACKET)
     }
 
+    /// Colon separator token, if present.
     pub fn colon(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::COLON)
     }
 
+    /// Description text token, if present.
     pub fn description(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::DESCRIPTION)
     }
