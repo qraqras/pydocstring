@@ -109,13 +109,12 @@ jobs:
             3.11
             3.12
             3.13
-            3.14
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --manifest-path bindings/python/Cargo.toml --out dist --interpreter 3.10 3.11 3.12 3.13 3.14
+          args: --release --manifest-path bindings/python/Cargo.toml --out dist --interpreter 3.10 3.11 3.12 3.13
           manylinux: auto
 
       - uses: actions/upload-artifact@v4
