@@ -1,10 +1,11 @@
 # pydocstring-rs
 
-[![PyPI - Version](https://img.shields.io/pypi/v/pydocstring-rs?color=EE88AA)](https://pypi.org/project/pydocstring-rs/)
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pydocstring-rs?color=EE88AA)](https://devguide.python.org/versions/)
-[![PyPI - License](https://img.shields.io/pypi/l/pydocstring-rs?color=EE88AA)](https://choosealicense.com/licenses/mit)
+[![PyPI - Version](https://img.shields.io/pypi/v/pydocstring-rs?color=0062A8)](https://pypi.org/project/pydocstring-rs/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pydocstring-rs?color=0062A8)](https://devguide.python.org/versions/)
+[![Crates.io Version](https://img.shields.io/crates/v/pydocstring?color=FFC12d)](https://crates.io/crates/pydocstring)
+[![Crates.io MSRV](https://img.shields.io/crates/msrv/pydocstring?color=FFC12d)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0)
 
-Python bindings for [pydocstring](https://github.com/qraqras/pydocstring) — a zero-dependency Rust parser for Python docstrings (Google and NumPy styles).
+Python bindings for [pydocstring](https://crates.io/crates/pydocstring) — a zero-dependency Rust parser for Python docstrings (Google and NumPy styles).
 
 Produces a **unified syntax tree** with **byte-precise source locations** on every token — designed as infrastructure for linters and formatters.
 
