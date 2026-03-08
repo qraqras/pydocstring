@@ -8,7 +8,6 @@ A zero-dependency Rust parser for Python docstrings (Google / NumPy style).
 
 Produces a **unified syntax tree** with **byte-precise source locations** on every token — designed as infrastructure for linters and formatters.
 
-
 ## Features
 
 - **Full syntax tree** — builds a complete AST, not just extracted fields; traverse it with the built-in `Visitor` + `walk`
