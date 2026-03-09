@@ -1,4 +1,4 @@
-use pydocstring::{Style, detect_style};
+use pydocstring::parse::{Style, detect_style};
 
 #[test]
 fn test_detect_numpy() {

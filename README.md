@@ -32,8 +32,7 @@ pydocstring = "0.0.3"
 ### Parsing
 
 ```rust
-use pydocstring::google::{parse_google, GoogleDocstring};
-use pydocstring::GoogleSectionKind;
+use pydocstring::parse::google::{parse_google, GoogleDocstring, GoogleSectionKind};
 
 let input = "Summary.\n\nArgs:\n    x (int): The value.\n    y (int): Another value.";
 let result = parse_google(input);
@@ -57,7 +56,7 @@ NumPy style works the same way — use `parse_numpy` / `NumPyDocstring` instead.
 ### Style Auto-Detection
 
 ```rust
-use pydocstring::{detect_style, Style};
+use pydocstring::parse::{detect_style, Style};
 
 assert_eq!(detect_style("Summary.\n\nArgs:\n    x: Desc."), Style::Google);
 assert_eq!(detect_style("Summary.\n\nParameters\n----------\nx : int"), Style::NumPy);
@@ -68,8 +67,7 @@ assert_eq!(detect_style("Summary.\n\nParameters\n----------\nx : int"), Style::N
 Every token carries byte offsets for precise diagnostics:
 
 ```rust
-use pydocstring::google::{parse_google, GoogleDocstring};
-use pydocstring::GoogleSectionKind;
+use pydocstring::parse::google::{parse_google, GoogleDocstring, GoogleSectionKind};
 
 let result = parse_google("Summary.\n\nArgs:\n    x (int): The value.");
 let doc = GoogleDocstring::cast(result.root()).unwrap();
@@ -90,7 +88,7 @@ for section in doc.sections() {
 The parse result is a tree of `SyntaxNode` (branches) and `SyntaxToken` (leaves), each tagged with a `SyntaxKind`. Use `pretty_print()` to visualize:
 
 ```rust
-use pydocstring::google::parse_google;
+use pydocstring::parse::google::parse_google;
 
 let result = parse_google("Summary.\n\nArgs:\n    x (int): The value.");
 println!("{}", result.pretty_print());
@@ -121,8 +119,8 @@ GOOGLE_DOCSTRING@0..42 {
 Walk the tree with the `Visitor` trait for style-agnostic analysis:
 
 ```rust
-use pydocstring::{Visitor, walk, SyntaxToken, SyntaxKind};
-use pydocstring::google::parse_google;
+use pydocstring::syntax::{Visitor, walk, SyntaxToken, SyntaxKind};
+use pydocstring::parse::google::parse_google;
 
 struct NameCollector<'a> {
     source: &'a str,

@@ -1,0 +1,369 @@
+//! Integration tests for the style-independent document model (IR).
+
+use pydocstring::model::{FreeSectionKind, Section};
+use pydocstring::parse::google::{parse_google, to_model::to_model as google_to_model};
+use pydocstring::parse::numpy::{parse_numpy, to_model::to_model as numpy_to_model};
+
+// =============================================================================
+// Google → IR: Summary & Extended Summary
+// =============================================================================
+
+#[test]
+fn google_summary_only() {
+    let parsed = parse_google("Summary line.");
+    let doc = google_to_model(&parsed);
+    assert_eq!(doc.summary.as_deref(), Some("Summary line."));
+    assert_eq!(doc.extended_summary, None);
+    assert!(doc.sections.is_empty());
+}
+
+#[test]
+fn google_summary_and_extended() {
+    let parsed = parse_google("Summary.\n\nExtended description\nspanning lines.");
+    let doc = google_to_model(&parsed);
+    assert_eq!(doc.summary.as_deref(), Some("Summary."));
+    assert!(doc.extended_summary.is_some());
+}
+
+// =============================================================================
+// Google → IR: Parameters
+// =============================================================================
+
+#[test]
+fn google_args_basic() {
+    let parsed = parse_google("Summary.\n\nArgs:\n    x (int): The value.");
+    let doc = google_to_model(&parsed);
+    assert_eq!(doc.sections.len(), 1);
+    match &doc.sections[0] {
+        Section::Parameters(params) => {
+            assert_eq!(params.len(), 1);
+            assert_eq!(params[0].names, vec!["x"]);
+            assert_eq!(params[0].type_annotation.as_deref(), Some("int"));
+            assert_eq!(params[0].description.as_deref(), Some("The value."));
+            assert!(!params[0].is_optional);
+            assert_eq!(params[0].default_value, None);
+        }
+        other => panic!("expected Parameters, got {:?}", other),
+    }
+}
+
+#[test]
+fn google_args_optional() {
+    let parsed = parse_google("Summary.\n\nArgs:\n    x (int, optional): The value.");
+    let doc = google_to_model(&parsed);
+    match &doc.sections[0] {
+        Section::Parameters(params) => {
+            assert!(params[0].is_optional);
+        }
+        other => panic!("expected Parameters, got {:?}", other),
+    }
+}
+
+#[test]
+fn google_args_multiple() {
+    let parsed = parse_google("Summary.\n\nArgs:\n    x (int): First.\n    y (str): Second.");
+    let doc = google_to_model(&parsed);
+    match &doc.sections[0] {
+        Section::Parameters(params) => {
+            assert_eq!(params.len(), 2);
+            assert_eq!(params[0].names, vec!["x"]);
+            assert_eq!(params[1].names, vec!["y"]);
+        }
+        other => panic!("expected Parameters, got {:?}", other),
+    }
+}
+
+#[test]
+fn google_args_no_type() {
+    let parsed = parse_google("Summary.\n\nArgs:\n    x: The value.");
+    let doc = google_to_model(&parsed);
+    match &doc.sections[0] {
+        Section::Parameters(params) => {
+            assert_eq!(params[0].type_annotation, None);
+        }
+        other => panic!("expected Parameters, got {:?}", other),
+    }
+}
+
+// =============================================================================
+// Google → IR: Returns
+// =============================================================================
+
+#[test]
+fn google_returns() {
+    let parsed = parse_google("Summary.\n\nReturns:\n    int: The result.");
+    let doc = google_to_model(&parsed);
+    match &doc.sections[0] {
+        Section::Returns(returns) => {
+            assert_eq!(returns.len(), 1);
+            assert_eq!(returns[0].name, None);
+            assert_eq!(returns[0].type_annotation.as_deref(), Some("int"));
+            assert_eq!(returns[0].description.as_deref(), Some("The result."));
+        }
+        other => panic!("expected Returns, got {:?}", other),
+    }
+}
+
+// =============================================================================
+// Google → IR: Raises
+// =============================================================================
+
+#[test]
+fn google_raises() {
+    let parsed = parse_google("Summary.\n\nRaises:\n    ValueError: If bad.");
+    let doc = google_to_model(&parsed);
+    match &doc.sections[0] {
+        Section::Raises(entries) => {
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].type_name, "ValueError");
+            assert_eq!(entries[0].description.as_deref(), Some("If bad."));
+        }
+        other => panic!("expected Raises, got {:?}", other),
+    }
+}
+
+// =============================================================================
+// Google → IR: Warns
+// =============================================================================
+
+#[test]
+fn google_warns() {
+    let parsed = parse_google("Summary.\n\nWarns:\n    UserWarning: Watch out.");
+    let doc = google_to_model(&parsed);
+    match &doc.sections[0] {
+        Section::Warns(entries) => {
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].type_name, "UserWarning");
+            assert_eq!(entries[0].description.as_deref(), Some("Watch out."));
+        }
+        other => panic!("expected Warns, got {:?}", other),
+    }
+}
+
+// =============================================================================
+// Google → IR: Free text sections
+// =============================================================================
+
+#[test]
+fn google_notes_section() {
+    let parsed = parse_google("Summary.\n\nNotes:\n    Some notes here.");
+    let doc = google_to_model(&parsed);
+    match &doc.sections[0] {
+        Section::FreeText { kind, body } => {
+            assert_eq!(*kind, FreeSectionKind::Notes);
+            assert!(!body.is_empty());
+        }
+        other => panic!("expected FreeText, got {:?}", other),
+    }
+}
+
+// =============================================================================
+// Google → IR: Multiple sections
+// =============================================================================
+
+#[test]
+fn google_multiple_sections() {
+    let parsed = parse_google(
+        "Summary.\n\nArgs:\n    x (int): Val.\n\nReturns:\n    str: Result.\n\nRaises:\n    ValueError: Bad.",
+    );
+    let doc = google_to_model(&parsed);
+    assert_eq!(doc.sections.len(), 3);
+    assert!(matches!(&doc.sections[0], Section::Parameters(_)));
+    assert!(matches!(&doc.sections[1], Section::Returns(_)));
+    assert!(matches!(&doc.sections[2], Section::Raises(_)));
+}
+
+// =============================================================================
+// Google → IR: No deprecation
+// =============================================================================
+
+#[test]
+fn google_no_deprecation() {
+    let parsed = parse_google("Summary.\n\nArgs:\n    x: Val.");
+    let doc = google_to_model(&parsed);
+    assert_eq!(doc.deprecation, None);
+}
+
+// =============================================================================
+// NumPy → IR: Summary & Extended Summary
+// =============================================================================
+
+#[test]
+fn numpy_summary_only() {
+    let parsed = parse_numpy("Summary line.");
+    let doc = numpy_to_model(&parsed);
+    assert_eq!(doc.summary.as_deref(), Some("Summary line."));
+    assert_eq!(doc.extended_summary, None);
+    assert!(doc.sections.is_empty());
+}
+
+#[test]
+fn numpy_summary_and_extended() {
+    let parsed = parse_numpy("Summary.\n\nExtended description.");
+    let doc = numpy_to_model(&parsed);
+    assert_eq!(doc.summary.as_deref(), Some("Summary."));
+    assert!(doc.extended_summary.is_some());
+}
+
+// =============================================================================
+// NumPy → IR: Parameters
+// =============================================================================
+
+#[test]
+fn numpy_parameters_basic() {
+    let parsed = parse_numpy("Summary.\n\nParameters\n----------\nx : int\n    The value.");
+    let doc = numpy_to_model(&parsed);
+    assert_eq!(doc.sections.len(), 1);
+    match &doc.sections[0] {
+        Section::Parameters(params) => {
+            assert_eq!(params.len(), 1);
+            assert_eq!(params[0].names, vec!["x"]);
+            assert_eq!(params[0].type_annotation.as_deref(), Some("int"));
+            assert_eq!(params[0].description.as_deref(), Some("The value."));
+        }
+        other => panic!("expected Parameters, got {:?}", other),
+    }
+}
+
+#[test]
+fn numpy_parameters_optional() {
+    let parsed =
+        parse_numpy("Summary.\n\nParameters\n----------\nx : int, optional\n    The value.");
+    let doc = numpy_to_model(&parsed);
+    match &doc.sections[0] {
+        Section::Parameters(params) => {
+            assert!(params[0].is_optional);
+        }
+        other => panic!("expected Parameters, got {:?}", other),
+    }
+}
+
+#[test]
+fn numpy_parameters_multiple_names() {
+    let parsed = parse_numpy("Summary.\n\nParameters\n----------\nx, y : float\n    Values.");
+    let doc = numpy_to_model(&parsed);
+    match &doc.sections[0] {
+        Section::Parameters(params) => {
+            assert_eq!(params[0].names, vec!["x", "y"]);
+        }
+        other => panic!("expected Parameters, got {:?}", other),
+    }
+}
+
+#[test]
+fn numpy_parameters_default_value() {
+    let parsed =
+        parse_numpy("Summary.\n\nParameters\n----------\nx : int, default: 0\n    The value.");
+    let doc = numpy_to_model(&parsed);
+    match &doc.sections[0] {
+        Section::Parameters(params) => {
+            assert_eq!(params[0].default_value.as_deref(), Some("0"));
+        }
+        other => panic!("expected Parameters, got {:?}", other),
+    }
+}
+
+// =============================================================================
+// NumPy → IR: Returns
+// =============================================================================
+
+#[test]
+fn numpy_returns() {
+    let parsed = parse_numpy("Summary.\n\nReturns\n-------\nresult : int\n    The result.");
+    let doc = numpy_to_model(&parsed);
+    match &doc.sections[0] {
+        Section::Returns(returns) => {
+            assert_eq!(returns.len(), 1);
+            assert_eq!(returns[0].type_annotation.as_deref(), Some("int"));
+        }
+        other => panic!("expected Returns, got {:?}", other),
+    }
+}
+
+// =============================================================================
+// NumPy → IR: Raises
+// =============================================================================
+
+#[test]
+fn numpy_raises() {
+    let parsed = parse_numpy("Summary.\n\nRaises\n------\nValueError\n    If bad.");
+    let doc = numpy_to_model(&parsed);
+    match &doc.sections[0] {
+        Section::Raises(entries) => {
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].type_name, "ValueError");
+        }
+        other => panic!("expected Raises, got {:?}", other),
+    }
+}
+
+// =============================================================================
+// NumPy → IR: Deprecation
+// =============================================================================
+
+#[test]
+fn numpy_deprecation() {
+    let parsed = parse_numpy("Summary.\n\n.. deprecated:: 1.6.0\n    Use `other` instead.");
+    let doc = numpy_to_model(&parsed);
+    let dep = doc.deprecation.as_ref().expect("should have deprecation");
+    assert_eq!(dep.version, "1.6.0");
+    assert!(dep.description.is_some());
+}
+
+// =============================================================================
+// NumPy → IR: Free text sections
+// =============================================================================
+
+#[test]
+fn numpy_notes_section() {
+    let parsed = parse_numpy("Summary.\n\nNotes\n-----\nSome notes here.");
+    let doc = numpy_to_model(&parsed);
+    match &doc.sections[0] {
+        Section::FreeText { kind, body } => {
+            assert_eq!(*kind, FreeSectionKind::Notes);
+            assert!(!body.is_empty());
+        }
+        other => panic!("expected FreeText, got {:?}", other),
+    }
+}
+
+// =============================================================================
+// NumPy → IR: Multiple sections
+// =============================================================================
+
+#[test]
+fn numpy_multiple_sections() {
+    let parsed = parse_numpy(
+        "Summary.\n\nParameters\n----------\nx : int\n    Val.\n\nReturns\n-------\nint\n    Result.\n\nRaises\n------\nValueError\n    Bad.",
+    );
+    let doc = numpy_to_model(&parsed);
+    assert_eq!(doc.sections.len(), 3);
+    assert!(matches!(&doc.sections[0], Section::Parameters(_)));
+    assert!(matches!(&doc.sections[1], Section::Returns(_)));
+    assert!(matches!(&doc.sections[2], Section::Raises(_)));
+}
+
+// =============================================================================
+// IR equality: same content from different styles
+// =============================================================================
+
+#[test]
+fn same_ir_from_both_styles() {
+    let google = parse_google("Summary.\n\nArgs:\n    x (int): The value.");
+    let numpy = parse_numpy("Summary.\n\nParameters\n----------\nx : int\n    The value.");
+
+    let g = google_to_model(&google);
+    let n = numpy_to_model(&numpy);
+
+    assert_eq!(g.summary, n.summary);
+
+    // Both should produce Parameters with the same content
+    match (&g.sections[0], &n.sections[0]) {
+        (Section::Parameters(gp), Section::Parameters(np)) => {
+            assert_eq!(gp[0].names, np[0].names);
+            assert_eq!(gp[0].type_annotation, np[0].type_annotation);
+            assert_eq!(gp[0].description, np[0].description);
+        }
+        _ => panic!("both should be Parameters sections"),
+    }
+}

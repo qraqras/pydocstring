@@ -5,6 +5,7 @@
 pub mod kind;
 pub mod nodes;
 pub mod parser;
+pub mod to_model;
 
 pub use kind::NumPySectionKind;
 pub use nodes::{

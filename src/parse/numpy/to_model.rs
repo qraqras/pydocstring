@@ -1,0 +1,161 @@
+//! Convert a NumPy-style AST into the style-independent [`Docstring`] model.
+
+use crate::model::{
+    Attribute, Deprecation, Docstring, ExceptionEntry, FreeSectionKind, Method, Parameter,
+    Reference, Return, Section, SeeAlsoEntry,
+};
+use crate::parse::numpy::kind::NumPySectionKind;
+use crate::parse::numpy::nodes::{NumPyDocstring, NumPySection};
+use crate::syntax::Parsed;
+
+/// Build a [`Docstring`] from a NumPy-style [`Parsed`] result.
+pub fn to_model(parsed: &Parsed) -> Docstring {
+    let source = parsed.source();
+    let root = NumPyDocstring::cast(parsed.root()).expect("root node must be NUMPY_DOCSTRING");
+
+    let summary = root.summary().map(|t| t.text(source).to_owned());
+    let extended_summary = root.extended_summary().map(|t| t.text(source).to_owned());
+
+    let deprecation = root.deprecation().map(|dep| Deprecation {
+        version: dep.version().text(source).to_owned(),
+        description: dep.description().map(|t| t.text(source).to_owned()),
+    });
+
+    let sections = root
+        .sections()
+        .map(|s| convert_section(&s, source))
+        .collect();
+
+    Docstring {
+        summary,
+        extended_summary,
+        deprecation,
+        sections,
+    }
+}
+
+fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
+    let kind = section.section_kind(source);
+
+    match kind {
+        NumPySectionKind::Parameters | NumPySectionKind::Receives => {
+            let entries = section
+                .parameters()
+                .map(|p| convert_parameter(&p, source))
+                .collect();
+            match kind {
+                NumPySectionKind::Parameters => Section::Parameters(entries),
+                NumPySectionKind::Receives => Section::Receives(entries),
+                _ => unreachable!(),
+            }
+        }
+        NumPySectionKind::OtherParameters => Section::OtherParameters(
+            section
+                .parameters()
+                .map(|p| convert_parameter(&p, source))
+                .collect(),
+        ),
+        NumPySectionKind::Returns | NumPySectionKind::Yields => {
+            let entries: Vec<Return> = section
+                .returns()
+                .map(|r| Return {
+                    name: r.name().map(|t| t.text(source).to_owned()),
+                    type_annotation: r.return_type().map(|t| t.text(source).to_owned()),
+                    description: r.description().map(|t| t.text(source).to_owned()),
+                })
+                .collect();
+            match kind {
+                NumPySectionKind::Returns => Section::Returns(entries),
+                NumPySectionKind::Yields => Section::Yields(entries),
+                _ => unreachable!(),
+            }
+        }
+        NumPySectionKind::Raises => Section::Raises(
+            section
+                .exceptions()
+                .map(|e| ExceptionEntry {
+                    type_name: e.r#type().text(source).to_owned(),
+                    description: e.description().map(|t| t.text(source).to_owned()),
+                })
+                .collect(),
+        ),
+        NumPySectionKind::Warns => Section::Warns(
+            section
+                .warnings()
+                .map(|w| ExceptionEntry {
+                    type_name: w.r#type().text(source).to_owned(),
+                    description: w.description().map(|t| t.text(source).to_owned()),
+                })
+                .collect(),
+        ),
+        NumPySectionKind::SeeAlso => Section::SeeAlso(
+            section
+                .see_also_items()
+                .map(|item| SeeAlsoEntry {
+                    names: item.names().map(|n| n.text(source).to_owned()).collect(),
+                    description: item.description().map(|t| t.text(source).to_owned()),
+                })
+                .collect(),
+        ),
+        NumPySectionKind::References => Section::References(
+            section
+                .references()
+                .map(|r| Reference {
+                    number: r.number().map(|t| t.text(source).to_owned()),
+                    content: r.content().map(|t| t.text(source).to_owned()),
+                })
+                .collect(),
+        ),
+        NumPySectionKind::Attributes => Section::Attributes(
+            section
+                .attributes()
+                .map(|a| Attribute {
+                    name: a.name().text(source).to_owned(),
+                    type_annotation: a.r#type().map(|t| t.text(source).to_owned()),
+                    description: a.description().map(|t| t.text(source).to_owned()),
+                })
+                .collect(),
+        ),
+        NumPySectionKind::Methods => Section::Methods(
+            section
+                .methods()
+                .map(|m| Method {
+                    name: m.name().text(source).to_owned(),
+                    type_annotation: None,
+                    description: m.description().map(|t| t.text(source).to_owned()),
+                })
+                .collect(),
+        ),
+        // Free-text sections
+        _ => {
+            let body = section
+                .body_text()
+                .map(|t| t.text(source).to_owned())
+                .unwrap_or_default();
+            let free_kind = match kind {
+                NumPySectionKind::Notes => FreeSectionKind::Notes,
+                NumPySectionKind::Examples => FreeSectionKind::Examples,
+                NumPySectionKind::Warnings => FreeSectionKind::Warnings,
+                NumPySectionKind::Unknown => FreeSectionKind::Unknown("Unknown".into()),
+                _ => unreachable!(),
+            };
+            Section::FreeText {
+                kind: free_kind,
+                body,
+            }
+        }
+    }
+}
+
+fn convert_parameter(
+    param: &crate::parse::numpy::nodes::NumPyParameter<'_>,
+    source: &str,
+) -> Parameter {
+    Parameter {
+        names: param.names().map(|n| n.text(source).to_owned()).collect(),
+        type_annotation: param.r#type().map(|t| t.text(source).to_owned()),
+        description: param.description().map(|t| t.text(source).to_owned()),
+        is_optional: param.optional().is_some(),
+        default_value: param.default_value().map(|t| t.text(source).to_owned()),
+    }
+}

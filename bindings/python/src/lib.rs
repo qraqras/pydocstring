@@ -1,8 +1,8 @@
 use pyo3::prelude::*;
 
-use pydocstring_core::google;
-use pydocstring_core::google::nodes as gn;
-use pydocstring_core::numpy::nodes as nn;
+use pydocstring_core::parse::google;
+use pydocstring_core::parse::google::nodes as gn;
+use pydocstring_core::parse::numpy::nodes as nn;
 use pydocstring_core::syntax::{Parsed, SyntaxNode, SyntaxToken};
 use pydocstring_core::text::TextRange;
 

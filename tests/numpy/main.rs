@@ -1,7 +1,6 @@
 //! Integration tests for NumPy-style docstring parser.
 
-pub use pydocstring::Parsed;
-pub use pydocstring::numpy::{
+pub use pydocstring::parse::numpy::{
     kind::NumPySectionKind,
     nodes::{
         NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod,
@@ -9,7 +8,7 @@ pub use pydocstring::numpy::{
     },
     parse_numpy,
 };
-pub use pydocstring::syntax::SyntaxToken;
+pub use pydocstring::syntax::{Parsed, SyntaxToken};
 pub use pydocstring::text::TextSize;
 
 mod edge_cases;

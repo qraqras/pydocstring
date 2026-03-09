@@ -4,8 +4,8 @@
 //! containing a tree of [`SyntaxNode`]s and [`SyntaxToken`]s.
 
 use crate::cursor::{LineCursor, indent_len};
-use crate::styles::google::kind::GoogleSectionKind;
-use crate::styles::utils::{find_entry_colon, find_matching_close, split_comma_parts};
+use crate::parse::google::kind::GoogleSectionKind;
+use crate::parse::utils::{find_entry_colon, find_matching_close, split_comma_parts};
 use crate::syntax::{Parsed, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 use crate::text::TextRange;
 
@@ -720,8 +720,8 @@ impl SectionBody {
 /// # Example
 ///
 /// ```rust
-/// use pydocstring::google::parse_google;
-/// use pydocstring::SyntaxKind;
+/// use pydocstring::parse::google::parse_google;
+/// use pydocstring::syntax::SyntaxKind;
 ///
 /// let input = "Summary.\n\nArgs:\n    x (int): The value.\n\nReturns:\n    int: The result.";
 /// let parsed = parse_google(input);

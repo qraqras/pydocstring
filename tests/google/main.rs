@@ -1,11 +1,10 @@
 //! Integration tests for Google-style docstring parser.
 
-pub use pydocstring::Parsed;
-pub use pydocstring::google::{
+pub use pydocstring::parse::google::{
     GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturns,
     GoogleSection, GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning, parse_google,
 };
-pub use pydocstring::syntax::SyntaxToken;
+pub use pydocstring::syntax::{Parsed, SyntaxToken};
 pub use pydocstring::text::TextSize;
 
 mod args;

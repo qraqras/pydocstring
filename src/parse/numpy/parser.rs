@@ -4,8 +4,8 @@
 //! containing a tree of [`SyntaxNode`]s and [`SyntaxToken`]s.
 
 use crate::cursor::{LineCursor, indent_columns, indent_len};
-use crate::styles::numpy::kind::NumPySectionKind;
-use crate::styles::utils::{find_entry_colon, find_matching_close, split_comma_parts};
+use crate::parse::numpy::kind::NumPySectionKind;
+use crate::parse::utils::{find_entry_colon, find_matching_close, split_comma_parts};
 use crate::syntax::{Parsed, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 use crate::text::TextRange;
 
@@ -954,8 +954,8 @@ impl SectionBody {
 /// # Example
 ///
 /// ```rust
-/// use pydocstring::numpy::parse_numpy;
-/// use pydocstring::SyntaxKind;
+/// use pydocstring::parse::numpy::parse_numpy;
+/// use pydocstring::syntax::SyntaxKind;
 ///
 /// let input = "Summary.\n\nParameters\n----------\nx : int\n    The value.\n";
 /// let parsed = parse_numpy(input);
