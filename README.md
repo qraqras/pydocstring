@@ -32,7 +32,7 @@ pydocstring = "0.0.3"
 ### Parsing
 
 ```rust
-use pydocstring::google::{parse_google, nodes::GoogleDocstring};
+use pydocstring::google::{parse_google, GoogleDocstring};
 use pydocstring::GoogleSectionKind;
 
 let input = "Summary.\n\nArgs:\n    x (int): The value.\n    y (int): Another value.";
@@ -68,7 +68,7 @@ assert_eq!(detect_style("Summary.\n\nParameters\n----------\nx : int"), Style::N
 Every token carries byte offsets for precise diagnostics:
 
 ```rust
-use pydocstring::google::{parse_google, nodes::GoogleDocstring};
+use pydocstring::google::{parse_google, GoogleDocstring};
 use pydocstring::GoogleSectionKind;
 
 let result = parse_google("Summary.\n\nArgs:\n    x (int): The value.");

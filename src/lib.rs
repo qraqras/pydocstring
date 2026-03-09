@@ -8,7 +8,7 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use pydocstring::numpy::{parse_numpy, nodes::NumPyDocstring};
+//! use pydocstring::numpy::{parse_numpy, NumPyDocstring};
 //!
 //! let docstring = r#"
 //! Brief description.
