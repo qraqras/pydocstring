@@ -423,16 +423,18 @@ fn parse_entry(cursor: &LineCursor, parse_type: bool) -> (EntryHeader, TextRange
     (header, entry_range)
 }
 
-fn build_content_range(cursor: &LineCursor, first: Option<usize>, last: usize) -> TextRange {
-    if let Some(f) = first {
+fn build_content_range(
+    cursor: &LineCursor,
+    first: Option<usize>,
+    last: usize,
+) -> Option<TextRange> {
+    first.map(|f| {
         let first_line = cursor.line_text(f);
         let first_col = indent_len(first_line);
         let last_line = cursor.line_text(last);
         let last_col = indent_len(last_line) + last_line.trim().len();
         cursor.make_range(f, first_col, last, last_col)
-    } else {
-        TextRange::empty()
-    }
+    })
 }
 
 // =============================================================================
@@ -557,7 +559,7 @@ fn process_see_also_line(
 
 /// Returns/Yields section state during parsing.
 struct ReturnsState {
-    range: TextRange,
+    range: Option<TextRange>,
     return_type: Option<TextRange>,
     colon: Option<TextRange>,
     description: Option<TextRange>,
@@ -566,7 +568,7 @@ struct ReturnsState {
 impl ReturnsState {
     fn new() -> Self {
         Self {
-            range: TextRange::empty(),
+            range: None,
             return_type: None,
             colon: None,
             description: None,
@@ -575,8 +577,8 @@ impl ReturnsState {
 
     fn process_line(&mut self, cursor: &LineCursor) {
         let trimmed_range = cursor.current_trimmed_range();
-        if self.range.is_empty() {
-            self.range = trimmed_range;
+        if self.range.is_none() {
+            self.range = Some(trimmed_range);
             let trimmed = cursor.current_trimmed();
             let col = cursor.current_indent();
             if let Some(colon_pos) = find_entry_colon(trimmed) {
@@ -600,11 +602,14 @@ impl ReturnsState {
                 Some(ref mut desc) => desc.extend(trimmed_range),
                 None => self.description = Some(trimmed_range),
             }
-            self.range = TextRange::new(self.range.start(), trimmed_range.end());
+            if let Some(ref mut r) = self.range {
+                r.extend(trimmed_range);
+            }
         }
     }
 
-    fn into_node(self, kind: SyntaxKind) -> SyntaxNode {
+    fn into_node(self, kind: SyntaxKind) -> Option<SyntaxNode> {
+        let range = self.range?;
         let mut children = Vec::new();
         if let Some(rt) = self.return_type {
             children.push(SyntaxElement::Token(SyntaxToken::new(
@@ -624,7 +629,7 @@ impl ReturnsState {
                 desc,
             )));
         }
-        SyntaxNode::new(kind, self.range, children)
+        Some(SyntaxNode::new(kind, range, children))
     }
 }
 
@@ -645,50 +650,42 @@ enum SectionBody {
     /// SeeAlso
     SeeAlso(Vec<SyntaxElement>),
     /// Free-text (Notes, Examples, etc.)
-    FreeText(TextRange),
+    FreeText(Option<TextRange>),
 }
 
 impl SectionBody {
+    #[rustfmt::skip]
     fn new(kind: GoogleSectionKind) -> Self {
         match kind {
-            GoogleSectionKind::Args
-            | GoogleSectionKind::KeywordArgs
-            | GoogleSectionKind::OtherParameters
-            | GoogleSectionKind::Receives => Self::Args(SyntaxKind::GOOGLE_ARG, Vec::new()),
+            GoogleSectionKind::Args => Self::Args(SyntaxKind::GOOGLE_ARG, Vec::new()),
+            GoogleSectionKind::KeywordArgs => Self::Args(SyntaxKind::GOOGLE_ARG, Vec::new()),
+            GoogleSectionKind::OtherParameters => Self::Args(SyntaxKind::GOOGLE_ARG, Vec::new()),
+            GoogleSectionKind::Receives => Self::Args(SyntaxKind::GOOGLE_ARG, Vec::new()),
             GoogleSectionKind::Attributes => Self::Args(SyntaxKind::GOOGLE_ATTRIBUTE, Vec::new()),
             GoogleSectionKind::Methods => Self::Args(SyntaxKind::GOOGLE_METHOD, Vec::new()),
-            GoogleSectionKind::Returns => {
-                Self::Returns(SyntaxKind::GOOGLE_RETURNS, ReturnsState::new())
-            }
-            GoogleSectionKind::Yields => {
-                Self::Returns(SyntaxKind::GOOGLE_RETURNS, ReturnsState::new())
-            }
+            GoogleSectionKind::Returns => Self::Returns(SyntaxKind::GOOGLE_RETURNS, ReturnsState::new()),
+            GoogleSectionKind::Yields => Self::Returns(SyntaxKind::GOOGLE_RETURNS, ReturnsState::new()),
             GoogleSectionKind::Raises => Self::Raises(Vec::new()),
             GoogleSectionKind::Warns => Self::Warns(Vec::new()),
             GoogleSectionKind::SeeAlso => Self::SeeAlso(Vec::new()),
-            _ => Self::FreeText(TextRange::empty()),
+            _ => Self::FreeText(None),
         }
     }
 
+    #[rustfmt::skip]
     fn process_line(&mut self, cursor: &LineCursor, entry_indent: &mut Option<usize>) {
         match self {
-            Self::Args(node_kind, nodes) => {
-                process_arg_line(cursor, *node_kind, nodes, entry_indent);
-            }
-            Self::Returns(_, state) => {
-                state.process_line(cursor);
-            }
-            Self::Raises(nodes) => {
-                process_exception_line(cursor, nodes, entry_indent);
-            }
-            Self::Warns(nodes) => {
-                process_warning_line(cursor, nodes, entry_indent);
-            }
-            Self::SeeAlso(nodes) => {
-                process_see_also_line(cursor, nodes, entry_indent);
-            }
+            Self::Args(node_kind, nodes) => process_arg_line(cursor, *node_kind, nodes, entry_indent),
+            Self::Returns(_, state) => state.process_line(cursor),
+            Self::Raises(nodes) => process_exception_line(cursor, nodes, entry_indent),
+            Self::Warns(nodes) => process_warning_line(cursor, nodes, entry_indent),
+            Self::SeeAlso(nodes) => process_see_also_line(cursor, nodes, entry_indent),
             Self::FreeText(range) => {
-                range.extend(cursor.current_trimmed_range());
+                let r = cursor.current_trimmed_range();
+                match range {
+                    Some(existing) => existing.extend(r),
+                    None => *range = Some(r),
+                }
             }
         }
     }
@@ -696,24 +693,20 @@ impl SectionBody {
     fn into_children(self) -> Vec<SyntaxElement> {
         match self {
             Self::Args(_, nodes) => nodes,
-            Self::Returns(kind, state) => {
-                if state.range.is_empty() {
-                    vec![]
-                } else {
-                    vec![SyntaxElement::Node(state.into_node(kind))]
-                }
-            }
-            Self::Raises(nodes) | Self::Warns(nodes) | Self::SeeAlso(nodes) => nodes,
-            Self::FreeText(range) => {
-                if range.is_empty() {
-                    vec![]
-                } else {
-                    vec![SyntaxElement::Token(SyntaxToken::new(
-                        SyntaxKind::BODY_TEXT,
-                        range,
-                    ))]
-                }
-            }
+            Self::Returns(kind, state) => match state.into_node(kind) {
+                Some(node) => vec![SyntaxElement::Node(node)],
+                None => vec![],
+            },
+            Self::Raises(nodes) => nodes,
+            Self::Warns(nodes) => nodes,
+            Self::SeeAlso(nodes) => nodes,
+            Self::FreeText(range) => match range {
+                Some(r) => vec![SyntaxElement::Token(SyntaxToken::new(
+                    SyntaxKind::BODY_TEXT,
+                    r,
+                ))],
+                None => vec![],
+            },
         }
     }
 }
@@ -774,7 +767,7 @@ pub fn parse_google(input: &str) -> Parsed {
             if !summary_done && summary_first.is_some() {
                 root_children.push(SyntaxElement::Token(SyntaxToken::new(
                     SyntaxKind::SUMMARY,
-                    build_content_range(&line_cursor, summary_first, summary_last),
+                    build_content_range(&line_cursor, summary_first, summary_last).unwrap(),
                 )));
                 summary_done = true;
             }
@@ -789,7 +782,7 @@ pub fn parse_google(input: &str) -> Parsed {
                 if summary_first.is_some() {
                     root_children.push(SyntaxElement::Token(SyntaxToken::new(
                         SyntaxKind::SUMMARY,
-                        build_content_range(&line_cursor, summary_first, summary_last),
+                        build_content_range(&line_cursor, summary_first, summary_last).unwrap(),
                     )));
                 }
                 summary_done = true;
@@ -798,7 +791,7 @@ pub fn parse_google(input: &str) -> Parsed {
                 if ext_first.is_some() {
                     root_children.push(SyntaxElement::Token(SyntaxToken::new(
                         SyntaxKind::EXTENDED_SUMMARY,
-                        build_content_range(&line_cursor, ext_first, ext_last),
+                        build_content_range(&line_cursor, ext_first, ext_last).unwrap(),
                     )));
                 }
                 extended_done = true;
@@ -859,13 +852,13 @@ pub fn parse_google(input: &str) -> Parsed {
     if !summary_done && summary_first.is_some() {
         root_children.push(SyntaxElement::Token(SyntaxToken::new(
             SyntaxKind::SUMMARY,
-            build_content_range(&line_cursor, summary_first, summary_last),
+            build_content_range(&line_cursor, summary_first, summary_last).unwrap(),
         )));
     }
     if !extended_done && ext_first.is_some() {
         root_children.push(SyntaxElement::Token(SyntaxToken::new(
             SyntaxKind::EXTENDED_SUMMARY,
-            build_content_range(&line_cursor, ext_first, ext_last),
+            build_content_range(&line_cursor, ext_first, ext_last).unwrap(),
         )));
     }
 

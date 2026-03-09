@@ -92,14 +92,6 @@ impl TextRange {
         Self { start, end }
     }
 
-    /// Creates an empty range at offset 0.
-    pub const fn empty() -> Self {
-        Self {
-            start: TextSize::new(0),
-            end: TextSize::new(0),
-        }
-    }
-
     /// Start offset (inclusive).
     pub const fn start(self) -> TextSize {
         self.start
@@ -146,16 +138,9 @@ impl TextRange {
         }
     }
 
-    /// Extend this range to include `other`.
-    ///
-    /// If `self` is empty, it is set to `other`.  Otherwise its end is
-    /// extended to `other.end()`.
+    /// Extend this range's end to include `other`.
     pub fn extend(&mut self, other: TextRange) {
-        if self.is_empty() {
-            *self = other;
-        } else {
-            self.end = other.end;
-        }
+        self.end = other.end;
     }
 }
 
