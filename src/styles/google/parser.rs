@@ -83,22 +83,23 @@ struct EntryHeader {
 }
 
 /// Parse a Google-style entry header at `cursor.line`.
-fn parse_entry_header(cursor: &LineCursor) -> EntryHeader {
+fn parse_entry_header(cursor: &LineCursor, parse_type: bool) -> EntryHeader {
     let line = cursor.current_line_text();
     let trimmed = line.trim();
     let entry_start = cursor.substr_offset(trimmed);
 
-    // --- Pattern 1: `name (type): desc` ---
-    let bracket_pos = trimmed.bytes().enumerate().find_map(|(i, b)| {
-        if (b == b'(' || b == b'[' || b == b'{' || b == b'<')
-            && i > 0
-            && trimmed.as_bytes()[i - 1].is_ascii_whitespace()
-        {
-            Some(i)
-        } else {
-            None
-        }
-    });
+    // --- Pattern 1: `name (type): desc` or `name(type): desc` ---
+    let bracket_pos = if parse_type {
+        trimmed.bytes().enumerate().find_map(|(i, b)| {
+            if (b == b'(' || b == b'[' || b == b'{' || b == b'<') && i > 0 {
+                Some(i)
+            } else {
+                None
+            }
+        })
+    } else {
+        None
+    };
 
     if let Some(rel_paren) = bracket_pos {
         if let Some(rel_close) = find_matching_close(trimmed, rel_paren) {
@@ -410,8 +411,8 @@ fn build_see_also_node(header: &EntryHeader, range: TextRange, source: &str) -> 
 // Section body helpers
 // =============================================================================
 
-fn parse_entry(cursor: &LineCursor) -> (EntryHeader, TextRange) {
-    let header = parse_entry_header(cursor);
+fn parse_entry(cursor: &LineCursor, parse_type: bool) -> (EntryHeader, TextRange) {
+    let header = parse_entry_header(cursor, parse_type);
     let entry_col = cursor.current_indent();
     let range_end = header
         .first_description
@@ -479,7 +480,7 @@ fn process_arg_line(
     if entry_indent.is_none() {
         *entry_indent = Some(indent_cols);
     }
-    let (header, entry_range) = parse_entry(cursor);
+    let (header, entry_range) = parse_entry(cursor, node_kind != SyntaxKind::GOOGLE_METHOD);
     nodes.push(SyntaxElement::Node(build_arg_node(
         node_kind,
         &header,
@@ -502,7 +503,7 @@ fn process_exception_line(
     if entry_indent.is_none() {
         *entry_indent = Some(indent_cols);
     }
-    let (header, entry_range) = parse_entry(cursor);
+    let (header, entry_range) = parse_entry(cursor, false);
     nodes.push(SyntaxElement::Node(build_exception_node(
         &header,
         entry_range,
@@ -524,7 +525,7 @@ fn process_warning_line(
     if entry_indent.is_none() {
         *entry_indent = Some(indent_cols);
     }
-    let (header, entry_range) = parse_entry(cursor);
+    let (header, entry_range) = parse_entry(cursor, false);
     nodes.push(SyntaxElement::Node(build_warning_node(
         &header,
         entry_range,
@@ -546,7 +547,7 @@ fn process_see_also_line(
     if entry_indent.is_none() {
         *entry_indent = Some(indent_cols);
     }
-    let (header, entry_range) = parse_entry(cursor);
+    let (header, entry_range) = parse_entry(cursor, false);
     nodes.push(SyntaxElement::Node(build_see_also_node(
         &header,
         entry_range,
@@ -934,13 +935,18 @@ mod tests {
 
     fn header_from(text: &str) -> EntryHeader {
         let cursor = LineCursor::new(text);
-        parse_entry_header(&cursor)
+        parse_entry_header(&cursor, false)
+    }
+
+    fn header_from_lenient(text: &str) -> EntryHeader {
+        let cursor = LineCursor::new(text);
+        parse_entry_header(&cursor, true)
     }
 
     #[test]
     fn test_parse_entry_header_with_type() {
         let src = "name (int): Description";
-        let header = header_from(src);
+        let header = header_from_lenient(src);
         assert_eq!(header.name.source_text(src), "name");
         assert!(header.type_info.is_some());
         let ti = header.type_info.unwrap();
@@ -954,7 +960,7 @@ mod tests {
     #[test]
     fn test_parse_entry_header_optional() {
         let src = "name (int, optional): Description";
-        let header = header_from(src);
+        let header = header_from_lenient(src);
         assert_eq!(header.name.source_text(src), "name");
         let ti = header.type_info.unwrap();
         assert_eq!(ti.r#type.unwrap().source_text(src), "int");
@@ -977,7 +983,7 @@ mod tests {
     #[test]
     fn test_parse_entry_header_complex_type() {
         let src = "data (Dict[str, List[int]]): Values";
-        let header = header_from(src);
+        let header = header_from_lenient(src);
         assert_eq!(header.name.source_text(src), "data");
         let ti = header.type_info.unwrap();
         assert_eq!(ti.r#type.unwrap().source_text(src), "Dict[str, List[int]]");
@@ -1004,7 +1010,7 @@ mod tests {
         );
 
         let src2 = "**kwargs (dict): Keyword arguments";
-        let header = header_from(src2);
+        let header = header_from_lenient(src2);
         assert_eq!(header.name.source_text(src2), "**kwargs");
         let ti = header.type_info.unwrap();
         assert_eq!(ti.r#type.unwrap().source_text(src2), "dict");
@@ -1032,6 +1038,44 @@ mod tests {
             header.first_description.unwrap().source_text(src),
             "Description"
         );
+    }
+
+    #[test]
+    fn test_parse_entry_header_no_space_before_bracket_strict() {
+        let src = "name(int): Description";
+        let header = header_from(src);
+        // Strict mode: brackets without space are NOT treated as type
+        assert_eq!(header.name.source_text(src), "name(int)");
+        assert!(header.type_info.is_none());
+        assert_eq!(
+            header.first_description.unwrap().source_text(src),
+            "Description"
+        );
+    }
+
+    #[test]
+    fn test_parse_entry_header_no_space_before_bracket_lenient() {
+        let src = "name(int): Description";
+        let header = header_from_lenient(src);
+        // Lenient mode: brackets without space ARE treated as type
+        assert_eq!(header.name.source_text(src), "name");
+        assert!(header.type_info.is_some());
+        let ti = header.type_info.unwrap();
+        assert_eq!(ti.r#type.unwrap().source_text(src), "int");
+        assert_eq!(
+            header.first_description.unwrap().source_text(src),
+            "Description"
+        );
+    }
+
+    #[test]
+    fn test_parse_entry_header_no_space_complex_type_lenient() {
+        let src = "data(Dict[str, int]): Values";
+        let header = header_from_lenient(src);
+        assert_eq!(header.name.source_text(src), "data");
+        let ti = header.type_info.unwrap();
+        assert_eq!(ti.r#type.unwrap().source_text(src), "Dict[str, int]");
+        assert_eq!(header.first_description.unwrap().source_text(src), "Values");
     }
 
     #[test]
