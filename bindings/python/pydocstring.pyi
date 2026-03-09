@@ -77,6 +77,7 @@ class GoogleDocstring:
     @property
     def source(self) -> str: ...
     def pretty_print(self) -> str: ...
+    def to_model(self) -> Docstring: ...
 
 # ─── NumPy ───────────────────────────────────────────────────────────────────
 
@@ -132,10 +133,160 @@ class NumPyDocstring:
     @property
     def source(self) -> str: ...
     def pretty_print(self) -> str: ...
+    def to_model(self) -> Docstring: ...
+
+# ─── Model IR ────────────────────────────────────────────────────────────────
+
+class Deprecation:
+    version: str
+    description: str | None
+    def __init__(
+        self,
+        version: str,
+        *,
+        description: str | None = None,
+    ) -> None: ...
+
+class Parameter:
+    names: list[str]
+    type_annotation: str | None
+    description: str | None
+    is_optional: bool
+    default_value: str | None
+    def __init__(
+        self,
+        names: list[str],
+        *,
+        type_annotation: str | None = None,
+        description: str | None = None,
+        is_optional: bool = False,
+        default_value: str | None = None,
+    ) -> None: ...
+
+class Return:
+    name: str | None
+    type_annotation: str | None
+    description: str | None
+    def __init__(
+        self,
+        *,
+        name: str | None = None,
+        type_annotation: str | None = None,
+        description: str | None = None,
+    ) -> None: ...
+
+class ExceptionEntry:
+    type_name: str
+    description: str | None
+    def __init__(
+        self,
+        type_name: str,
+        *,
+        description: str | None = None,
+    ) -> None: ...
+
+class SeeAlsoEntry:
+    names: list[str]
+    description: str | None
+    def __init__(
+        self,
+        names: list[str],
+        *,
+        description: str | None = None,
+    ) -> None: ...
+
+class Reference:
+    number: str | None
+    content: str | None
+    def __init__(
+        self,
+        *,
+        number: str | None = None,
+        content: str | None = None,
+    ) -> None: ...
+
+class Attribute:
+    name: str
+    type_annotation: str | None
+    description: str | None
+    def __init__(
+        self,
+        name: str,
+        *,
+        type_annotation: str | None = None,
+        description: str | None = None,
+    ) -> None: ...
+
+class Method:
+    name: str
+    type_annotation: str | None
+    description: str | None
+    def __init__(
+        self,
+        name: str,
+        *,
+        type_annotation: str | None = None,
+        description: str | None = None,
+    ) -> None: ...
+
+class Section:
+    @property
+    def kind(self) -> str: ...
+    @property
+    def parameters(self) -> list[Parameter]: ...
+    @property
+    def returns(self) -> list[Return]: ...
+    @property
+    def exceptions(self) -> list[ExceptionEntry]: ...
+    @property
+    def attributes(self) -> list[Attribute]: ...
+    @property
+    def methods(self) -> list[Method]: ...
+    @property
+    def see_also_entries(self) -> list[SeeAlsoEntry]: ...
+    @property
+    def references(self) -> list[Reference]: ...
+    @property
+    def body(self) -> str | None: ...
+    def __init__(
+        self,
+        kind: str,
+        *,
+        parameters: list[Parameter] | None = None,
+        returns: list[Return] | None = None,
+        exceptions: list[ExceptionEntry] | None = None,
+        attributes: list[Attribute] | None = None,
+        methods: list[Method] | None = None,
+        see_also_entries: list[SeeAlsoEntry] | None = None,
+        references: list[Reference] | None = None,
+        body: str | None = None,
+    ) -> None: ...
+
+class Docstring:
+    summary: str | None
+    extended_summary: str | None
+    @property
+    def deprecation(self) -> Deprecation | None: ...
+    @deprecation.setter
+    def deprecation(self, value: Deprecation | None) -> None: ...
+    @property
+    def sections(self) -> list[Section]: ...
+    @sections.setter
+    def sections(self, value: list[Section]) -> None: ...
+    def __init__(
+        self,
+        *,
+        summary: str | None = None,
+        extended_summary: str | None = None,
+        deprecation: Deprecation | None = None,
+        sections: list[Section] | None = None,
+    ) -> None: ...
 
 # ─── Functions ───────────────────────────────────────────────────────────────
 
 def parse_google(input: str) -> GoogleDocstring: ...
 def parse_numpy(input: str) -> NumPyDocstring: ...
 def detect_style(input: str) -> Style: ...
+def emit_google(doc: Docstring) -> str: ...
+def emit_numpy(doc: Docstring) -> str: ...
 def walk(node: Node) -> Generator[Node | Token, None, None]: ...

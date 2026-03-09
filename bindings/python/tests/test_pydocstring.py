@@ -181,3 +181,249 @@ class TestWalk:
             if isinstance(item, pydocstring.Token) and item.kind == "NAME"
         ]
         assert names == ["Args", "x", "y"]
+
+
+class TestModelTypes:
+    def test_parameter_construction(self):
+        p = pydocstring.Parameter(["x"], type_annotation="int", description="The value.")
+        assert p.names == ["x"]
+        assert p.type_annotation == "int"
+        assert p.description == "The value."
+        assert p.is_optional is False
+        assert p.default_value is None
+
+    def test_parameter_mutability(self):
+        p = pydocstring.Parameter(["x"])
+        p.names = ["x", "y"]
+        p.type_annotation = "str"
+        p.is_optional = True
+        assert p.names == ["x", "y"]
+        assert p.type_annotation == "str"
+        assert p.is_optional is True
+
+    def test_return_construction(self):
+        r = pydocstring.Return(type_annotation="int", description="The result.")
+        assert r.name is None
+        assert r.type_annotation == "int"
+        assert r.description == "The result."
+
+    def test_exception_entry_construction(self):
+        e = pydocstring.ExceptionEntry("ValueError", description="If x is negative.")
+        assert e.type_name == "ValueError"
+        assert e.description == "If x is negative."
+
+    def test_deprecation_construction(self):
+        d = pydocstring.Deprecation("1.6.0", description="Use new_func instead.")
+        assert d.version == "1.6.0"
+        assert d.description == "Use new_func instead."
+
+    def test_attribute_construction(self):
+        a = pydocstring.Attribute("name", type_annotation="str", description="The name.")
+        assert a.name == "name"
+        assert a.type_annotation == "str"
+
+    def test_method_construction(self):
+        m = pydocstring.Method("run", description="Run the task.")
+        assert m.name == "run"
+        assert m.type_annotation is None
+        assert m.description == "Run the task."
+
+    def test_see_also_entry_construction(self):
+        s = pydocstring.SeeAlsoEntry(["foo", "bar"], description="Related functions.")
+        assert s.names == ["foo", "bar"]
+        assert s.description == "Related functions."
+
+    def test_reference_construction(self):
+        r = pydocstring.Reference(number="1", content="Doe et al. 2020")
+        assert r.number == "1"
+        assert r.content == "Doe et al. 2020"
+
+
+class TestSection:
+    def test_parameters_section(self):
+        p = pydocstring.Parameter(["x"], type_annotation="int", description="Value.")
+        sec = pydocstring.Section("parameters", parameters=[p])
+        assert sec.kind == "parameters"
+        params = sec.parameters
+        assert len(params) == 1
+        assert params[0].names == ["x"]
+        assert params[0].type_annotation == "int"
+
+    def test_returns_section(self):
+        r = pydocstring.Return(type_annotation="bool", description="Success.")
+        sec = pydocstring.Section("returns", returns=[r])
+        assert sec.kind == "returns"
+        rets = sec.returns
+        assert len(rets) == 1
+        assert rets[0].type_annotation == "bool"
+
+    def test_raises_section(self):
+        e = pydocstring.ExceptionEntry("ValueError", description="Bad value.")
+        sec = pydocstring.Section("raises", exceptions=[e])
+        assert sec.kind == "raises"
+        assert len(sec.exceptions) == 1
+        assert sec.exceptions[0].type_name == "ValueError"
+
+    def test_free_text_section(self):
+        sec = pydocstring.Section("notes", body="Some notes here.")
+        assert sec.kind == "notes"
+        assert sec.body == "Some notes here."
+
+    def test_empty_accessors(self):
+        sec = pydocstring.Section("parameters", parameters=[])
+        assert sec.returns == []
+        assert sec.exceptions == []
+        assert sec.body is None
+
+
+class TestDocstringModel:
+    def test_construction(self):
+        doc = pydocstring.Docstring(summary="Brief summary.")
+        assert doc.summary == "Brief summary."
+        assert doc.extended_summary is None
+        assert doc.deprecation is None
+        assert doc.sections == []
+
+    def test_mutability(self):
+        doc = pydocstring.Docstring(summary="Old.")
+        doc.summary = "New."
+        assert doc.summary == "New."
+
+    def test_with_sections(self):
+        p = pydocstring.Parameter(["x"], type_annotation="int")
+        sec = pydocstring.Section("parameters", parameters=[p])
+        doc = pydocstring.Docstring(summary="Brief.", sections=[sec])
+        assert len(doc.sections) == 1
+        assert doc.sections[0].kind == "parameters"
+
+    def test_with_deprecation(self):
+        dep = pydocstring.Deprecation("2.0", description="Removed.")
+        doc = pydocstring.Docstring(deprecation=dep)
+        assert doc.deprecation is not None
+        assert doc.deprecation.version == "2.0"
+
+
+class TestToModel:
+    def test_google_to_model(self):
+        doc = pydocstring.parse_google(
+            "Summary.\n\nArgs:\n    x (int): The value.\n"
+        )
+        model = doc.to_model()
+        assert model.summary == "Summary."
+        assert len(model.sections) == 1
+        assert model.sections[0].kind == "parameters"
+        params = model.sections[0].parameters
+        assert len(params) == 1
+        assert params[0].names == ["x"]
+        assert params[0].type_annotation == "int"
+        assert params[0].description == "The value."
+
+    def test_numpy_to_model(self):
+        doc = pydocstring.parse_numpy(
+            "Summary.\n\nParameters\n----------\nx : int\n    The value.\n"
+        )
+        model = doc.to_model()
+        assert model.summary == "Summary."
+        assert len(model.sections) == 1
+        assert model.sections[0].kind == "parameters"
+        params = model.sections[0].parameters
+        assert len(params) == 1
+        assert params[0].names == ["x"]
+        assert params[0].type_annotation == "int"
+
+    def test_google_to_model_raises(self):
+        doc = pydocstring.parse_google(
+            "Summary.\n\nRaises:\n    ValueError: Bad input.\n"
+        )
+        model = doc.to_model()
+        assert model.sections[0].kind == "raises"
+        assert model.sections[0].exceptions[0].type_name == "ValueError"
+
+    def test_google_to_model_returns(self):
+        doc = pydocstring.parse_google(
+            "Summary.\n\nReturns:\n    int: The result.\n"
+        )
+        model = doc.to_model()
+        assert model.sections[0].kind == "returns"
+        rets = model.sections[0].returns
+        assert len(rets) == 1
+        assert rets[0].type_annotation == "int"
+
+
+class TestEmit:
+    def test_emit_google(self):
+        doc = pydocstring.Docstring(
+            summary="Brief summary.",
+            sections=[
+                pydocstring.Section(
+                    "parameters",
+                    parameters=[
+                        pydocstring.Parameter(
+                            ["x"], type_annotation="int", description="The value."
+                        )
+                    ],
+                )
+            ],
+        )
+        text = pydocstring.emit_google(doc)
+        assert "Brief summary." in text
+        assert "Args:" in text
+        assert "x (int):" in text
+
+    def test_emit_numpy(self):
+        doc = pydocstring.Docstring(
+            summary="Brief summary.",
+            sections=[
+                pydocstring.Section(
+                    "parameters",
+                    parameters=[
+                        pydocstring.Parameter(
+                            ["x"], type_annotation="int", description="The value."
+                        )
+                    ],
+                )
+            ],
+        )
+        text = pydocstring.emit_numpy(doc)
+        assert "Brief summary." in text
+        assert "Parameters" in text
+        assert "----------" in text
+        assert "x : int" in text
+
+    def test_roundtrip_google(self):
+        original = "Summary.\n\nArgs:\n    x (int): The value.\n"
+        doc = pydocstring.parse_google(original)
+        model = doc.to_model()
+        emitted = pydocstring.emit_google(model)
+        assert "Summary." in emitted
+        assert "Args:" in emitted
+        assert "x (int):" in emitted
+
+    def test_roundtrip_numpy(self):
+        original = "Summary.\n\nParameters\n----------\nx : int\n    The value.\n"
+        doc = pydocstring.parse_numpy(original)
+        model = doc.to_model()
+        emitted = pydocstring.emit_numpy(model)
+        assert "Summary." in emitted
+        assert "Parameters" in emitted
+        assert "x : int" in emitted
+
+    def test_convert_google_to_numpy(self):
+        google_doc = pydocstring.parse_google(
+            "Summary.\n\nArgs:\n    x (int): The value.\n"
+        )
+        model = google_doc.to_model()
+        numpy_text = pydocstring.emit_numpy(model)
+        assert "Summary." in numpy_text
+        assert "Parameters" in numpy_text
+        assert "----------" in numpy_text
+        assert "x : int" in numpy_text
+
+    def test_emit_free_text_section(self):
+        doc = pydocstring.Docstring(
+            summary="Brief.",
+            sections=[pydocstring.Section("notes", body="Some notes.")],
+        )
+        text = pydocstring.emit_google(doc)
+        assert "Notes:" in text
+        assert "Some notes." in text
