@@ -24,7 +24,7 @@ Python bindings are also available as [`pydocstring-rs`](https://pypi.org/projec
 
 ```toml
 [dependencies]
-pydocstring = "0.0.3"
+pydocstring = "0.1.0"
 ```
 
 ## Usage
@@ -139,6 +139,65 @@ let result = parse_google("Summary.\n\nArgs:\n    x: Desc.\n    y: Desc.");
 let mut collector = NameCollector { source: result.source(), names: vec![] };
 walk(result.root(), &mut collector);
 assert_eq!(collector.names, vec!["Args", "x", "y"]);
+```
+
+### Style-Independent Model (IR)
+
+Convert any parsed docstring into a style-independent intermediate representation for analysis or transformation:
+
+```rust
+use pydocstring::parse::google::{parse_google, to_model::to_model};
+
+let parsed = parse_google("Summary.\n\nArgs:\n    x (int): The value.\n");
+let doc = to_model(&parsed).unwrap();
+
+assert_eq!(doc.summary.as_deref(), Some("Summary."));
+for section in &doc.sections {
+    if let pydocstring::model::Section::Parameters(params) = section {
+        assert_eq!(params[0].names, vec!["x"]);
+        assert_eq!(params[0].type_annotation.as_deref(), Some("int"));
+    }
+}
+```
+
+### Emitting (Code Generation)
+
+Re-emit a `Docstring` model in any style — useful for style conversion or formatting:
+
+```rust
+use pydocstring::model::{Docstring, Section, Parameter};
+use pydocstring::emit::google::emit_google;
+use pydocstring::emit::numpy::emit_numpy;
+
+let doc = Docstring {
+    summary: Some("Brief summary.".into()),
+    sections: vec![Section::Parameters(vec![Parameter {
+        names: vec!["x".into()],
+        type_annotation: Some("int".into()),
+        description: Some("The value.".into()),
+        is_optional: false,
+        default_value: None,
+    }])],
+    ..Default::default()
+};
+
+let google = emit_google(&doc);
+assert!(google.contains("Args:"));
+
+let numpy = emit_numpy(&doc);
+assert!(numpy.contains("Parameters\n----------"));
+```
+
+Combine parsing and emitting to convert between styles:
+
+```rust
+use pydocstring::parse::google::{parse_google, to_model::to_model};
+use pydocstring::emit::numpy::emit_numpy;
+
+let parsed = parse_google("Summary.\n\nArgs:\n    x (int): The value.\n");
+let doc = to_model(&parsed).unwrap();
+let numpy_text = emit_numpy(&doc);
+assert!(numpy_text.contains("Parameters\n----------"));
 ```
 
 ## Supported Sections

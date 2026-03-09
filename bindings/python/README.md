@@ -165,34 +165,107 @@ token = doc.summary
 print(token.range.start, token.range.end)  # 0 8
 ```
 
+### Style-Independent Model (IR)
+
+Convert any parsed docstring into a style-independent intermediate representation for analysis or transformation:
+
+```python
+from pydocstring import parse_google
+
+parsed = parse_google("Summary.\n\nArgs:\n    x (int): The value.\n")
+doc = parsed.to_model()
+
+print(doc.summary)  # "Summary."
+
+for section in doc.sections:
+    if section.kind == "Parameters":
+        for param in section.parameters:
+            print(param.names)            # ["x"]
+            print(param.type_annotation)  # "int"
+            print(param.description)      # "The value."
+```
+
+### Emitting (Code Generation)
+
+Re-emit a `Docstring` model in any style — useful for style conversion or formatting:
+
+```python
+from pydocstring import Docstring, Section, Parameter, emit_google, emit_numpy
+
+doc = Docstring(
+    summary="Brief summary.",
+    sections=[
+        Section(
+            "Parameters",
+            parameters=[
+                Parameter(
+                    ["x"],
+                    type_annotation="int",
+                    description="The value.",
+                ),
+            ],
+        ),
+    ],
+)
+
+google = emit_google(doc)
+print(google)  # Contains "Args:"
+
+numpy = emit_numpy(doc)
+print(numpy)  # Contains "Parameters\n----------"
+```
+
+Combine parsing and emitting to convert between styles:
+
+```python
+from pydocstring import parse_google, emit_numpy
+
+parsed = parse_google("Summary.\n\nArgs:\n    x (int): The value.\n")
+doc = parsed.to_model()
+numpy_text = emit_numpy(doc)
+print(numpy_text)  # Contains "Parameters\n----------"
+```
+
 ## API Reference
 
 ### Functions
 
-| Function             | Returns           | Description                                   |
-|----------------------|-------------------|-----------------------------------------------|
-| `parse_google(text)` | `GoogleDocstring` | Parse a Google-style docstring                |
-| `parse_numpy(text)`  | `NumPyDocstring`  | Parse a NumPy-style docstring                 |
-| `detect_style(text)` | `Style`           | Detect style: `Style.GOOGLE` or `Style.NUMPY` |
+| Function             | Returns           | Description                                    |
+|----------------------|-------------------|------------------------------------------------|
+| `parse_google(text)` | `GoogleDocstring` | Parse a Google-style docstring                 |
+| `parse_numpy(text)`  | `NumPyDocstring`  | Parse a NumPy-style docstring                  |
+| `detect_style(text)` | `Style`           | Detect style: `Style.GOOGLE` or `Style.NUMPY`  |
+| `emit_google(doc)`   | `str`             | Emit a `Docstring` model as Google-style text  |
+| `emit_numpy(doc)`    | `str`             | Emit a `Docstring` model as NumPy-style text   |
 
 ### Objects
 
-| Class             | Key Properties                                                                |
-|-------------------|-------------------------------------------------------------------------------|
-| `Style`           | `GOOGLE`, `NUMPY` (enum)                                                      |
-| `GoogleDocstring` | `summary`, `extended_summary`, `sections`, `node`, `source`, `pretty_print()` |
-| `GoogleSection`   | `kind`, `args`, `returns`, `exceptions`, `body_text`, `node`                  |
-| `GoogleArg`       | `name`, `type`, `description`, `optional`                                     |
-| `GoogleReturns`   | `return_type`, `description`                                                  |
-| `GoogleException` | `type`, `description`                                                         |
-| `NumPyDocstring`  | `summary`, `extended_summary`, `sections`, `node`, `source`, `pretty_print()` |
-| `NumPySection`    | `kind`, `parameters`, `returns`, `exceptions`, `body_text`, `node`            |
-| `NumPyParameter`  | `names`, `type`, `description`, `optional`, `default_value`                   |
-| `NumPyReturns`    | `name`, `return_type`, `description`                                          |
-| `NumPyException`  | `type`, `description`                                                         |
-| `Token`           | `kind`, `text`, `range`                                                       |
-| `Node`            | `kind`, `range`, `children`                                                   |
-| `TextRange`       | `start`, `end`                                                                |
+| Class             | Key Properties                                                                                                   |
+|-------------------|------------------------------------------------------------------------------------------------------------------|
+| `Style`           | `GOOGLE`, `NUMPY` (enum)                                                                                         |
+| `GoogleDocstring` | `summary`, `extended_summary`, `sections`, `node`, `source`, `pretty_print()`, `to_model()`                      |
+| `GoogleSection`   | `kind`, `args`, `returns`, `exceptions`, `body_text`, `node`                                                     |
+| `GoogleArg`       | `name`, `type`, `description`, `optional`                                                                        |
+| `GoogleReturns`   | `return_type`, `description`                                                                                     |
+| `GoogleException` | `type`, `description`                                                                                            |
+| `NumPyDocstring`  | `summary`, `extended_summary`, `sections`, `node`, `source`, `pretty_print()`, `to_model()`                      |
+| `NumPySection`    | `kind`, `parameters`, `returns`, `exceptions`, `body_text`, `node`                                               |
+| `NumPyParameter`  | `names`, `type`, `description`, `optional`, `default_value`                                                      |
+| `NumPyReturns`    | `name`, `return_type`, `description`                                                                             |
+| `NumPyException`  | `type`, `description`                                                                                            |
+| `Token`           | `kind`, `text`, `range`                                                                                          |
+| `Node`            | `kind`, `range`, `children`                                                                                      |
+| `TextRange`       | `start`, `end`                                                                                                   |
+| `Docstring`       | `summary`, `extended_summary`, `deprecation`, `sections`                                                         |
+| `Section` (model) | `kind`, `parameters`, `returns`, `exceptions`, `attributes`, `methods`, `see_also_entries`, `references`, `body` |
+| `Parameter`       | `names`, `type_annotation`, `description`, `is_optional`, `default_value`                                        |
+| `Return`          | `name`, `type_annotation`, `description`                                                                         |
+| `ExceptionEntry`  | `type_name`, `description`                                                                                       |
+| `Attribute`       | `name`, `type_annotation`, `description`                                                                         |
+| `Method`          | `name`, `type_annotation`, `description`                                                                         |
+| `SeeAlsoEntry`    | `names`, `description`                                                                                           |
+| `Reference`       | `number`, `content`                                                                                              |
+| `Deprecation`     | `version`, `description`                                                                                         |
 
 ## Development
 

@@ -120,10 +120,10 @@ fn to_py_node(py: Python<'_>, node: &SyntaxNode, source: &str) -> PyResult<Py<Py
         .iter()
         .map(|child| match child {
             pydocstring_core::syntax::SyntaxElement::Node(n) => {
-                Ok(to_py_node(py, n, source)?.into_any().into())
+                Ok(to_py_node(py, n, source)?.into_any())
             }
             pydocstring_core::syntax::SyntaxElement::Token(t) => {
-                Ok(to_py_token(py, t, source)?.into_any().into())
+                Ok(to_py_token(py, t, source)?.into_any())
             }
         })
         .collect::<PyResult<Vec<_>>>()?;
