@@ -492,7 +492,7 @@ fn google_roundtrip_summary() {
     use pydocstring::parse::google::{parse_google, to_model::to_model};
 
     let input = "Summary line.";
-    let doc = to_model(&parse_google(input));
+    let doc = to_model(&parse_google(input)).unwrap();
     let output = emit_google(&doc);
     assert_eq!(output.trim(), input);
 }
@@ -502,7 +502,7 @@ fn numpy_roundtrip_summary() {
     use pydocstring::parse::numpy::{parse_numpy, to_model::to_model};
 
     let input = "Summary line.";
-    let doc = to_model(&parse_numpy(input));
+    let doc = to_model(&parse_numpy(input)).unwrap();
     let output = emit_numpy(&doc);
     assert_eq!(output.trim(), input);
 }
@@ -516,7 +516,7 @@ fn google_to_numpy_conversion() {
     use pydocstring::parse::google::{parse_google, to_model::to_model};
 
     let google_input = "Summary.\n\nArgs:\n    x (int): The value.";
-    let doc = to_model(&parse_google(google_input));
+    let doc = to_model(&parse_google(google_input)).unwrap();
     let numpy_output = emit_numpy(&doc);
     assert!(numpy_output.contains("Parameters\n----------\n"));
     assert!(numpy_output.contains("x : int\n    The value.\n"));
@@ -527,7 +527,7 @@ fn numpy_to_google_conversion() {
     use pydocstring::parse::numpy::{parse_numpy, to_model::to_model};
 
     let numpy_input = "Summary.\n\nParameters\n----------\nx : int\n    The value.\n";
-    let doc = to_model(&parse_numpy(numpy_input));
+    let doc = to_model(&parse_numpy(numpy_input)).unwrap();
     let google_output = emit_google(&doc);
     assert!(google_output.contains("Args:\n"));
     assert!(google_output.contains("    x (int): The value.\n"));

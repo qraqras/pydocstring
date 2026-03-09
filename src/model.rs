@@ -10,7 +10,7 @@
 //! use pydocstring::parse::google::{parse_google, to_model::to_model};
 //!
 //! let parsed = parse_google("Summary.\n\nArgs:\n    x (int): The value.\n");
-//! let doc = to_model(&parsed);
+//! let doc = to_model(&parsed).unwrap();
 //! assert_eq!(doc.summary.as_deref(), Some("Summary."));
 //! ```
 

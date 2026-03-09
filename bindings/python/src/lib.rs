@@ -66,24 +66,23 @@ impl PyToken {
     }
 }
 
-fn to_py_token(py: Python<'_>, token: &SyntaxToken, source: &str) -> Py<PyToken> {
+fn to_py_token(py: Python<'_>, token: &SyntaxToken, source: &str) -> PyResult<Py<PyToken>> {
     Py::new(
         py,
         PyToken {
             kind: token.kind().name().to_string(),
             text: token.text(source).to_string(),
-            range: Py::new(py, PyTextRange::from(token.range())).unwrap(),
+            range: Py::new(py, PyTextRange::from(token.range()))?,
         },
     )
-    .unwrap()
 }
 
 fn to_py_token_opt(
     py: Python<'_>,
     token: Option<&SyntaxToken>,
     source: &str,
-) -> Option<Py<PyToken>> {
-    token.map(|t| to_py_token(py, t, source))
+) -> PyResult<Option<Py<PyToken>>> {
+    token.map(|t| to_py_token(py, t, source)).transpose()
 }
 
 // ─── Node ───────────────────────────────────────────────────────────────────
@@ -114,29 +113,28 @@ impl PyNode {
     }
 }
 
-fn to_py_node(py: Python<'_>, node: &SyntaxNode, source: &str) -> Py<PyNode> {
+fn to_py_node(py: Python<'_>, node: &SyntaxNode, source: &str) -> PyResult<Py<PyNode>> {
     let children: Vec<PyObject> = node
         .children()
         .iter()
         .map(|child| match child {
             pydocstring_core::syntax::SyntaxElement::Node(n) => {
-                to_py_node(py, n, source).into_any().into()
+                Ok(to_py_node(py, n, source)?.into_any().into())
             }
             pydocstring_core::syntax::SyntaxElement::Token(t) => {
-                to_py_token(py, t, source).into_any().into()
+                Ok(to_py_token(py, t, source)?.into_any().into())
             }
         })
-        .collect();
+        .collect::<PyResult<Vec<_>>>()?;
 
     Py::new(
         py,
         PyNode {
             kind: node.kind().name().to_string(),
-            range: Py::new(py, PyTextRange::from(node.range())).unwrap(),
+            range: Py::new(py, PyTextRange::from(node.range()))?,
             children,
         },
     )
-    .unwrap()
 }
 
 // ─── Google typed wrappers ──────────────────────────────────────────────────
@@ -446,7 +444,7 @@ impl PyNumPyDocstring {
         &self.source
     }
     fn pretty_print(&self) -> String {
-        let parsed = pydocstring_core::numpy::parse_numpy(&self.source);
+        let parsed = pydocstring_core::parse::numpy::parse_numpy(&self.source);
         parsed.pretty_print()
     }
     fn __repr__(&self) -> String {
@@ -458,10 +456,12 @@ impl PyNumPyDocstring {
 
 fn build_google_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyGoogleDocstring>> {
     let source = parsed.source();
-    let doc = gn::GoogleDocstring::cast(parsed.root()).unwrap();
+    let doc = gn::GoogleDocstring::cast(parsed.root()).ok_or_else(|| {
+        pyo3::exceptions::PyValueError::new_err("root node is not a GOOGLE_DOCSTRING")
+    })?;
 
-    let summary = to_py_token_opt(py, doc.summary(), source);
-    let extended_summary = to_py_token_opt(py, doc.extended_summary(), source);
+    let summary = to_py_token_opt(py, doc.summary(), source)?;
+    let extended_summary = to_py_token_opt(py, doc.extended_summary(), source)?;
 
     let sections: Vec<Py<PyGoogleSection>> = doc
         .sections()
@@ -473,40 +473,40 @@ fn build_google_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyGoog
                     Py::new(
                         py,
                         PyGoogleArg {
-                            name: to_py_token(py, a.name(), source),
-                            r#type: to_py_token_opt(py, a.r#type(), source),
-                            description: to_py_token_opt(py, a.description(), source),
-                            optional: to_py_token_opt(py, a.optional(), source),
+                            name: to_py_token(py, a.name(), source)?,
+                            r#type: to_py_token_opt(py, a.r#type(), source)?,
+                            description: to_py_token_opt(py, a.description(), source)?,
+                            optional: to_py_token_opt(py, a.optional(), source)?,
                         },
                     )
-                    .unwrap()
                 })
-                .collect();
-            let returns = sec.returns().map(|r| {
-                Py::new(
-                    py,
-                    PyGoogleReturns {
-                        return_type: to_py_token_opt(py, r.return_type(), source),
-                        description: to_py_token_opt(py, r.description(), source),
-                    },
-                )
-                .unwrap()
-            });
+                .collect::<PyResult<Vec<_>>>()?;
+            let returns = sec
+                .returns()
+                .map(|r| {
+                    Py::new(
+                        py,
+                        PyGoogleReturns {
+                            return_type: to_py_token_opt(py, r.return_type(), source)?,
+                            description: to_py_token_opt(py, r.description(), source)?,
+                        },
+                    )
+                })
+                .transpose()?;
             let exceptions: Vec<Py<PyGoogleException>> = sec
                 .exceptions()
                 .map(|e| {
                     Py::new(
                         py,
                         PyGoogleException {
-                            r#type: to_py_token(py, e.r#type(), source),
-                            description: to_py_token_opt(py, e.description(), source),
+                            r#type: to_py_token(py, e.r#type(), source)?,
+                            description: to_py_token_opt(py, e.description(), source)?,
                         },
                     )
-                    .unwrap()
                 })
-                .collect();
-            let body_text = to_py_token_opt(py, sec.body_text(), source);
-            let node = to_py_node(py, sec.syntax(), source);
+                .collect::<PyResult<Vec<_>>>()?;
+            let body_text = to_py_token_opt(py, sec.body_text(), source)?;
+            let node = to_py_node(py, sec.syntax(), source)?;
             Py::new(
                 py,
                 PyGoogleSection {
@@ -518,11 +518,10 @@ fn build_google_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyGoog
                     node,
                 },
             )
-            .unwrap()
         })
-        .collect();
+        .collect::<PyResult<Vec<_>>>()?;
 
-    let node = to_py_node(py, parsed.root(), source);
+    let node = to_py_node(py, parsed.root(), source)?;
 
     Py::new(
         py,
@@ -534,15 +533,16 @@ fn build_google_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyGoog
             source: source.to_string(),
         },
     )
-    .map_err(Into::into)
 }
 
 fn build_numpy_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyNumPyDocstring>> {
     let source = parsed.source();
-    let doc = nn::NumPyDocstring::cast(parsed.root()).unwrap();
+    let doc = nn::NumPyDocstring::cast(parsed.root()).ok_or_else(|| {
+        pyo3::exceptions::PyValueError::new_err("root node is not a NUMPY_DOCSTRING")
+    })?;
 
-    let summary = to_py_token_opt(py, doc.summary(), source);
-    let extended_summary = to_py_token_opt(py, doc.extended_summary(), source);
+    let summary = to_py_token_opt(py, doc.summary(), source)?;
+    let extended_summary = to_py_token_opt(py, doc.extended_summary(), source)?;
 
     let sections: Vec<Py<PyNumPySection>> = doc
         .sections()
@@ -551,50 +551,49 @@ fn build_numpy_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyNumPy
             let parameters: Vec<Py<PyNumPyParameter>> = sec
                 .parameters()
                 .map(|p| {
-                    let names: Vec<Py<PyToken>> =
-                        p.names().map(|n| to_py_token(py, n, source)).collect();
+                    let names: Vec<Py<PyToken>> = p
+                        .names()
+                        .map(|n| to_py_token(py, n, source))
+                        .collect::<PyResult<Vec<_>>>()?;
                     Py::new(
                         py,
                         PyNumPyParameter {
                             names,
-                            r#type: to_py_token_opt(py, p.r#type(), source),
-                            description: to_py_token_opt(py, p.description(), source),
-                            optional: to_py_token_opt(py, p.optional(), source),
-                            default_value: to_py_token_opt(py, p.default_value(), source),
+                            r#type: to_py_token_opt(py, p.r#type(), source)?,
+                            description: to_py_token_opt(py, p.description(), source)?,
+                            optional: to_py_token_opt(py, p.optional(), source)?,
+                            default_value: to_py_token_opt(py, p.default_value(), source)?,
                         },
                     )
-                    .unwrap()
                 })
-                .collect();
+                .collect::<PyResult<Vec<_>>>()?;
             let returns: Vec<Py<PyNumPyReturns>> = sec
                 .returns()
                 .map(|r| {
                     Py::new(
                         py,
                         PyNumPyReturns {
-                            name: to_py_token_opt(py, r.name(), source),
-                            return_type: to_py_token_opt(py, r.return_type(), source),
-                            description: to_py_token_opt(py, r.description(), source),
+                            name: to_py_token_opt(py, r.name(), source)?,
+                            return_type: to_py_token_opt(py, r.return_type(), source)?,
+                            description: to_py_token_opt(py, r.description(), source)?,
                         },
                     )
-                    .unwrap()
                 })
-                .collect();
+                .collect::<PyResult<Vec<_>>>()?;
             let exceptions: Vec<Py<PyNumPyException>> = sec
                 .exceptions()
                 .map(|e| {
                     Py::new(
                         py,
                         PyNumPyException {
-                            r#type: to_py_token(py, e.r#type(), source),
-                            description: to_py_token_opt(py, e.description(), source),
+                            r#type: to_py_token(py, e.r#type(), source)?,
+                            description: to_py_token_opt(py, e.description(), source)?,
                         },
                     )
-                    .unwrap()
                 })
-                .collect();
-            let body_text = to_py_token_opt(py, sec.body_text(), source);
-            let node = to_py_node(py, sec.syntax(), source);
+                .collect::<PyResult<Vec<_>>>()?;
+            let body_text = to_py_token_opt(py, sec.body_text(), source)?;
+            let node = to_py_node(py, sec.syntax(), source)?;
             Py::new(
                 py,
                 PyNumPySection {
@@ -606,11 +605,10 @@ fn build_numpy_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyNumPy
                     node,
                 },
             )
-            .unwrap()
         })
-        .collect();
+        .collect::<PyResult<Vec<_>>>()?;
 
-    let node = to_py_node(py, parsed.root(), source);
+    let node = to_py_node(py, parsed.root(), source)?;
 
     Py::new(
         py,
@@ -622,7 +620,6 @@ fn build_numpy_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyNumPy
             source: source.to_string(),
         },
     )
-    .map_err(Into::into)
 }
 
 // ─── Module functions ───────────────────────────────────────────────────────
@@ -637,7 +634,7 @@ fn parse_google(py: Python<'_>, input: &str) -> PyResult<Py<PyGoogleDocstring>> 
 /// Parse a NumPy-style docstring and return a NumPyDocstring object.
 #[pyfunction]
 fn parse_numpy(py: Python<'_>, input: &str) -> PyResult<Py<PyNumPyDocstring>> {
-    let parsed = pydocstring_core::numpy::parse_numpy(input);
+    let parsed = pydocstring_core::parse::numpy::parse_numpy(input);
     build_numpy_docstring(py, &parsed)
 }
 
@@ -671,9 +668,9 @@ impl PyStyle {
 /// Detect the docstring style.
 #[pyfunction]
 fn detect_style(input: &str) -> PyStyle {
-    match pydocstring_core::detect_style(input) {
-        pydocstring_core::Style::Google => PyStyle::Google,
-        pydocstring_core::Style::NumPy => PyStyle::NumPy,
+    match pydocstring_core::parse::detect_style(input) {
+        pydocstring_core::parse::Style::Google => PyStyle::Google,
+        pydocstring_core::parse::Style::NumPy => PyStyle::NumPy,
     }
 }
 

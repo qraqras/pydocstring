@@ -98,7 +98,7 @@ fn free_section_name(kind: &FreeSectionKind) -> &str {
 fn emit_section_header(out: &mut String, name: &str) {
     out.push_str(name);
     out.push('\n');
-    for _ in 0..name.len() {
+    for _ in 0..name.chars().count() {
         out.push('-');
     }
     out.push('\n');

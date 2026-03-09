@@ -9,9 +9,11 @@ use crate::parse::numpy::nodes::{NumPyDocstring, NumPySection};
 use crate::syntax::Parsed;
 
 /// Build a [`Docstring`] from a NumPy-style [`Parsed`] result.
-pub fn to_model(parsed: &Parsed) -> Docstring {
+///
+/// Returns `None` if the root node is not a `NUMPY_DOCSTRING`.
+pub fn to_model(parsed: &Parsed) -> Option<Docstring> {
     let source = parsed.source();
-    let root = NumPyDocstring::cast(parsed.root()).expect("root node must be NUMPY_DOCSTRING");
+    let root = NumPyDocstring::cast(parsed.root())?;
 
     let summary = root.summary().map(|t| t.text(source).to_owned());
     let extended_summary = root.extended_summary().map(|t| t.text(source).to_owned());
@@ -26,12 +28,12 @@ pub fn to_model(parsed: &Parsed) -> Docstring {
         .map(|s| convert_section(&s, source))
         .collect();
 
-    Docstring {
+    Some(Docstring {
         summary,
         extended_summary,
         deprecation,
         sections,
-    }
+    })
 }
 
 fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
@@ -136,7 +138,9 @@ fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
                 NumPySectionKind::Notes => FreeSectionKind::Notes,
                 NumPySectionKind::Examples => FreeSectionKind::Examples,
                 NumPySectionKind::Warnings => FreeSectionKind::Warnings,
-                NumPySectionKind::Unknown => FreeSectionKind::Unknown("Unknown".into()),
+                NumPySectionKind::Unknown => {
+                    FreeSectionKind::Unknown(section.header().name().text(source).to_owned())
+                }
                 _ => unreachable!(),
             };
             Section::FreeText {

@@ -9,9 +9,11 @@ use crate::parse::google::nodes::{GoogleDocstring, GoogleSection};
 use crate::syntax::Parsed;
 
 /// Build a [`Docstring`] from a Google-style [`Parsed`] result.
-pub fn to_model(parsed: &Parsed) -> Docstring {
+///
+/// Returns `None` if the root node is not a `GOOGLE_DOCSTRING`.
+pub fn to_model(parsed: &Parsed) -> Option<Docstring> {
     let source = parsed.source();
-    let root = GoogleDocstring::cast(parsed.root()).expect("root node must be GOOGLE_DOCSTRING");
+    let root = GoogleDocstring::cast(parsed.root())?;
 
     let summary = root.summary().map(|t| t.text(source).to_owned());
     let extended_summary = root.extended_summary().map(|t| t.text(source).to_owned());
@@ -21,12 +23,12 @@ pub fn to_model(parsed: &Parsed) -> Docstring {
         .map(|s| convert_section(&s, source))
         .collect();
 
-    Docstring {
+    Some(Docstring {
         summary,
         extended_summary,
         deprecation: None,
         sections,
-    }
+    })
 }
 
 fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
@@ -126,7 +128,9 @@ fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
                 GoogleSectionKind::Hint => FreeSectionKind::Hint,
                 GoogleSectionKind::Important => FreeSectionKind::Important,
                 GoogleSectionKind::Tip => FreeSectionKind::Tip,
-                GoogleSectionKind::Unknown => FreeSectionKind::Unknown("Unknown".into()),
+                GoogleSectionKind::Unknown => {
+                    FreeSectionKind::Unknown(section.header().name().text(source).to_owned())
+                }
                 _ => unreachable!(),
             };
             Section::FreeText {
