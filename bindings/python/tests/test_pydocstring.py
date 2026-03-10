@@ -149,7 +149,7 @@ class TestToken:
     def test_properties(self):
         doc = pydocstring.parse_google("Summary.")
         token = doc.summary
-        assert token.kind == "SUMMARY"
+        assert token.kind == pydocstring.SyntaxKind.SUMMARY
         assert token.text == "Summary."
         assert token.range.start == 0
         assert token.range.end == 8
@@ -159,7 +159,7 @@ class TestNode:
     def test_properties(self):
         doc = pydocstring.parse_google("Summary.")
         node = doc.node
-        assert node.kind == "GOOGLE_DOCSTRING"
+        assert node.kind == pydocstring.SyntaxKind.GOOGLE_DOCSTRING
         assert len(node.children) > 0
         assert node.range.start == 0
 
@@ -169,16 +169,16 @@ class TestWalk:
         doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x (int): Value.")
         items = list(pydocstring.walk(doc.node))
         kinds = [item.kind for item in items]
-        assert "GOOGLE_DOCSTRING" in kinds
-        assert "SUMMARY" in kinds
-        assert "NAME" in kinds
+        assert pydocstring.SyntaxKind.GOOGLE_DOCSTRING in kinds
+        assert pydocstring.SyntaxKind.SUMMARY in kinds
+        assert pydocstring.SyntaxKind.NAME in kinds
 
     def test_walk_collects_names(self):
         doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x: Desc.\n    y: Desc.")
         names = [
             item.text
             for item in pydocstring.walk(doc.node)
-            if isinstance(item, pydocstring.Token) and item.kind == "NAME"
+            if isinstance(item, pydocstring.Token) and item.kind == pydocstring.SyntaxKind.NAME
         ]
         assert names == ["Args", "x", "y"]
 

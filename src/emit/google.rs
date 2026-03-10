@@ -7,6 +7,10 @@ use crate::model::{
 
 /// Emit a [`Docstring`] as a Google-style docstring string.
 ///
+/// `base_indent` is the number of spaces prepended to every non-empty line
+/// of output, so the result can be embedded at the correct indentation level
+/// in a Python file.
+///
 /// # Example
 ///
 /// ```rust
@@ -24,10 +28,10 @@ use crate::model::{
 ///     }])],
 ///     ..Default::default()
 /// };
-/// let text = emit_google(&doc);
+/// let text = emit_google(&doc, 0);
 /// assert!(text.contains("Args:"));
 /// ```
-pub fn emit_google(doc: &Docstring) -> String {
+pub fn emit_google(doc: &Docstring, base_indent: usize) -> String {
     let mut out = String::new();
 
     // Summary
@@ -49,7 +53,10 @@ pub fn emit_google(doc: &Docstring) -> String {
         emit_section(&mut out, section);
     }
 
-    out
+    if base_indent == 0 {
+        return out;
+    }
+    super::indent_lines(&out, base_indent)
 }
 
 /// Section header name for Google style.

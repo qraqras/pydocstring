@@ -5,3 +5,17 @@
 
 pub mod google;
 pub mod numpy;
+
+/// Prepend `base_indent` spaces to every non-empty line.
+pub(crate) fn indent_lines(text: &str, base_indent: usize) -> String {
+    let indent: String = " ".repeat(base_indent);
+    let mut result = String::new();
+    for line in text.lines() {
+        if !line.is_empty() {
+            result.push_str(&indent);
+        }
+        result.push_str(line);
+        result.push('\n');
+    }
+    result
+}
