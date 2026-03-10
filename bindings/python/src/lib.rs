@@ -4,7 +4,7 @@ use pydocstring_core::model;
 use pydocstring_core::parse::google;
 use pydocstring_core::parse::google::nodes as gn;
 use pydocstring_core::parse::numpy::nodes as nn;
-use pydocstring_core::syntax::{Parsed, SyntaxNode, SyntaxToken};
+use pydocstring_core::syntax::{Parsed, SyntaxKind, SyntaxNode, SyntaxToken};
 use pydocstring_core::text::TextRange;
 
 // ─── TextRange ──────────────────────────────────────────────────────────────
@@ -39,11 +39,183 @@ impl From<&TextRange> for PyTextRange {
     }
 }
 
+// ─── SyntaxKind ──────────────────────────────────────────────────────────────
+
+/// Syntax node/token kind enum.
+#[pyclass(eq, eq_int, frozen, hash, name = "SyntaxKind")]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(non_camel_case_types)]
+enum PySyntaxKind {
+    // Common tokens
+    NAME,
+    TYPE,
+    COLON,
+    DESCRIPTION,
+    OPEN_BRACKET,
+    CLOSE_BRACKET,
+    OPTIONAL,
+    BODY_TEXT,
+    SUMMARY,
+    EXTENDED_SUMMARY,
+    STRAY_LINE,
+    // Google-specific tokens
+    WARNING_TYPE,
+    // NumPy-specific tokens
+    UNDERLINE,
+    DIRECTIVE_MARKER,
+    KEYWORD,
+    DOUBLE_COLON,
+    VERSION,
+    RETURN_TYPE,
+    DEFAULT_KEYWORD,
+    DEFAULT_SEPARATOR,
+    DEFAULT_VALUE,
+    NUMBER,
+    CONTENT,
+    // Google nodes
+    GOOGLE_DOCSTRING,
+    GOOGLE_SECTION,
+    GOOGLE_SECTION_HEADER,
+    GOOGLE_ARG,
+    GOOGLE_RETURNS,
+    GOOGLE_EXCEPTION,
+    GOOGLE_WARNING,
+    GOOGLE_SEE_ALSO_ITEM,
+    GOOGLE_ATTRIBUTE,
+    GOOGLE_METHOD,
+    // NumPy nodes
+    NUMPY_DOCSTRING,
+    NUMPY_SECTION,
+    NUMPY_SECTION_HEADER,
+    NUMPY_DEPRECATION,
+    NUMPY_PARAMETER,
+    NUMPY_RETURNS,
+    NUMPY_EXCEPTION,
+    NUMPY_WARNING,
+    NUMPY_SEE_ALSO_ITEM,
+    NUMPY_REFERENCE,
+    NUMPY_ATTRIBUTE,
+    NUMPY_METHOD,
+}
+
+#[pymethods]
+impl PySyntaxKind {
+    fn __repr__(&self) -> String {
+        format!("SyntaxKind.{}", self.to_core().name())
+    }
+
+    fn __str__(&self) -> &'static str {
+        self.to_core().name()
+    }
+}
+
+impl PySyntaxKind {
+    fn from_core(kind: SyntaxKind) -> Self {
+        match kind {
+            SyntaxKind::NAME => Self::NAME,
+            SyntaxKind::TYPE => Self::TYPE,
+            SyntaxKind::COLON => Self::COLON,
+            SyntaxKind::DESCRIPTION => Self::DESCRIPTION,
+            SyntaxKind::OPEN_BRACKET => Self::OPEN_BRACKET,
+            SyntaxKind::CLOSE_BRACKET => Self::CLOSE_BRACKET,
+            SyntaxKind::OPTIONAL => Self::OPTIONAL,
+            SyntaxKind::BODY_TEXT => Self::BODY_TEXT,
+            SyntaxKind::SUMMARY => Self::SUMMARY,
+            SyntaxKind::EXTENDED_SUMMARY => Self::EXTENDED_SUMMARY,
+            SyntaxKind::STRAY_LINE => Self::STRAY_LINE,
+            SyntaxKind::WARNING_TYPE => Self::WARNING_TYPE,
+            SyntaxKind::UNDERLINE => Self::UNDERLINE,
+            SyntaxKind::DIRECTIVE_MARKER => Self::DIRECTIVE_MARKER,
+            SyntaxKind::KEYWORD => Self::KEYWORD,
+            SyntaxKind::DOUBLE_COLON => Self::DOUBLE_COLON,
+            SyntaxKind::VERSION => Self::VERSION,
+            SyntaxKind::RETURN_TYPE => Self::RETURN_TYPE,
+            SyntaxKind::DEFAULT_KEYWORD => Self::DEFAULT_KEYWORD,
+            SyntaxKind::DEFAULT_SEPARATOR => Self::DEFAULT_SEPARATOR,
+            SyntaxKind::DEFAULT_VALUE => Self::DEFAULT_VALUE,
+            SyntaxKind::NUMBER => Self::NUMBER,
+            SyntaxKind::CONTENT => Self::CONTENT,
+            SyntaxKind::GOOGLE_DOCSTRING => Self::GOOGLE_DOCSTRING,
+            SyntaxKind::GOOGLE_SECTION => Self::GOOGLE_SECTION,
+            SyntaxKind::GOOGLE_SECTION_HEADER => Self::GOOGLE_SECTION_HEADER,
+            SyntaxKind::GOOGLE_ARG => Self::GOOGLE_ARG,
+            SyntaxKind::GOOGLE_RETURNS => Self::GOOGLE_RETURNS,
+            SyntaxKind::GOOGLE_EXCEPTION => Self::GOOGLE_EXCEPTION,
+            SyntaxKind::GOOGLE_WARNING => Self::GOOGLE_WARNING,
+            SyntaxKind::GOOGLE_SEE_ALSO_ITEM => Self::GOOGLE_SEE_ALSO_ITEM,
+            SyntaxKind::GOOGLE_ATTRIBUTE => Self::GOOGLE_ATTRIBUTE,
+            SyntaxKind::GOOGLE_METHOD => Self::GOOGLE_METHOD,
+            SyntaxKind::NUMPY_DOCSTRING => Self::NUMPY_DOCSTRING,
+            SyntaxKind::NUMPY_SECTION => Self::NUMPY_SECTION,
+            SyntaxKind::NUMPY_SECTION_HEADER => Self::NUMPY_SECTION_HEADER,
+            SyntaxKind::NUMPY_DEPRECATION => Self::NUMPY_DEPRECATION,
+            SyntaxKind::NUMPY_PARAMETER => Self::NUMPY_PARAMETER,
+            SyntaxKind::NUMPY_RETURNS => Self::NUMPY_RETURNS,
+            SyntaxKind::NUMPY_EXCEPTION => Self::NUMPY_EXCEPTION,
+            SyntaxKind::NUMPY_WARNING => Self::NUMPY_WARNING,
+            SyntaxKind::NUMPY_SEE_ALSO_ITEM => Self::NUMPY_SEE_ALSO_ITEM,
+            SyntaxKind::NUMPY_REFERENCE => Self::NUMPY_REFERENCE,
+            SyntaxKind::NUMPY_ATTRIBUTE => Self::NUMPY_ATTRIBUTE,
+            SyntaxKind::NUMPY_METHOD => Self::NUMPY_METHOD,
+        }
+    }
+
+    fn to_core(self) -> SyntaxKind {
+        match self {
+            Self::NAME => SyntaxKind::NAME,
+            Self::TYPE => SyntaxKind::TYPE,
+            Self::COLON => SyntaxKind::COLON,
+            Self::DESCRIPTION => SyntaxKind::DESCRIPTION,
+            Self::OPEN_BRACKET => SyntaxKind::OPEN_BRACKET,
+            Self::CLOSE_BRACKET => SyntaxKind::CLOSE_BRACKET,
+            Self::OPTIONAL => SyntaxKind::OPTIONAL,
+            Self::BODY_TEXT => SyntaxKind::BODY_TEXT,
+            Self::SUMMARY => SyntaxKind::SUMMARY,
+            Self::EXTENDED_SUMMARY => SyntaxKind::EXTENDED_SUMMARY,
+            Self::STRAY_LINE => SyntaxKind::STRAY_LINE,
+            Self::WARNING_TYPE => SyntaxKind::WARNING_TYPE,
+            Self::UNDERLINE => SyntaxKind::UNDERLINE,
+            Self::DIRECTIVE_MARKER => SyntaxKind::DIRECTIVE_MARKER,
+            Self::KEYWORD => SyntaxKind::KEYWORD,
+            Self::DOUBLE_COLON => SyntaxKind::DOUBLE_COLON,
+            Self::VERSION => SyntaxKind::VERSION,
+            Self::RETURN_TYPE => SyntaxKind::RETURN_TYPE,
+            Self::DEFAULT_KEYWORD => SyntaxKind::DEFAULT_KEYWORD,
+            Self::DEFAULT_SEPARATOR => SyntaxKind::DEFAULT_SEPARATOR,
+            Self::DEFAULT_VALUE => SyntaxKind::DEFAULT_VALUE,
+            Self::NUMBER => SyntaxKind::NUMBER,
+            Self::CONTENT => SyntaxKind::CONTENT,
+            Self::GOOGLE_DOCSTRING => SyntaxKind::GOOGLE_DOCSTRING,
+            Self::GOOGLE_SECTION => SyntaxKind::GOOGLE_SECTION,
+            Self::GOOGLE_SECTION_HEADER => SyntaxKind::GOOGLE_SECTION_HEADER,
+            Self::GOOGLE_ARG => SyntaxKind::GOOGLE_ARG,
+            Self::GOOGLE_RETURNS => SyntaxKind::GOOGLE_RETURNS,
+            Self::GOOGLE_EXCEPTION => SyntaxKind::GOOGLE_EXCEPTION,
+            Self::GOOGLE_WARNING => SyntaxKind::GOOGLE_WARNING,
+            Self::GOOGLE_SEE_ALSO_ITEM => SyntaxKind::GOOGLE_SEE_ALSO_ITEM,
+            Self::GOOGLE_ATTRIBUTE => SyntaxKind::GOOGLE_ATTRIBUTE,
+            Self::GOOGLE_METHOD => SyntaxKind::GOOGLE_METHOD,
+            Self::NUMPY_DOCSTRING => SyntaxKind::NUMPY_DOCSTRING,
+            Self::NUMPY_SECTION => SyntaxKind::NUMPY_SECTION,
+            Self::NUMPY_SECTION_HEADER => SyntaxKind::NUMPY_SECTION_HEADER,
+            Self::NUMPY_DEPRECATION => SyntaxKind::NUMPY_DEPRECATION,
+            Self::NUMPY_PARAMETER => SyntaxKind::NUMPY_PARAMETER,
+            Self::NUMPY_RETURNS => SyntaxKind::NUMPY_RETURNS,
+            Self::NUMPY_EXCEPTION => SyntaxKind::NUMPY_EXCEPTION,
+            Self::NUMPY_WARNING => SyntaxKind::NUMPY_WARNING,
+            Self::NUMPY_SEE_ALSO_ITEM => SyntaxKind::NUMPY_SEE_ALSO_ITEM,
+            Self::NUMPY_REFERENCE => SyntaxKind::NUMPY_REFERENCE,
+            Self::NUMPY_ATTRIBUTE => SyntaxKind::NUMPY_ATTRIBUTE,
+            Self::NUMPY_METHOD => SyntaxKind::NUMPY_METHOD,
+        }
+    }
+}
+
 // ─── Token ──────────────────────────────────────────────────────────────────
 
 #[pyclass(name = "Token", frozen)]
 struct PyToken {
-    kind: String,
+    kind: PySyntaxKind,
     text: String,
     range: Py<PyTextRange>,
 }
@@ -51,8 +223,8 @@ struct PyToken {
 #[pymethods]
 impl PyToken {
     #[getter]
-    fn kind(&self) -> &str {
-        &self.kind
+    fn kind(&self) -> PySyntaxKind {
+        self.kind
     }
     #[getter]
     fn text(&self) -> &str {
@@ -63,7 +235,11 @@ impl PyToken {
         self.range.clone_ref(py)
     }
     fn __repr__(&self) -> String {
-        format!("Token({}, {:?})", self.kind, self.text)
+        format!(
+            "Token(SyntaxKind.{}, {:?})",
+            self.kind.to_core().name(),
+            self.text
+        )
     }
 }
 
@@ -71,7 +247,7 @@ fn to_py_token(py: Python<'_>, token: &SyntaxToken, source: &str) -> PyResult<Py
     Py::new(
         py,
         PyToken {
-            kind: token.kind().name().to_string(),
+            kind: PySyntaxKind::from_core(token.kind()),
             text: token.text(source).to_string(),
             range: Py::new(py, PyTextRange::from(token.range()))?,
         },
@@ -90,7 +266,7 @@ fn to_py_token_opt(
 
 #[pyclass(name = "Node", frozen)]
 struct PyNode {
-    kind: String,
+    kind: PySyntaxKind,
     range: Py<PyTextRange>,
     children: Vec<PyObject>,
 }
@@ -98,8 +274,8 @@ struct PyNode {
 #[pymethods]
 impl PyNode {
     #[getter]
-    fn kind(&self) -> &str {
-        &self.kind
+    fn kind(&self) -> PySyntaxKind {
+        self.kind
     }
     #[getter]
     fn range(&self, py: Python<'_>) -> Py<PyTextRange> {
@@ -110,7 +286,11 @@ impl PyNode {
         self.children.iter().map(|c| c.clone_ref(py)).collect()
     }
     fn __repr__(&self) -> String {
-        format!("Node({}, {} children)", self.kind, self.children.len())
+        format!(
+            "Node(SyntaxKind.{}, {} children)",
+            self.kind.to_core().name(),
+            self.children.len()
+        )
     }
 }
 
@@ -131,7 +311,7 @@ fn to_py_node(py: Python<'_>, node: &SyntaxNode, source: &str) -> PyResult<Py<Py
     Py::new(
         py,
         PyNode {
-            kind: node.kind().name().to_string(),
+            kind: PySyntaxKind::from_core(node.kind()),
             range: Py::new(py, PyTextRange::from(node.range()))?,
             children,
         },
@@ -1401,18 +1581,18 @@ fn detect_style(input: &str) -> PyStyle {
 
 /// Emit a model Docstring as a Google-style docstring string.
 #[pyfunction]
-#[pyo3(name = "emit_google")]
-fn py_emit_google(py: Python<'_>, doc: Py<PyModelDocstring>) -> String {
+#[pyo3(name = "emit_google", signature = (doc, base_indent=0))]
+fn py_emit_google(py: Python<'_>, doc: Py<PyModelDocstring>, base_indent: usize) -> String {
     let doc = doc.borrow(py);
-    pydocstring_core::emit::google::emit_google(&doc.inner)
+    pydocstring_core::emit::google::emit_google(&doc.inner, base_indent)
 }
 
 /// Emit a model Docstring as a NumPy-style docstring string.
 #[pyfunction]
-#[pyo3(name = "emit_numpy")]
-fn py_emit_numpy(py: Python<'_>, doc: Py<PyModelDocstring>) -> String {
+#[pyo3(name = "emit_numpy", signature = (doc, base_indent=0))]
+fn py_emit_numpy(py: Python<'_>, doc: Py<PyModelDocstring>, base_indent: usize) -> String {
     let doc = doc.borrow(py);
-    pydocstring_core::emit::numpy::emit_numpy(&doc.inner)
+    pydocstring_core::emit::numpy::emit_numpy(&doc.inner, base_indent)
 }
 
 // ─── Module ─────────────────────────────────────────────────────────────────
@@ -1425,6 +1605,7 @@ fn pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_emit_google, m)?)?;
     m.add_function(wrap_pyfunction!(py_emit_numpy, m)?)?;
     m.add_class::<PyStyle>()?;
+    m.add_class::<PySyntaxKind>()?;
     m.add_class::<PyTextRange>()?;
     m.add_class::<PyToken>()?;
     m.add_class::<PyNode>()?;
