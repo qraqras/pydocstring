@@ -12,7 +12,7 @@ cargo clippy --all-targets -- -D warnings
 echo "OK"
 
 echo "--- Stage fixed files ---"
-git add -u
+git diff --cached --name-only --diff-filter=ACMR | xargs -r git add
 echo "OK"
 
 echo "=== All checks passed ==="
