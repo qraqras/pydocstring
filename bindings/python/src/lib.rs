@@ -1,8 +1,9 @@
 use pyo3::prelude::*;
 
-use pydocstring_core::google;
-use pydocstring_core::google::nodes as gn;
-use pydocstring_core::numpy::nodes as nn;
+use pydocstring_core::model;
+use pydocstring_core::parse::google;
+use pydocstring_core::parse::google::nodes as gn;
+use pydocstring_core::parse::numpy::nodes as nn;
 use pydocstring_core::syntax::{Parsed, SyntaxNode, SyntaxToken};
 use pydocstring_core::text::TextRange;
 
@@ -66,24 +67,23 @@ impl PyToken {
     }
 }
 
-fn to_py_token(py: Python<'_>, token: &SyntaxToken, source: &str) -> Py<PyToken> {
+fn to_py_token(py: Python<'_>, token: &SyntaxToken, source: &str) -> PyResult<Py<PyToken>> {
     Py::new(
         py,
         PyToken {
             kind: token.kind().name().to_string(),
             text: token.text(source).to_string(),
-            range: Py::new(py, PyTextRange::from(token.range())).unwrap(),
+            range: Py::new(py, PyTextRange::from(token.range()))?,
         },
     )
-    .unwrap()
 }
 
 fn to_py_token_opt(
     py: Python<'_>,
     token: Option<&SyntaxToken>,
     source: &str,
-) -> Option<Py<PyToken>> {
-    token.map(|t| to_py_token(py, t, source))
+) -> PyResult<Option<Py<PyToken>>> {
+    token.map(|t| to_py_token(py, t, source)).transpose()
 }
 
 // ─── Node ───────────────────────────────────────────────────────────────────
@@ -114,29 +114,28 @@ impl PyNode {
     }
 }
 
-fn to_py_node(py: Python<'_>, node: &SyntaxNode, source: &str) -> Py<PyNode> {
+fn to_py_node(py: Python<'_>, node: &SyntaxNode, source: &str) -> PyResult<Py<PyNode>> {
     let children: Vec<PyObject> = node
         .children()
         .iter()
         .map(|child| match child {
             pydocstring_core::syntax::SyntaxElement::Node(n) => {
-                to_py_node(py, n, source).into_any().into()
+                Ok(to_py_node(py, n, source)?.into_any())
             }
             pydocstring_core::syntax::SyntaxElement::Token(t) => {
-                to_py_token(py, t, source).into_any().into()
+                Ok(to_py_token(py, t, source)?.into_any())
             }
         })
-        .collect();
+        .collect::<PyResult<Vec<_>>>()?;
 
     Py::new(
         py,
         PyNode {
             kind: node.kind().name().to_string(),
-            range: Py::new(py, PyTextRange::from(node.range())).unwrap(),
+            range: Py::new(py, PyTextRange::from(node.range()))?,
             children,
         },
     )
-    .unwrap()
 }
 
 // ─── Google typed wrappers ──────────────────────────────────────────────────
@@ -283,6 +282,12 @@ impl PyGoogleDocstring {
     fn pretty_print(&self) -> String {
         let parsed = google::parse_google(&self.source);
         parsed.pretty_print()
+    }
+    fn to_model(&self) -> PyResult<PyModelDocstring> {
+        let parsed = google::parse_google(&self.source);
+        let doc = pydocstring_core::parse::google::to_model::to_model(&parsed)
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("failed to convert to model"))?;
+        Ok(PyModelDocstring { inner: doc })
     }
     fn __repr__(&self) -> String {
         "GoogleDocstring(...)".to_string()
@@ -446,8 +451,14 @@ impl PyNumPyDocstring {
         &self.source
     }
     fn pretty_print(&self) -> String {
-        let parsed = pydocstring_core::numpy::parse_numpy(&self.source);
+        let parsed = pydocstring_core::parse::numpy::parse_numpy(&self.source);
         parsed.pretty_print()
+    }
+    fn to_model(&self) -> PyResult<PyModelDocstring> {
+        let parsed = pydocstring_core::parse::numpy::parse_numpy(&self.source);
+        let doc = pydocstring_core::parse::numpy::to_model::to_model(&parsed)
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("failed to convert to model"))?;
+        Ok(PyModelDocstring { inner: doc })
     }
     fn __repr__(&self) -> String {
         "NumPyDocstring(...)".to_string()
@@ -458,10 +469,12 @@ impl PyNumPyDocstring {
 
 fn build_google_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyGoogleDocstring>> {
     let source = parsed.source();
-    let doc = gn::GoogleDocstring::cast(parsed.root()).unwrap();
+    let doc = gn::GoogleDocstring::cast(parsed.root()).ok_or_else(|| {
+        pyo3::exceptions::PyValueError::new_err("root node is not a GOOGLE_DOCSTRING")
+    })?;
 
-    let summary = to_py_token_opt(py, doc.summary(), source);
-    let extended_summary = to_py_token_opt(py, doc.extended_summary(), source);
+    let summary = to_py_token_opt(py, doc.summary(), source)?;
+    let extended_summary = to_py_token_opt(py, doc.extended_summary(), source)?;
 
     let sections: Vec<Py<PyGoogleSection>> = doc
         .sections()
@@ -473,40 +486,40 @@ fn build_google_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyGoog
                     Py::new(
                         py,
                         PyGoogleArg {
-                            name: to_py_token(py, a.name(), source),
-                            r#type: to_py_token_opt(py, a.r#type(), source),
-                            description: to_py_token_opt(py, a.description(), source),
-                            optional: to_py_token_opt(py, a.optional(), source),
+                            name: to_py_token(py, a.name(), source)?,
+                            r#type: to_py_token_opt(py, a.r#type(), source)?,
+                            description: to_py_token_opt(py, a.description(), source)?,
+                            optional: to_py_token_opt(py, a.optional(), source)?,
                         },
                     )
-                    .unwrap()
                 })
-                .collect();
-            let returns = sec.returns().map(|r| {
-                Py::new(
-                    py,
-                    PyGoogleReturns {
-                        return_type: to_py_token_opt(py, r.return_type(), source),
-                        description: to_py_token_opt(py, r.description(), source),
-                    },
-                )
-                .unwrap()
-            });
+                .collect::<PyResult<Vec<_>>>()?;
+            let returns = sec
+                .returns()
+                .map(|r| {
+                    Py::new(
+                        py,
+                        PyGoogleReturns {
+                            return_type: to_py_token_opt(py, r.return_type(), source)?,
+                            description: to_py_token_opt(py, r.description(), source)?,
+                        },
+                    )
+                })
+                .transpose()?;
             let exceptions: Vec<Py<PyGoogleException>> = sec
                 .exceptions()
                 .map(|e| {
                     Py::new(
                         py,
                         PyGoogleException {
-                            r#type: to_py_token(py, e.r#type(), source),
-                            description: to_py_token_opt(py, e.description(), source),
+                            r#type: to_py_token(py, e.r#type(), source)?,
+                            description: to_py_token_opt(py, e.description(), source)?,
                         },
                     )
-                    .unwrap()
                 })
-                .collect();
-            let body_text = to_py_token_opt(py, sec.body_text(), source);
-            let node = to_py_node(py, sec.syntax(), source);
+                .collect::<PyResult<Vec<_>>>()?;
+            let body_text = to_py_token_opt(py, sec.body_text(), source)?;
+            let node = to_py_node(py, sec.syntax(), source)?;
             Py::new(
                 py,
                 PyGoogleSection {
@@ -518,11 +531,10 @@ fn build_google_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyGoog
                     node,
                 },
             )
-            .unwrap()
         })
-        .collect();
+        .collect::<PyResult<Vec<_>>>()?;
 
-    let node = to_py_node(py, parsed.root(), source);
+    let node = to_py_node(py, parsed.root(), source)?;
 
     Py::new(
         py,
@@ -534,15 +546,16 @@ fn build_google_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyGoog
             source: source.to_string(),
         },
     )
-    .map_err(Into::into)
 }
 
 fn build_numpy_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyNumPyDocstring>> {
     let source = parsed.source();
-    let doc = nn::NumPyDocstring::cast(parsed.root()).unwrap();
+    let doc = nn::NumPyDocstring::cast(parsed.root()).ok_or_else(|| {
+        pyo3::exceptions::PyValueError::new_err("root node is not a NUMPY_DOCSTRING")
+    })?;
 
-    let summary = to_py_token_opt(py, doc.summary(), source);
-    let extended_summary = to_py_token_opt(py, doc.extended_summary(), source);
+    let summary = to_py_token_opt(py, doc.summary(), source)?;
+    let extended_summary = to_py_token_opt(py, doc.extended_summary(), source)?;
 
     let sections: Vec<Py<PyNumPySection>> = doc
         .sections()
@@ -551,50 +564,49 @@ fn build_numpy_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyNumPy
             let parameters: Vec<Py<PyNumPyParameter>> = sec
                 .parameters()
                 .map(|p| {
-                    let names: Vec<Py<PyToken>> =
-                        p.names().map(|n| to_py_token(py, n, source)).collect();
+                    let names: Vec<Py<PyToken>> = p
+                        .names()
+                        .map(|n| to_py_token(py, n, source))
+                        .collect::<PyResult<Vec<_>>>()?;
                     Py::new(
                         py,
                         PyNumPyParameter {
                             names,
-                            r#type: to_py_token_opt(py, p.r#type(), source),
-                            description: to_py_token_opt(py, p.description(), source),
-                            optional: to_py_token_opt(py, p.optional(), source),
-                            default_value: to_py_token_opt(py, p.default_value(), source),
+                            r#type: to_py_token_opt(py, p.r#type(), source)?,
+                            description: to_py_token_opt(py, p.description(), source)?,
+                            optional: to_py_token_opt(py, p.optional(), source)?,
+                            default_value: to_py_token_opt(py, p.default_value(), source)?,
                         },
                     )
-                    .unwrap()
                 })
-                .collect();
+                .collect::<PyResult<Vec<_>>>()?;
             let returns: Vec<Py<PyNumPyReturns>> = sec
                 .returns()
                 .map(|r| {
                     Py::new(
                         py,
                         PyNumPyReturns {
-                            name: to_py_token_opt(py, r.name(), source),
-                            return_type: to_py_token_opt(py, r.return_type(), source),
-                            description: to_py_token_opt(py, r.description(), source),
+                            name: to_py_token_opt(py, r.name(), source)?,
+                            return_type: to_py_token_opt(py, r.return_type(), source)?,
+                            description: to_py_token_opt(py, r.description(), source)?,
                         },
                     )
-                    .unwrap()
                 })
-                .collect();
+                .collect::<PyResult<Vec<_>>>()?;
             let exceptions: Vec<Py<PyNumPyException>> = sec
                 .exceptions()
                 .map(|e| {
                     Py::new(
                         py,
                         PyNumPyException {
-                            r#type: to_py_token(py, e.r#type(), source),
-                            description: to_py_token_opt(py, e.description(), source),
+                            r#type: to_py_token(py, e.r#type(), source)?,
+                            description: to_py_token_opt(py, e.description(), source)?,
                         },
                     )
-                    .unwrap()
                 })
-                .collect();
-            let body_text = to_py_token_opt(py, sec.body_text(), source);
-            let node = to_py_node(py, sec.syntax(), source);
+                .collect::<PyResult<Vec<_>>>()?;
+            let body_text = to_py_token_opt(py, sec.body_text(), source)?;
+            let node = to_py_node(py, sec.syntax(), source)?;
             Py::new(
                 py,
                 PyNumPySection {
@@ -606,11 +618,10 @@ fn build_numpy_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyNumPy
                     node,
                 },
             )
-            .unwrap()
         })
-        .collect();
+        .collect::<PyResult<Vec<_>>>()?;
 
-    let node = to_py_node(py, parsed.root(), source);
+    let node = to_py_node(py, parsed.root(), source)?;
 
     Py::new(
         py,
@@ -622,7 +633,718 @@ fn build_numpy_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyNumPy
             source: source.to_string(),
         },
     )
-    .map_err(Into::into)
+}
+
+// ─── Model IR types ─────────────────────────────────────────────────────────
+
+#[pyclass(name = "Deprecation")]
+#[derive(Clone)]
+struct PyModelDeprecation {
+    #[pyo3(get, set)]
+    version: String,
+    #[pyo3(get, set)]
+    description: Option<String>,
+}
+
+#[pymethods]
+impl PyModelDeprecation {
+    #[new]
+    #[pyo3(signature = (version, *, description=None))]
+    fn new(version: String, description: Option<String>) -> Self {
+        Self {
+            version,
+            description,
+        }
+    }
+    fn __repr__(&self) -> String {
+        format!("Deprecation(version={:?})", self.version)
+    }
+}
+
+#[pyclass(name = "Parameter")]
+#[derive(Clone)]
+struct PyModelParameter {
+    #[pyo3(get, set)]
+    names: Vec<String>,
+    #[pyo3(get, set)]
+    type_annotation: Option<String>,
+    #[pyo3(get, set)]
+    description: Option<String>,
+    #[pyo3(get, set)]
+    is_optional: bool,
+    #[pyo3(get, set)]
+    default_value: Option<String>,
+}
+
+#[pymethods]
+impl PyModelParameter {
+    #[new]
+    #[pyo3(signature = (names, *, type_annotation=None, description=None, is_optional=false, default_value=None))]
+    fn new(
+        names: Vec<String>,
+        type_annotation: Option<String>,
+        description: Option<String>,
+        is_optional: bool,
+        default_value: Option<String>,
+    ) -> Self {
+        Self {
+            names,
+            type_annotation,
+            description,
+            is_optional,
+            default_value,
+        }
+    }
+    fn __repr__(&self) -> String {
+        format!("Parameter({})", self.names.join(", "))
+    }
+}
+
+#[pyclass(name = "Return")]
+#[derive(Clone)]
+struct PyModelReturn {
+    #[pyo3(get, set)]
+    name: Option<String>,
+    #[pyo3(get, set)]
+    type_annotation: Option<String>,
+    #[pyo3(get, set)]
+    description: Option<String>,
+}
+
+#[pymethods]
+impl PyModelReturn {
+    #[new]
+    #[pyo3(signature = (*, name=None, type_annotation=None, description=None))]
+    fn new(
+        name: Option<String>,
+        type_annotation: Option<String>,
+        description: Option<String>,
+    ) -> Self {
+        Self {
+            name,
+            type_annotation,
+            description,
+        }
+    }
+    fn __repr__(&self) -> String {
+        if let Some(ref name) = self.name {
+            format!("Return({})", name)
+        } else {
+            "Return(...)".to_string()
+        }
+    }
+}
+
+#[pyclass(name = "ExceptionEntry")]
+#[derive(Clone)]
+struct PyModelExceptionEntry {
+    #[pyo3(get, set)]
+    type_name: String,
+    #[pyo3(get, set)]
+    description: Option<String>,
+}
+
+#[pymethods]
+impl PyModelExceptionEntry {
+    #[new]
+    #[pyo3(signature = (type_name, *, description=None))]
+    fn new(type_name: String, description: Option<String>) -> Self {
+        Self {
+            type_name,
+            description,
+        }
+    }
+    fn __repr__(&self) -> String {
+        format!("ExceptionEntry({})", self.type_name)
+    }
+}
+
+#[pyclass(name = "SeeAlsoEntry")]
+#[derive(Clone)]
+struct PyModelSeeAlsoEntry {
+    #[pyo3(get, set)]
+    names: Vec<String>,
+    #[pyo3(get, set)]
+    description: Option<String>,
+}
+
+#[pymethods]
+impl PyModelSeeAlsoEntry {
+    #[new]
+    #[pyo3(signature = (names, *, description=None))]
+    fn new(names: Vec<String>, description: Option<String>) -> Self {
+        Self { names, description }
+    }
+    fn __repr__(&self) -> String {
+        format!("SeeAlsoEntry({})", self.names.join(", "))
+    }
+}
+
+#[pyclass(name = "Reference")]
+#[derive(Clone)]
+struct PyModelReference {
+    #[pyo3(get, set)]
+    number: Option<String>,
+    #[pyo3(get, set)]
+    content: Option<String>,
+}
+
+#[pymethods]
+impl PyModelReference {
+    #[new]
+    #[pyo3(signature = (*, number=None, content=None))]
+    fn new(number: Option<String>, content: Option<String>) -> Self {
+        Self { number, content }
+    }
+    fn __repr__(&self) -> String {
+        if let Some(ref num) = self.number {
+            format!("Reference({})", num)
+        } else {
+            "Reference(...)".to_string()
+        }
+    }
+}
+
+#[pyclass(name = "Attribute")]
+#[derive(Clone)]
+struct PyModelAttribute {
+    #[pyo3(get, set)]
+    name: String,
+    #[pyo3(get, set)]
+    type_annotation: Option<String>,
+    #[pyo3(get, set)]
+    description: Option<String>,
+}
+
+#[pymethods]
+impl PyModelAttribute {
+    #[new]
+    #[pyo3(signature = (name, *, type_annotation=None, description=None))]
+    fn new(name: String, type_annotation: Option<String>, description: Option<String>) -> Self {
+        Self {
+            name,
+            type_annotation,
+            description,
+        }
+    }
+    fn __repr__(&self) -> String {
+        format!("Attribute({})", self.name)
+    }
+}
+
+#[pyclass(name = "Method")]
+#[derive(Clone)]
+struct PyModelMethod {
+    #[pyo3(get, set)]
+    name: String,
+    #[pyo3(get, set)]
+    type_annotation: Option<String>,
+    #[pyo3(get, set)]
+    description: Option<String>,
+}
+
+#[pymethods]
+impl PyModelMethod {
+    #[new]
+    #[pyo3(signature = (name, *, type_annotation=None, description=None))]
+    fn new(name: String, type_annotation: Option<String>, description: Option<String>) -> Self {
+        Self {
+            name,
+            type_annotation,
+            description,
+        }
+    }
+    fn __repr__(&self) -> String {
+        format!("Method({})", self.name)
+    }
+}
+
+// ─── Section ────────────────────────────────────────────────────────────────
+
+fn free_section_kind_to_str(kind: &model::FreeSectionKind) -> &str {
+    match kind {
+        model::FreeSectionKind::Notes => "notes",
+        model::FreeSectionKind::Examples => "examples",
+        model::FreeSectionKind::Warnings => "warnings",
+        model::FreeSectionKind::Todo => "todo",
+        model::FreeSectionKind::Attention => "attention",
+        model::FreeSectionKind::Caution => "caution",
+        model::FreeSectionKind::Danger => "danger",
+        model::FreeSectionKind::Error => "error",
+        model::FreeSectionKind::Hint => "hint",
+        model::FreeSectionKind::Important => "important",
+        model::FreeSectionKind::Tip => "tip",
+        model::FreeSectionKind::Unknown(name) => name.as_str(),
+    }
+}
+
+fn str_to_free_section_kind(s: &str) -> model::FreeSectionKind {
+    match s {
+        "notes" => model::FreeSectionKind::Notes,
+        "examples" => model::FreeSectionKind::Examples,
+        "warnings" => model::FreeSectionKind::Warnings,
+        "todo" => model::FreeSectionKind::Todo,
+        "attention" => model::FreeSectionKind::Attention,
+        "caution" => model::FreeSectionKind::Caution,
+        "danger" => model::FreeSectionKind::Danger,
+        "error" => model::FreeSectionKind::Error,
+        "hint" => model::FreeSectionKind::Hint,
+        "important" => model::FreeSectionKind::Important,
+        "tip" => model::FreeSectionKind::Tip,
+        other => model::FreeSectionKind::Unknown(other.to_string()),
+    }
+}
+
+fn extract_parameters(py: Python<'_>, entries: &[Py<PyModelParameter>]) -> Vec<model::Parameter> {
+    entries
+        .iter()
+        .map(|p| {
+            let p = p.borrow(py);
+            model::Parameter {
+                names: p.names.clone(),
+                type_annotation: p.type_annotation.clone(),
+                description: p.description.clone(),
+                is_optional: p.is_optional,
+                default_value: p.default_value.clone(),
+            }
+        })
+        .collect()
+}
+
+fn extract_returns(py: Python<'_>, entries: &[Py<PyModelReturn>]) -> Vec<model::Return> {
+    entries
+        .iter()
+        .map(|r| {
+            let r = r.borrow(py);
+            model::Return {
+                name: r.name.clone(),
+                type_annotation: r.type_annotation.clone(),
+                description: r.description.clone(),
+            }
+        })
+        .collect()
+}
+
+fn extract_exceptions(
+    py: Python<'_>,
+    entries: &[Py<PyModelExceptionEntry>],
+) -> Vec<model::ExceptionEntry> {
+    entries
+        .iter()
+        .map(|e| {
+            let e = e.borrow(py);
+            model::ExceptionEntry {
+                type_name: e.type_name.clone(),
+                description: e.description.clone(),
+            }
+        })
+        .collect()
+}
+
+fn extract_attributes(py: Python<'_>, entries: &[Py<PyModelAttribute>]) -> Vec<model::Attribute> {
+    entries
+        .iter()
+        .map(|a| {
+            let a = a.borrow(py);
+            model::Attribute {
+                name: a.name.clone(),
+                type_annotation: a.type_annotation.clone(),
+                description: a.description.clone(),
+            }
+        })
+        .collect()
+}
+
+fn extract_methods(py: Python<'_>, entries: &[Py<PyModelMethod>]) -> Vec<model::Method> {
+    entries
+        .iter()
+        .map(|m| {
+            let m = m.borrow(py);
+            model::Method {
+                name: m.name.clone(),
+                type_annotation: m.type_annotation.clone(),
+                description: m.description.clone(),
+            }
+        })
+        .collect()
+}
+
+fn extract_see_also(
+    py: Python<'_>,
+    entries: &[Py<PyModelSeeAlsoEntry>],
+) -> Vec<model::SeeAlsoEntry> {
+    entries
+        .iter()
+        .map(|s| {
+            let s = s.borrow(py);
+            model::SeeAlsoEntry {
+                names: s.names.clone(),
+                description: s.description.clone(),
+            }
+        })
+        .collect()
+}
+
+fn extract_references(py: Python<'_>, entries: &[Py<PyModelReference>]) -> Vec<model::Reference> {
+    entries
+        .iter()
+        .map(|r| {
+            let r = r.borrow(py);
+            model::Reference {
+                number: r.number.clone(),
+                content: r.content.clone(),
+            }
+        })
+        .collect()
+}
+
+#[pyclass(name = "Section")]
+#[derive(Clone)]
+struct PyModelSection {
+    inner: model::Section,
+}
+
+#[pymethods]
+impl PyModelSection {
+    #[new]
+    #[pyo3(signature = (kind, *, parameters=None, returns=None, exceptions=None, attributes=None, methods=None, see_also_entries=None, references=None, body=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        py: Python<'_>,
+        kind: &str,
+        parameters: Option<Vec<Py<PyModelParameter>>>,
+        returns: Option<Vec<Py<PyModelReturn>>>,
+        exceptions: Option<Vec<Py<PyModelExceptionEntry>>>,
+        attributes: Option<Vec<Py<PyModelAttribute>>>,
+        methods: Option<Vec<Py<PyModelMethod>>>,
+        see_also_entries: Option<Vec<Py<PyModelSeeAlsoEntry>>>,
+        references: Option<Vec<Py<PyModelReference>>>,
+        body: Option<String>,
+    ) -> PyResult<Self> {
+        let inner = match kind {
+            "parameters" => {
+                model::Section::Parameters(extract_parameters(py, &parameters.unwrap_or_default()))
+            }
+            "keyword_parameters" => model::Section::KeywordParameters(extract_parameters(
+                py,
+                &parameters.unwrap_or_default(),
+            )),
+            "other_parameters" => model::Section::OtherParameters(extract_parameters(
+                py,
+                &parameters.unwrap_or_default(),
+            )),
+            "receives" => {
+                model::Section::Receives(extract_parameters(py, &parameters.unwrap_or_default()))
+            }
+            "returns" => model::Section::Returns(extract_returns(py, &returns.unwrap_or_default())),
+            "yields" => model::Section::Yields(extract_returns(py, &returns.unwrap_or_default())),
+            "raises" => {
+                model::Section::Raises(extract_exceptions(py, &exceptions.unwrap_or_default()))
+            }
+            "warns" => {
+                model::Section::Warns(extract_exceptions(py, &exceptions.unwrap_or_default()))
+            }
+            "attributes" => {
+                model::Section::Attributes(extract_attributes(py, &attributes.unwrap_or_default()))
+            }
+            "methods" => model::Section::Methods(extract_methods(py, &methods.unwrap_or_default())),
+            "see_also" => {
+                model::Section::SeeAlso(extract_see_also(py, &see_also_entries.unwrap_or_default()))
+            }
+            "references" => {
+                model::Section::References(extract_references(py, &references.unwrap_or_default()))
+            }
+            other => model::Section::FreeText {
+                kind: str_to_free_section_kind(other),
+                body: body.unwrap_or_default(),
+            },
+        };
+        Ok(Self { inner })
+    }
+
+    #[getter]
+    fn kind(&self) -> &str {
+        match &self.inner {
+            model::Section::Parameters(_) => "parameters",
+            model::Section::KeywordParameters(_) => "keyword_parameters",
+            model::Section::OtherParameters(_) => "other_parameters",
+            model::Section::Receives(_) => "receives",
+            model::Section::Returns(_) => "returns",
+            model::Section::Yields(_) => "yields",
+            model::Section::Raises(_) => "raises",
+            model::Section::Warns(_) => "warns",
+            model::Section::Attributes(_) => "attributes",
+            model::Section::Methods(_) => "methods",
+            model::Section::SeeAlso(_) => "see_also",
+            model::Section::References(_) => "references",
+            model::Section::FreeText { kind, .. } => free_section_kind_to_str(kind),
+        }
+    }
+
+    #[getter]
+    fn parameters(&self, py: Python<'_>) -> PyResult<Vec<Py<PyModelParameter>>> {
+        match &self.inner {
+            model::Section::Parameters(ps)
+            | model::Section::KeywordParameters(ps)
+            | model::Section::OtherParameters(ps)
+            | model::Section::Receives(ps) => ps
+                .iter()
+                .map(|p| {
+                    Py::new(
+                        py,
+                        PyModelParameter {
+                            names: p.names.clone(),
+                            type_annotation: p.type_annotation.clone(),
+                            description: p.description.clone(),
+                            is_optional: p.is_optional,
+                            default_value: p.default_value.clone(),
+                        },
+                    )
+                })
+                .collect(),
+            _ => Ok(vec![]),
+        }
+    }
+
+    #[getter]
+    fn returns(&self, py: Python<'_>) -> PyResult<Vec<Py<PyModelReturn>>> {
+        match &self.inner {
+            model::Section::Returns(rs) | model::Section::Yields(rs) => rs
+                .iter()
+                .map(|r| {
+                    Py::new(
+                        py,
+                        PyModelReturn {
+                            name: r.name.clone(),
+                            type_annotation: r.type_annotation.clone(),
+                            description: r.description.clone(),
+                        },
+                    )
+                })
+                .collect(),
+            _ => Ok(vec![]),
+        }
+    }
+
+    #[getter]
+    fn exceptions(&self, py: Python<'_>) -> PyResult<Vec<Py<PyModelExceptionEntry>>> {
+        match &self.inner {
+            model::Section::Raises(es) | model::Section::Warns(es) => es
+                .iter()
+                .map(|e| {
+                    Py::new(
+                        py,
+                        PyModelExceptionEntry {
+                            type_name: e.type_name.clone(),
+                            description: e.description.clone(),
+                        },
+                    )
+                })
+                .collect(),
+            _ => Ok(vec![]),
+        }
+    }
+
+    #[getter]
+    fn attributes(&self, py: Python<'_>) -> PyResult<Vec<Py<PyModelAttribute>>> {
+        match &self.inner {
+            model::Section::Attributes(attrs) => attrs
+                .iter()
+                .map(|a| {
+                    Py::new(
+                        py,
+                        PyModelAttribute {
+                            name: a.name.clone(),
+                            type_annotation: a.type_annotation.clone(),
+                            description: a.description.clone(),
+                        },
+                    )
+                })
+                .collect(),
+            _ => Ok(vec![]),
+        }
+    }
+
+    #[getter]
+    fn methods(&self, py: Python<'_>) -> PyResult<Vec<Py<PyModelMethod>>> {
+        match &self.inner {
+            model::Section::Methods(ms) => ms
+                .iter()
+                .map(|m| {
+                    Py::new(
+                        py,
+                        PyModelMethod {
+                            name: m.name.clone(),
+                            type_annotation: m.type_annotation.clone(),
+                            description: m.description.clone(),
+                        },
+                    )
+                })
+                .collect(),
+            _ => Ok(vec![]),
+        }
+    }
+
+    #[getter]
+    fn see_also_entries(&self, py: Python<'_>) -> PyResult<Vec<Py<PyModelSeeAlsoEntry>>> {
+        match &self.inner {
+            model::Section::SeeAlso(items) => items
+                .iter()
+                .map(|item| {
+                    Py::new(
+                        py,
+                        PyModelSeeAlsoEntry {
+                            names: item.names.clone(),
+                            description: item.description.clone(),
+                        },
+                    )
+                })
+                .collect(),
+            _ => Ok(vec![]),
+        }
+    }
+
+    #[getter]
+    fn references(&self, py: Python<'_>) -> PyResult<Vec<Py<PyModelReference>>> {
+        match &self.inner {
+            model::Section::References(refs) => refs
+                .iter()
+                .map(|r| {
+                    Py::new(
+                        py,
+                        PyModelReference {
+                            number: r.number.clone(),
+                            content: r.content.clone(),
+                        },
+                    )
+                })
+                .collect(),
+            _ => Ok(vec![]),
+        }
+    }
+
+    #[getter]
+    fn body(&self) -> Option<String> {
+        match &self.inner {
+            model::Section::FreeText { body, .. } => Some(body.clone()),
+            _ => None,
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("Section({})", self.kind())
+    }
+}
+
+// ─── Model Docstring ────────────────────────────────────────────────────────
+
+#[pyclass(name = "Docstring")]
+#[derive(Clone)]
+struct PyModelDocstring {
+    inner: model::Docstring,
+}
+
+#[pymethods]
+impl PyModelDocstring {
+    #[new]
+    #[pyo3(signature = (*, summary=None, extended_summary=None, deprecation=None, sections=None))]
+    fn new(
+        py: Python<'_>,
+        summary: Option<String>,
+        extended_summary: Option<String>,
+        deprecation: Option<Py<PyModelDeprecation>>,
+        sections: Option<Vec<Py<PyModelSection>>>,
+    ) -> Self {
+        Self {
+            inner: model::Docstring {
+                summary,
+                extended_summary,
+                deprecation: deprecation.map(|d| {
+                    let d = d.borrow(py);
+                    model::Deprecation {
+                        version: d.version.clone(),
+                        description: d.description.clone(),
+                    }
+                }),
+                sections: sections
+                    .map(|ss| ss.iter().map(|s| s.borrow(py).inner.clone()).collect())
+                    .unwrap_or_default(),
+            },
+        }
+    }
+
+    #[getter]
+    fn summary(&self) -> Option<&str> {
+        self.inner.summary.as_deref()
+    }
+
+    #[setter]
+    fn set_summary(&mut self, v: Option<String>) {
+        self.inner.summary = v;
+    }
+
+    #[getter]
+    fn extended_summary(&self) -> Option<&str> {
+        self.inner.extended_summary.as_deref()
+    }
+
+    #[setter]
+    fn set_extended_summary(&mut self, v: Option<String>) {
+        self.inner.extended_summary = v;
+    }
+
+    #[getter]
+    fn deprecation(&self, py: Python<'_>) -> PyResult<Option<Py<PyModelDeprecation>>> {
+        self.inner
+            .deprecation
+            .as_ref()
+            .map(|d| {
+                Py::new(
+                    py,
+                    PyModelDeprecation {
+                        version: d.version.clone(),
+                        description: d.description.clone(),
+                    },
+                )
+            })
+            .transpose()
+    }
+
+    #[setter]
+    fn set_deprecation(&mut self, dep: Option<Py<PyModelDeprecation>>) {
+        Python::with_gil(|py| {
+            self.inner.deprecation = dep.map(|d| {
+                let d = d.borrow(py);
+                model::Deprecation {
+                    version: d.version.clone(),
+                    description: d.description.clone(),
+                }
+            });
+        });
+    }
+
+    #[getter]
+    fn sections(&self, py: Python<'_>) -> PyResult<Vec<Py<PyModelSection>>> {
+        self.inner
+            .sections
+            .iter()
+            .map(|s| Py::new(py, PyModelSection { inner: s.clone() }))
+            .collect()
+    }
+
+    #[setter]
+    fn set_sections(&mut self, sections: Vec<Py<PyModelSection>>) {
+        Python::with_gil(|py| {
+            self.inner.sections = sections
+                .iter()
+                .map(|s| s.borrow(py).inner.clone())
+                .collect();
+        });
+    }
+
+    fn __repr__(&self) -> String {
+        format!("Docstring(summary={:?})", self.inner.summary)
+    }
 }
 
 // ─── Module functions ───────────────────────────────────────────────────────
@@ -637,7 +1359,7 @@ fn parse_google(py: Python<'_>, input: &str) -> PyResult<Py<PyGoogleDocstring>> 
 /// Parse a NumPy-style docstring and return a NumPyDocstring object.
 #[pyfunction]
 fn parse_numpy(py: Python<'_>, input: &str) -> PyResult<Py<PyNumPyDocstring>> {
-    let parsed = pydocstring_core::numpy::parse_numpy(input);
+    let parsed = pydocstring_core::parse::numpy::parse_numpy(input);
     build_numpy_docstring(py, &parsed)
 }
 
@@ -671,10 +1393,26 @@ impl PyStyle {
 /// Detect the docstring style.
 #[pyfunction]
 fn detect_style(input: &str) -> PyStyle {
-    match pydocstring_core::detect_style(input) {
-        pydocstring_core::Style::Google => PyStyle::Google,
-        pydocstring_core::Style::NumPy => PyStyle::NumPy,
+    match pydocstring_core::parse::detect_style(input) {
+        pydocstring_core::parse::Style::Google => PyStyle::Google,
+        pydocstring_core::parse::Style::NumPy => PyStyle::NumPy,
     }
+}
+
+/// Emit a model Docstring as a Google-style docstring string.
+#[pyfunction]
+#[pyo3(name = "emit_google")]
+fn py_emit_google(py: Python<'_>, doc: Py<PyModelDocstring>) -> String {
+    let doc = doc.borrow(py);
+    pydocstring_core::emit::google::emit_google(&doc.inner)
+}
+
+/// Emit a model Docstring as a NumPy-style docstring string.
+#[pyfunction]
+#[pyo3(name = "emit_numpy")]
+fn py_emit_numpy(py: Python<'_>, doc: Py<PyModelDocstring>) -> String {
+    let doc = doc.borrow(py);
+    pydocstring_core::emit::numpy::emit_numpy(&doc.inner)
 }
 
 // ─── Module ─────────────────────────────────────────────────────────────────
@@ -684,6 +1422,8 @@ fn pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_google, m)?)?;
     m.add_function(wrap_pyfunction!(parse_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(detect_style, m)?)?;
+    m.add_function(wrap_pyfunction!(py_emit_google, m)?)?;
+    m.add_function(wrap_pyfunction!(py_emit_numpy, m)?)?;
     m.add_class::<PyStyle>()?;
     m.add_class::<PyTextRange>()?;
     m.add_class::<PyToken>()?;
@@ -698,6 +1438,16 @@ fn pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyNumPyParameter>()?;
     m.add_class::<PyNumPyReturns>()?;
     m.add_class::<PyNumPyException>()?;
+    m.add_class::<PyModelDocstring>()?;
+    m.add_class::<PyModelSection>()?;
+    m.add_class::<PyModelParameter>()?;
+    m.add_class::<PyModelReturn>()?;
+    m.add_class::<PyModelExceptionEntry>()?;
+    m.add_class::<PyModelSeeAlsoEntry>()?;
+    m.add_class::<PyModelReference>()?;
+    m.add_class::<PyModelAttribute>()?;
+    m.add_class::<PyModelMethod>()?;
+    m.add_class::<PyModelDeprecation>()?;
 
     // Add walk as a pure-Python function via exec
     let globals = pyo3::types::PyDict::new(m.py());

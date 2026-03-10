@@ -3,7 +3,7 @@
 //! Each wrapper is a newtype over `&SyntaxNode` that provides typed accessors
 //! for the node's children (tokens and sub-nodes).
 
-use crate::styles::numpy::kind::NumPySectionKind;
+use crate::parse::numpy::kind::NumPySectionKind;
 use crate::syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 
 // =============================================================================

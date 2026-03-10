@@ -4,8 +4,8 @@
 //! containing a tree of [`SyntaxNode`]s and [`SyntaxToken`]s.
 
 use crate::cursor::{LineCursor, indent_columns, indent_len};
-use crate::styles::numpy::kind::NumPySectionKind;
-use crate::styles::utils::{find_entry_colon, find_matching_close, split_comma_parts};
+use crate::parse::numpy::kind::NumPySectionKind;
+use crate::parse::utils::{find_entry_colon, find_matching_close, split_comma_parts};
 use crate::syntax::{Parsed, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 use crate::text::TextRange;
 
@@ -886,10 +886,11 @@ enum SectionBody {
 impl SectionBody {
     fn new(kind: NumPySectionKind) -> Self {
         match kind {
-            NumPySectionKind::Parameters
-            | NumPySectionKind::OtherParameters
-            | NumPySectionKind::Receives => Self::Parameters(Vec::new()),
-            NumPySectionKind::Returns | NumPySectionKind::Yields => Self::Returns(Vec::new()),
+            NumPySectionKind::Parameters => Self::Parameters(Vec::new()),
+            NumPySectionKind::OtherParameters => Self::Parameters(Vec::new()),
+            NumPySectionKind::Receives => Self::Parameters(Vec::new()),
+            NumPySectionKind::Returns => Self::Returns(Vec::new()),
+            NumPySectionKind::Yields => Self::Returns(Vec::new()),
             NumPySectionKind::Raises => Self::Raises(Vec::new()),
             NumPySectionKind::Warns => Self::Warns(Vec::new()),
             NumPySectionKind::SeeAlso => Self::SeeAlso(Vec::new()),
@@ -922,14 +923,14 @@ impl SectionBody {
 
     fn into_children(self) -> Vec<SyntaxElement> {
         match self {
-            Self::Parameters(nodes)
-            | Self::Returns(nodes)
-            | Self::Raises(nodes)
-            | Self::Warns(nodes)
-            | Self::SeeAlso(nodes)
-            | Self::References(nodes)
-            | Self::Attributes(nodes)
-            | Self::Methods(nodes) => nodes,
+            Self::Parameters(nodes) => nodes,
+            Self::Returns(nodes) => nodes,
+            Self::Raises(nodes) => nodes,
+            Self::Warns(nodes) => nodes,
+            Self::SeeAlso(nodes) => nodes,
+            Self::References(nodes) => nodes,
+            Self::Attributes(nodes) => nodes,
+            Self::Methods(nodes) => nodes,
             Self::FreeText(range) => {
                 if let Some(r) = range {
                     vec![SyntaxElement::Token(SyntaxToken::new(
@@ -953,8 +954,8 @@ impl SectionBody {
 /// # Example
 ///
 /// ```rust
-/// use pydocstring::numpy::parse_numpy;
-/// use pydocstring::SyntaxKind;
+/// use pydocstring::parse::numpy::parse_numpy;
+/// use pydocstring::syntax::SyntaxKind;
 ///
 /// let input = "Summary.\n\nParameters\n----------\nx : int\n    The value.\n";
 /// let parsed = parse_numpy(input);

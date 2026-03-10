@@ -8,7 +8,7 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use pydocstring::numpy::{parse_numpy, nodes::NumPyDocstring};
+//! use pydocstring::parse::numpy::{parse_numpy, NumPyDocstring};
 //!
 //! let docstring = r#"
 //! Brief description.
@@ -27,7 +27,7 @@
 //! ## Style Auto-Detection
 //!
 //! ```rust
-//! use pydocstring::{detect_style, Style};
+//! use pydocstring::parse::{detect_style, Style};
 //!
 //! let numpy_doc = "Summary.\n\nParameters\n----------\nx : int\n    Desc.";
 //! assert_eq!(detect_style(numpy_doc), Style::NumPy);
@@ -44,13 +44,8 @@
 //! - Google style: fully supported
 
 pub(crate) mod cursor;
-pub mod styles;
+pub mod emit;
+pub mod model;
+pub mod parse;
 pub mod syntax;
 pub mod text;
-
-pub use styles::Style;
-pub use styles::detect_style;
-pub use styles::google::{self, GoogleSectionKind};
-pub use styles::numpy::{self, NumPySectionKind};
-pub use syntax::{Parsed, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken, Visitor, walk};
-pub use text::{TextRange, TextSize};

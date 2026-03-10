@@ -5,6 +5,7 @@
 pub mod kind;
 pub mod nodes;
 pub mod parser;
+pub mod to_model;
 
 pub use kind::GoogleSectionKind;
 pub use nodes::{

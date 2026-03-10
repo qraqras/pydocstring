@@ -47,8 +47,8 @@ impl fmt::Display for Style {
 /// # Example
 ///
 /// ```rust
-/// use pydocstring::detect_style;
-/// use pydocstring::Style;
+/// use pydocstring::parse::detect_style;
+/// use pydocstring::parse::Style;
 ///
 /// let numpy = "Summary.\n\nParameters\n----------\nx : int\n    Description.";
 /// assert_eq!(detect_style(numpy), Style::NumPy);
