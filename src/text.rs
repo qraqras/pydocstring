@@ -149,3 +149,67 @@ impl fmt::Display for TextRange {
         write!(f, "{}..{}", self.start, self.end)
     }
 }
+
+// =============================================================================
+// LineColumn
+// =============================================================================
+
+/// A line/column position in the source text.
+///
+/// `lineno` is 1-based; `col` is the 0-based byte offset from the start of
+/// the line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct LineColumn {
+    /// 1-based line number.
+    pub lineno: u32,
+    /// 0-based byte column offset from the start of the line.
+    pub col: u32,
+}
+
+impl fmt::Display for LineColumn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.lineno, self.col)
+    }
+}
+
+// =============================================================================
+// LineIndex
+// =============================================================================
+
+/// A lookup table for converting byte offsets to [`LineColumn`] positions.
+///
+/// Build once from the source text with [`LineIndex::new`], then call
+/// [`LineIndex::line_col`] for any [`TextSize`] offset.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineIndex {
+    /// Byte offset of the first character of each line.
+    /// `line_starts[0]` is always 0 (start of the first line).
+    line_starts: Vec<u32>,
+}
+
+impl LineIndex {
+    /// Build a `LineIndex` from the source text.
+    pub fn new(source: &str) -> Self {
+        let mut line_starts = vec![0u32];
+        for (i, b) in source.bytes().enumerate() {
+            if b == b'\n' {
+                line_starts.push((i + 1) as u32);
+            }
+        }
+        Self { line_starts }
+    }
+
+    /// Convert a byte offset to a [`LineColumn`] position.
+    ///
+    /// `lineno` is 1-based; `col` is the 0-based byte offset within the line.
+    pub fn line_col(&self, offset: TextSize) -> LineColumn {
+        let offset = offset.raw();
+        // The index of the last line that starts at or before `offset`.
+        let line = self.line_starts.partition_point(|&s| s <= offset) - 1;
+        let col = offset - self.line_starts[line];
+        LineColumn {
+            lineno: line as u32 + 1,
+            col,
+        }
+    }
+}

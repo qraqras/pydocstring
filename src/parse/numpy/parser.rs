@@ -5,7 +5,9 @@
 
 use crate::cursor::{LineCursor, indent_columns, indent_len};
 use crate::parse::numpy::kind::NumPySectionKind;
-use crate::parse::utils::{find_entry_colon, find_matching_close, split_comma_parts};
+use crate::parse::utils::{
+    find_entry_colon, find_matching_close, split_comma_parts, try_parse_bracket_entry,
+};
 use crate::syntax::{Parsed, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 use crate::text::TextRange;
 
@@ -104,6 +106,7 @@ struct ParamHeaderParts {
     default_keyword: Option<TextRange>,
     default_separator: Option<TextRange>,
     default_value: Option<TextRange>,
+    first_description: Option<TextRange>,
 }
 
 fn parse_name_and_type(
@@ -112,6 +115,11 @@ fn parse_name_and_type(
     col_base: usize,
     cursor: &LineCursor,
 ) -> ParamHeaderParts {
+    // --- Google-style bracket pattern: `name (type): desc` ---
+    if let Some(result) = try_parse_google_style_entry(text, line_idx, col_base, cursor) {
+        return result;
+    }
+
     let Some(colon_pos) = find_entry_colon(text) else {
         let names = parse_name_list(text, line_idx, col_base, cursor);
         return ParamHeaderParts {
@@ -122,6 +130,7 @@ fn parse_name_and_type(
             default_keyword: None,
             default_separator: None,
             default_value: None,
+            first_description: None,
         };
     };
 
@@ -142,6 +151,7 @@ fn parse_name_and_type(
             default_keyword: None,
             default_separator: None,
             default_value: None,
+            first_description: None,
         };
     }
 
@@ -215,7 +225,57 @@ fn parse_name_and_type(
         default_keyword,
         default_separator,
         default_value,
+        first_description: None,
     }
+}
+
+/// Try to parse a Google-style entry `name (type): desc` or `name(type): desc`.
+///
+/// Returns `Some(ParamHeaderParts)` when the line matches the bracket-style
+/// pattern.  Otherwise returns `None` so that the caller falls through to
+/// the normal NumPy parsing path.
+fn try_parse_google_style_entry(
+    text: &str,
+    line_idx: usize,
+    col_base: usize,
+    cursor: &LineCursor,
+) -> Option<ParamHeaderParts> {
+    let entry = try_parse_bracket_entry(text)?;
+
+    let names = parse_name_list(entry.name, line_idx, col_base, cursor);
+
+    let param_type = if !entry.clean_type.is_empty() {
+        Some(cursor.make_line_range(
+            line_idx,
+            col_base + entry.type_offset,
+            entry.clean_type.len(),
+        ))
+    } else {
+        None
+    };
+
+    let optional = entry
+        .optional_offset
+        .map(|r| cursor.make_line_range(line_idx, col_base + r, "optional".len()));
+
+    let colon = entry
+        .colon
+        .map(|c| cursor.make_line_range(line_idx, col_base + c, 1));
+
+    let first_description = entry
+        .description_offset
+        .map(|d| cursor.make_line_range(line_idx, col_base + d, entry.description.unwrap().len()));
+
+    Some(ParamHeaderParts {
+        names,
+        colon,
+        param_type,
+        optional,
+        default_keyword: None,
+        default_separator: None,
+        default_value: None,
+        first_description,
+    })
 }
 
 fn parse_name_list(
@@ -291,6 +351,12 @@ fn build_parameter_node(parts: &ParamHeaderParts, range: TextRange) -> SyntaxNod
         children.push(SyntaxElement::Token(SyntaxToken::new(
             SyntaxKind::DEFAULT_VALUE,
             dv,
+        )));
+    }
+    if let Some(desc) = parts.first_description {
+        children.push(SyntaxElement::Token(SyntaxToken::new(
+            SyntaxKind::DESCRIPTION,
+            desc,
         )));
     }
     SyntaxNode::new(SyntaxKind::NUMPY_PARAMETER, range, children)

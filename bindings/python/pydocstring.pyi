@@ -63,6 +63,17 @@ class TextRange:
     @property
     def end(self) -> int: ...
 
+class LineColumn:
+    """A line/column position in the source text.
+
+    ``lineno`` is 1-based; ``col`` is 0-based and counted in Unicode
+    codepoints, matching Python's ``ast`` module convention.
+    """
+    @property
+    def lineno(self) -> int: ...
+    @property
+    def col(self) -> int: ...
+
 class Token:
     @property
     def kind(self) -> SyntaxKind: ...
@@ -130,6 +141,13 @@ class GoogleDocstring:
     def source(self) -> str: ...
     def pretty_print(self) -> str: ...
     def to_model(self) -> Docstring: ...
+    def line_col(self, offset: int) -> LineColumn:
+        """Convert a byte offset to a LineColumn.
+
+        The offset is typically ``token.range.start`` or ``token.range.end``.
+        ``lineno`` is 1-based; ``col`` is 0-based Unicode codepoints.
+        """
+        ...
 
 # ─── NumPy ───────────────────────────────────────────────────────────────────
 
@@ -186,6 +204,13 @@ class NumPyDocstring:
     def source(self) -> str: ...
     def pretty_print(self) -> str: ...
     def to_model(self) -> Docstring: ...
+    def line_col(self, offset: int) -> LineColumn:
+        """Convert a byte offset to a LineColumn.
+
+        The offset is typically ``token.range.start`` or ``token.range.end``.
+        ``lineno`` is 1-based; ``col`` is 0-based Unicode codepoints.
+        """
+        ...
 
 # ─── Model IR ────────────────────────────────────────────────────────────────
 
