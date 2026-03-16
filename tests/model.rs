@@ -367,3 +367,34 @@ fn same_ir_from_both_styles() {
         _ => panic!("both should be Parameters sections"),
     }
 }
+
+// =============================================================================
+// NumPy IR: Google-style entries in NumPy sections
+// =============================================================================
+
+#[test]
+fn numpy_google_style_entry_to_model() {
+    let parsed = parse_numpy("Summary.\n\nParameters\n----------\nname (str): The name.\n");
+    let doc = numpy_to_model(&parsed).unwrap();
+    let params = match &doc.sections[0] {
+        Section::Parameters(p) => p,
+        _ => panic!("expected Parameters"),
+    };
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].names, vec!["name"]);
+    assert_eq!(params[0].type_annotation.as_deref(), Some("str"));
+    assert_eq!(params[0].description.as_deref(), Some("The name."));
+}
+
+#[test]
+fn numpy_google_style_optional_to_model() {
+    let parsed =
+        parse_numpy("Summary.\n\nParameters\n----------\nname (str, optional): The name.\n");
+    let doc = numpy_to_model(&parsed).unwrap();
+    let params = match &doc.sections[0] {
+        Section::Parameters(p) => p,
+        _ => panic!("expected Parameters"),
+    };
+    assert_eq!(params[0].type_annotation.as_deref(), Some("str"));
+    assert!(params[0].is_optional);
+}

@@ -430,3 +430,148 @@ fn test_receives_section_body_variant() {
     let params: Vec<_> = s.parameters().collect();
     assert_eq!(params.len(), 1);
 }
+
+// =============================================================================
+// Google-style entry format in NumPy sections
+// =============================================================================
+
+#[test]
+fn test_google_style_entry_in_numpy_section() {
+    let docstring = "Summary.\n\nParameters\n----------\nname (str): The name.\n";
+    let result = parse_numpy(docstring);
+    let params = parameters(&result);
+    assert_eq!(params.len(), 1);
+
+    let names: Vec<_> = params[0].names().collect();
+    assert_eq!(names[0].text(result.source()), "name");
+    assert_eq!(
+        params[0].r#type().map(|t| t.text(result.source())),
+        Some("str")
+    );
+    assert_eq!(
+        params[0].description().map(|t| t.text(result.source())),
+        Some("The name.")
+    );
+}
+
+#[test]
+fn test_google_style_entry_with_optional() {
+    let docstring = "Summary.\n\nParameters\n----------\nname (str, optional): The name.\n";
+    let result = parse_numpy(docstring);
+    let params = parameters(&result);
+    assert_eq!(params.len(), 1);
+
+    let names: Vec<_> = params[0].names().collect();
+    assert_eq!(names[0].text(result.source()), "name");
+    assert_eq!(
+        params[0].r#type().map(|t| t.text(result.source())),
+        Some("str")
+    );
+    assert!(params[0].optional().is_some());
+    assert_eq!(
+        params[0].description().map(|t| t.text(result.source())),
+        Some("The name.")
+    );
+}
+
+#[test]
+fn test_google_style_entry_no_description() {
+    let docstring = "Summary.\n\nParameters\n----------\nname (int):\n";
+    let result = parse_numpy(docstring);
+    let params = parameters(&result);
+    assert_eq!(params.len(), 1);
+
+    let names: Vec<_> = params[0].names().collect();
+    assert_eq!(names[0].text(result.source()), "name");
+    assert_eq!(
+        params[0].r#type().map(|t| t.text(result.source())),
+        Some("int")
+    );
+    assert!(params[0].description().is_none());
+}
+
+#[test]
+fn test_google_style_entry_with_continuation() {
+    let docstring =
+        "Summary.\n\nParameters\n----------\nname (str): The name.\n    Continued here.\n";
+    let result = parse_numpy(docstring);
+    let params = parameters(&result);
+    assert_eq!(params.len(), 1);
+
+    assert_eq!(
+        params[0].r#type().map(|t| t.text(result.source())),
+        Some("str")
+    );
+    assert_eq!(
+        params[0].description().map(|t| t.text(result.source())),
+        Some("The name.\n    Continued here.")
+    );
+}
+
+#[test]
+fn test_google_style_entry_complex_type() {
+    let docstring = "Summary.\n\nParameters\n----------\ndata (Dict[str, int]): The mapping.\n";
+    let result = parse_numpy(docstring);
+    let params = parameters(&result);
+    assert_eq!(params.len(), 1);
+
+    assert_eq!(
+        params[0].r#type().map(|t| t.text(result.source())),
+        Some("Dict[str, int]")
+    );
+    assert_eq!(
+        params[0].description().map(|t| t.text(result.source())),
+        Some("The mapping.")
+    );
+}
+
+#[test]
+fn test_google_style_mixed_with_numpy_style() {
+    let docstring = "Summary.\n\nParameters\n----------\nx (int): First.\ny : str\n    Second.\n";
+    let result = parse_numpy(docstring);
+    let params = parameters(&result);
+    assert_eq!(params.len(), 2);
+
+    // Google-style entry
+    assert_eq!(params[0].names().next().unwrap().text(result.source()), "x");
+    assert_eq!(
+        params[0].r#type().map(|t| t.text(result.source())),
+        Some("int")
+    );
+    assert_eq!(
+        params[0].description().map(|t| t.text(result.source())),
+        Some("First.")
+    );
+
+    // NumPy-style entry
+    assert_eq!(params[1].names().next().unwrap().text(result.source()), "y");
+    assert_eq!(
+        params[1].r#type().map(|t| t.text(result.source())),
+        Some("str")
+    );
+    assert_eq!(
+        params[1].description().map(|t| t.text(result.source())),
+        Some("Second.")
+    );
+}
+
+#[test]
+fn test_google_style_entry_no_colon_after_bracket() {
+    let docstring = "Summary.\n\nParameters\n----------\nname (int)\n    Desc.\n";
+    let result = parse_numpy(docstring);
+    let params = parameters(&result);
+    assert_eq!(params.len(), 1);
+
+    assert_eq!(
+        params[0].names().next().unwrap().text(result.source()),
+        "name"
+    );
+    assert_eq!(
+        params[0].r#type().map(|t| t.text(result.source())),
+        Some("int")
+    );
+    assert_eq!(
+        params[0].description().map(|t| t.text(result.source())),
+        Some("Desc.")
+    );
+}

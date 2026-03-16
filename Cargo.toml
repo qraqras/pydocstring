@@ -12,7 +12,7 @@ readme = "README.md"
 keywords = ["python", "docstring", "parser", "google", "numpy"]
 categories = ["parser-implementations", "development-tools"]
 rust-version = "1.85"
-exclude = [".devcontainer/", ".githooks/", ".github/", "target/", "tests/", "bindings/"]
+exclude = [".devcontainer/", ".githooks/", ".github/", "bindings/", "target/", "tests/"]
 
 [lib]
 name = "pydocstring"

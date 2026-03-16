@@ -5,7 +5,7 @@
 
 use crate::cursor::{LineCursor, indent_len};
 use crate::parse::google::kind::GoogleSectionKind;
-use crate::parse::utils::{find_entry_colon, find_matching_close, split_comma_parts};
+use crate::parse::utils::{find_entry_colon, try_parse_bracket_entry};
 use crate::syntax::{Parsed, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 use crate::text::TextRange;
 
@@ -22,42 +22,6 @@ fn extract_section_name(trimmed: &str) -> (&str, bool) {
         (stripped.trim_end(), true)
     } else {
         (trimmed, false)
-    }
-}
-
-// =============================================================================
-// Optional helpers
-// =============================================================================
-
-/// Strip a trailing `optional` marker from a type annotation.
-///
-/// Uses bracket-aware comma splitting so that commas inside type
-/// annotations like `Dict[str, int]` are never mistaken for the
-/// separator before `optional`.
-///
-/// Returns `(clean_type, optional_byte_offset)` where the offset is
-/// relative to the start of `type_content` and points to the `o` in
-/// `optional`.
-fn strip_optional(type_content: &str) -> (&str, Option<usize>) {
-    let parts = split_comma_parts(type_content);
-    let mut optional_offset = None;
-    let mut type_end = 0;
-
-    for &(seg_offset, seg_raw) in &parts {
-        let seg = seg_raw.trim();
-        if seg == "optional" {
-            let ws_lead = seg_raw.len() - seg_raw.trim_start().len();
-            optional_offset = Some(seg_offset + ws_lead);
-        } else if !seg.is_empty() {
-            type_end = seg_offset + seg_raw.trim_end().len();
-        }
-    }
-
-    if let Some(opt) = optional_offset {
-        let clean = type_content[..type_end].trim_end_matches(',').trim_end();
-        (clean, Some(opt))
-    } else {
-        (type_content, None)
     }
 }
 
@@ -89,42 +53,24 @@ fn parse_entry_header(cursor: &LineCursor, parse_type: bool) -> EntryHeader {
     let entry_start = cursor.substr_offset(trimmed);
 
     // --- Pattern 1: `name (type): desc` or `name(type): desc` ---
-    let bracket_pos = if parse_type {
-        trimmed.bytes().enumerate().find_map(|(i, b)| {
-            if (b == b'(' || b == b'[' || b == b'{' || b == b'<') && i > 0 {
-                Some(i)
-            } else {
-                None
-            }
-        })
-    } else {
-        None
-    };
+    if parse_type {
+        if let Some(entry) = try_parse_bracket_entry(trimmed) {
+            let name_span = TextRange::from_offset_len(entry_start, entry.name.len());
+            let open_bracket = TextRange::from_offset_len(entry_start + entry.open_bracket, 1);
+            let close_bracket = TextRange::from_offset_len(entry_start + entry.close_bracket, 1);
 
-    if let Some(rel_paren) = bracket_pos {
-        if let Some(rel_close) = find_matching_close(trimmed, rel_paren) {
-            let abs_paren = entry_start + rel_paren;
-            let abs_close = entry_start + rel_close;
-
-            let name = trimmed[..rel_paren].trim_end();
-            let name_span = TextRange::from_offset_len(entry_start, name.len());
-            let open_bracket = TextRange::from_offset_len(abs_paren, 1);
-            let close_bracket = TextRange::from_offset_len(abs_close, 1);
-
-            let type_raw = &trimmed[rel_paren + 1..rel_close];
-            let type_trimmed = type_raw.trim();
-            let leading_ws = type_raw.len() - type_raw.trim_start().len();
-            let type_start = abs_paren + 1 + leading_ws;
-
-            let (clean_type, opt_rel) = strip_optional(type_trimmed);
-            let opt_span =
-                opt_rel.map(|r| TextRange::from_offset_len(type_start + r, "optional".len()));
-
-            let type_span = if !clean_type.is_empty() {
-                Some(TextRange::from_offset_len(type_start, clean_type.len()))
+            let type_span = if !entry.clean_type.is_empty() {
+                Some(TextRange::from_offset_len(
+                    entry_start + entry.type_offset,
+                    entry.clean_type.len(),
+                ))
             } else {
                 None
             };
+
+            let opt_span = entry
+                .optional_offset
+                .map(|r| TextRange::from_offset_len(entry_start + r, "optional".len()));
 
             let type_info = Some(TypeInfo {
                 open_bracket,
@@ -133,8 +79,12 @@ fn parse_entry_header(cursor: &LineCursor, parse_type: bool) -> EntryHeader {
                 optional: opt_span,
             });
 
-            let after_close = &trimmed[rel_close + 1..];
-            let (first_description, colon) = extract_desc_after_colon(after_close, abs_close + 1);
+            let colon = entry
+                .colon
+                .map(|c| TextRange::from_offset_len(entry_start + c, 1));
+            let first_description = entry.description_offset.map(|d| {
+                TextRange::from_offset_len(entry_start + d, entry.description.unwrap().len())
+            });
 
             let range_end = if let Some(ref desc) = first_description {
                 desc.end()
@@ -190,29 +140,6 @@ fn parse_entry_header(cursor: &LineCursor, parse_type: bool) -> EntryHeader {
         type_info: None,
         colon: None,
         first_description: None,
-    }
-}
-
-/// Extract description and colon spans after the closing bracket.
-fn extract_desc_after_colon(
-    after_paren: &str,
-    base_offset: usize,
-) -> (Option<TextRange>, Option<TextRange>) {
-    let stripped = after_paren.trim_start();
-    if let Some(after_colon) = stripped.strip_prefix(':') {
-        let desc = after_colon.trim_start();
-        let leading_to_stripped = after_paren.len() - stripped.len();
-        let leading_after_colon = after_colon.len() - desc.len();
-        let colon_abs = base_offset + leading_to_stripped;
-        let desc_start = colon_abs + 1 + leading_after_colon;
-        let desc_range = if desc.is_empty() {
-            None
-        } else {
-            Some(TextRange::from_offset_len(desc_start, desc.len()))
-        };
-        (desc_range, Some(TextRange::from_offset_len(colon_abs, 1)))
-    } else {
-        (None, None)
     }
 }
 
@@ -1069,19 +996,5 @@ mod tests {
         let ti = header.type_info.unwrap();
         assert_eq!(ti.r#type.unwrap().source_text(src), "Dict[str, int]");
         assert_eq!(header.first_description.unwrap().source_text(src), "Values");
-    }
-
-    #[test]
-    fn test_strip_optional_basic() {
-        assert_eq!(strip_optional("int, optional"), ("int", Some(5)));
-        assert_eq!(strip_optional("int"), ("int", None));
-        assert_eq!(
-            strip_optional("Dict[str, int], optional"),
-            ("Dict[str, int]", Some(16))
-        );
-        assert_eq!(strip_optional("optional"), ("", Some(0)));
-        assert_eq!(strip_optional("int,optional"), ("int", Some(4)));
-        assert_eq!(strip_optional("int,  optional"), ("int", Some(6)));
-        assert_eq!(strip_optional("int, optional  "), ("int", Some(5)));
     }
 }
