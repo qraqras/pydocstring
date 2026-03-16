@@ -39,6 +39,60 @@ impl From<&TextRange> for PyTextRange {
     }
 }
 
+// ─── LineColumn ─────────────────────────────────────────────────────────────
+
+/// A line/column position in the source text.
+///
+/// `lineno` is 1-based; `col` is the 0-based Unicode codepoint offset from
+/// the start of the line (compatible with Python's `ast` module).
+#[pyclass(name = "LineColumn", frozen)]
+struct PyLineColumn {
+    #[pyo3(get)]
+    lineno: u32,
+    #[pyo3(get)]
+    col: u32,
+}
+
+#[pymethods]
+impl PyLineColumn {
+    fn __repr__(&self) -> String {
+        format!("LineColumn(lineno={}, col={})", self.lineno, self.col)
+    }
+}
+
+/// Convert a byte offset into a `PyLineColumn` with codepoint-based `col`.
+///
+/// Returns an error if `byte_offset` is beyond the source length or does not
+/// land on a UTF-8 character boundary.
+fn byte_offset_to_line_col(source: &str, byte_offset: usize) -> PyResult<PyLineColumn> {
+    if byte_offset > source.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "offset {} is out of bounds (source length: {})",
+            byte_offset,
+            source.len()
+        )));
+    }
+    let mut lineno = 1u32;
+    let mut line_start = 0usize;
+    for (i, b) in source.bytes().enumerate() {
+        if i >= byte_offset {
+            break;
+        }
+        if b == b'\n' {
+            lineno += 1;
+            line_start = i + 1;
+        }
+    }
+    // Verify the offset falls on a char boundary before slicing.
+    if !source.is_char_boundary(byte_offset) || !source.is_char_boundary(line_start) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "offset is not on a UTF-8 character boundary",
+        ));
+    }
+    let col = source[line_start..byte_offset].chars().count() as u32;
+    Ok(PyLineColumn { lineno, col })
+}
+
 // ─── SyntaxKind ──────────────────────────────────────────────────────────────
 
 /// Syntax node/token kind enum.
@@ -469,6 +523,15 @@ impl PyGoogleDocstring {
             .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("failed to convert to model"))?;
         Ok(PyModelDocstring { inner: doc })
     }
+    /// Convert a byte offset to a `LineColumn` with codepoint-based `col`.
+    ///
+    /// The offset is typically obtained from `Token.range.start` or
+    /// `Token.range.end`.  `lineno` is 1-based; `col` is 0-based and counted
+    /// in Unicode codepoints, matching Python's `ast` module convention.
+    fn line_col(&self, py: Python<'_>, offset: u32) -> PyResult<Py<PyLineColumn>> {
+        let lc = byte_offset_to_line_col(&self.source, offset as usize)?;
+        Py::new(py, lc)
+    }
     fn __repr__(&self) -> String {
         "GoogleDocstring(...)".to_string()
     }
@@ -639,6 +702,15 @@ impl PyNumPyDocstring {
         let doc = pydocstring_core::parse::numpy::to_model::to_model(&parsed)
             .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("failed to convert to model"))?;
         Ok(PyModelDocstring { inner: doc })
+    }
+    /// Convert a byte offset to a `LineColumn` with codepoint-based `col`.
+    ///
+    /// The offset is typically obtained from `Token.range.start` or
+    /// `Token.range.end`.  `lineno` is 1-based; `col` is 0-based and counted
+    /// in Unicode codepoints, matching Python's `ast` module convention.
+    fn line_col(&self, py: Python<'_>, offset: u32) -> PyResult<Py<PyLineColumn>> {
+        let lc = byte_offset_to_line_col(&self.source, offset as usize)?;
+        Py::new(py, lc)
     }
     fn __repr__(&self) -> String {
         "NumPyDocstring(...)".to_string()
@@ -1607,6 +1679,7 @@ fn pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyStyle>()?;
     m.add_class::<PySyntaxKind>()?;
     m.add_class::<PyTextRange>()?;
+    m.add_class::<PyLineColumn>()?;
     m.add_class::<PyToken>()?;
     m.add_class::<PyNode>()?;
     m.add_class::<PyGoogleDocstring>()?;

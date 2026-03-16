@@ -419,6 +419,106 @@ class TestEmit:
         assert "----------" in numpy_text
         assert "x : int" in numpy_text
 
+
+class TestLineCol:
+    """Tests for GoogleDocstring.line_col() and NumPyDocstring.line_col()."""
+
+    # ── Google ───────────────────────────────────────────────────────────────
+
+    def test_google_summary_first_line(self):
+        doc = pydocstring.parse_google("Summary.")
+        lc = doc.line_col(doc.summary.range.start)
+        assert lc.lineno == 1
+        assert lc.col == 0
+
+    def test_google_arg_name_lineno(self):
+        src = "Summary.\n\nArgs:\n    x (int): Value."
+        doc = pydocstring.parse_google(src)
+        arg = doc.sections[0].args[0]
+        lc = doc.line_col(arg.name.range.start)
+        assert lc.lineno == 4   # "    x (int): Value." is on line 4
+        assert lc.col == 4      # 4 spaces of indentation
+
+    def test_google_col_is_codepoints_not_bytes(self):
+        # "α" is 2 bytes in UTF-8 but 1 codepoint.
+        # Source: "α.\n\nArgs:\n    x: V."
+        # "x" starts at byte 4+4=... let's compute:
+        # line 1: "α.\n"  → α=2bytes, .=1, \n=1  → line_start line4 = 2+1+1+1 = 5
+        # line 2: "\n"    → 1byte
+        # line 3: "Args:\n" → 6bytes
+        # line 4: "    x: V.\n" → "    x" starts with 4 spaces + x
+        # byte of "x" in line4 = 5+1+6+4 = 16
+        src = "α.\n\nArgs:\n    x: V."
+        doc = pydocstring.parse_google(src)
+        arg = doc.sections[0].args[0]
+        lc = doc.line_col(arg.name.range.start)
+        assert lc.lineno == 4
+        assert lc.col == 4  # 4 spaces → 4 codepoints (bytes == codepoints here)
+
+    def test_google_multibyte_col(self):
+        # Line with multibyte chars before the token.
+        # "αβ: int" as the summary — check col of "int" token text
+        # α=2bytes, β=2bytes, :=1, space=1 → "int" starts at byte 6
+        # but codepoints: α=1, β=1, :=1, space=1 → col=4
+        src = "αβ: int"
+        doc = pydocstring.parse_google(src)
+        # The whole line is treated as summary; check that line_col at byte 6
+        # returns col 4 (codepoints), not 6 (bytes)
+        lc = doc.line_col(6)
+        assert lc.lineno == 1
+        assert lc.col == 4
+
+    def test_google_multiline_lineno(self):
+        src = "Summary.\n\nExtended.\n\nArgs:\n    x: V."
+        doc = pydocstring.parse_google(src)
+        arg = doc.sections[0].args[0]
+        lc = doc.line_col(arg.name.range.start)
+        assert lc.lineno == 6
+
+    def test_google_returns_class(self):
+        lc = pydocstring.parse_google("S.").line_col(0)
+        assert isinstance(lc, pydocstring.LineColumn)
+
+    def test_google_out_of_bounds(self):
+        import pytest
+        doc = pydocstring.parse_google("S.")
+        with pytest.raises(Exception):
+            doc.line_col(9999)
+
+    # ── NumPy ────────────────────────────────────────────────────────────────
+
+    def test_numpy_summary_first_line(self):
+        doc = pydocstring.parse_numpy("Summary.")
+        lc = doc.line_col(doc.summary.range.start)
+        assert lc.lineno == 1
+        assert lc.col == 0
+
+    def test_numpy_param_name_lineno(self):
+        src = "Summary.\n\nParameters\n----------\nx : int\n    Desc."
+        doc = pydocstring.parse_numpy(src)
+        param = doc.sections[0].parameters[0]
+        lc = doc.line_col(param.names[0].range.start)
+        assert lc.lineno == 5   # "x : int" is on line 5
+        assert lc.col == 0
+
+    def test_numpy_multibyte_col(self):
+        # Same multibyte check for NumPy path
+        src = "αβ: int"
+        doc = pydocstring.parse_numpy(src)
+        lc = doc.line_col(6)
+        assert lc.lineno == 1
+        assert lc.col == 4
+
+    def test_numpy_returns_class(self):
+        lc = pydocstring.parse_numpy("S.").line_col(0)
+        assert isinstance(lc, pydocstring.LineColumn)
+
+    def test_numpy_out_of_bounds(self):
+        import pytest
+        doc = pydocstring.parse_numpy("S.")
+        with pytest.raises(Exception):
+            doc.line_col(9999)
+
     def test_emit_free_text_section(self):
         doc = pydocstring.Docstring(
             summary="Brief.",

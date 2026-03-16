@@ -10,7 +10,7 @@
 use core::fmt;
 use core::fmt::Write;
 
-use crate::text::TextRange;
+use crate::text::{LineColumn, LineIndex, TextRange};
 
 // =============================================================================
 // SyntaxKind
@@ -426,12 +426,18 @@ impl SyntaxElement {
 pub struct Parsed {
     source: String,
     root: SyntaxNode,
+    line_index: LineIndex,
 }
 
 impl Parsed {
     /// Creates a new `Parsed` from source text and root node.
     pub fn new(source: String, root: SyntaxNode) -> Self {
-        Self { source, root }
+        let line_index = LineIndex::new(&source);
+        Self {
+            source,
+            root,
+            line_index,
+        }
     }
 
     /// The full source text.
@@ -442,6 +448,13 @@ impl Parsed {
     /// The root node of the syntax tree.
     pub fn root(&self) -> &SyntaxNode {
         &self.root
+    }
+
+    /// Convert a byte offset to a [`LineColumn`] position.
+    ///
+    /// `lineno` is 1-based; `col` is the 0-based byte column within the line.
+    pub fn line_col(&self, offset: crate::text::TextSize) -> LineColumn {
+        self.line_index.line_col(offset)
     }
 
     /// Produce a Biome-style pretty-printed representation of the tree.
