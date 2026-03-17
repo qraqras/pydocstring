@@ -75,11 +75,7 @@ fn has_numpy_sections(input: &str) -> bool {
     for i in 0..lines.len().saturating_sub(1) {
         let current = lines[i].trim();
         let next = lines[i + 1].trim();
-        if !current.is_empty()
-            && !next.is_empty()
-            && next.len() >= 3
-            && next.chars().all(|c| c == '-')
-        {
+        if !current.is_empty() && !next.is_empty() && next.len() >= 3 && next.chars().all(|c| c == '-') {
             return true;
         }
     }

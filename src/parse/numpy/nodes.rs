@@ -56,9 +56,7 @@ impl<'a> NumPyDocstring<'a> {
 
     /// Iterate over all section nodes.
     pub fn sections(&self) -> impl Iterator<Item = NumPySection<'a>> {
-        self.0
-            .nodes(SyntaxKind::NUMPY_SECTION)
-            .filter_map(NumPySection::cast)
+        self.0.nodes(SyntaxKind::NUMPY_SECTION).filter_map(NumPySection::cast)
     }
 
     /// Iterate over stray line tokens.
@@ -99,9 +97,7 @@ impl<'a> NumPySection<'a> {
 
     /// Iterate over returns entry nodes.
     pub fn returns(&self) -> impl Iterator<Item = NumPyReturns<'a>> {
-        self.0
-            .nodes(SyntaxKind::NUMPY_RETURNS)
-            .filter_map(NumPyReturns::cast)
+        self.0.nodes(SyntaxKind::NUMPY_RETURNS).filter_map(NumPyReturns::cast)
     }
 
     /// Iterate over exception entry nodes.
@@ -113,9 +109,7 @@ impl<'a> NumPySection<'a> {
 
     /// Iterate over warning entry nodes.
     pub fn warnings(&self) -> impl Iterator<Item = NumPyWarning<'a>> {
-        self.0
-            .nodes(SyntaxKind::NUMPY_WARNING)
-            .filter_map(NumPyWarning::cast)
+        self.0.nodes(SyntaxKind::NUMPY_WARNING).filter_map(NumPyWarning::cast)
     }
 
     /// Iterate over see-also item nodes.
@@ -141,9 +135,7 @@ impl<'a> NumPySection<'a> {
 
     /// Iterate over method entry nodes.
     pub fn methods(&self) -> impl Iterator<Item = NumPyMethod<'a>> {
-        self.0
-            .nodes(SyntaxKind::NUMPY_METHOD)
-            .filter_map(NumPyMethod::cast)
+        self.0.nodes(SyntaxKind::NUMPY_METHOD).filter_map(NumPyMethod::cast)
     }
 
     /// Free-text body content, if this is a free-text section.

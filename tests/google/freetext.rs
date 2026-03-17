@@ -8,20 +8,14 @@ use super::*;
 fn test_note_section() {
     let docstring = "Summary.\n\nNote:\n    This is a note.";
     let result = parse_google(docstring);
-    assert_eq!(
-        notes(&result).unwrap().text(result.source()),
-        "This is a note."
-    );
+    assert_eq!(notes(&result).unwrap().text(result.source()), "This is a note.");
 }
 
 #[test]
 fn test_notes_alias() {
     let docstring = "Summary.\n\nNotes:\n    This is also a note.";
     let result = parse_google(docstring);
-    assert_eq!(
-        notes(&result).unwrap().text(result.source()),
-        "This is also a note."
-    );
+    assert_eq!(notes(&result).unwrap().text(result.source()), "This is also a note.");
 }
 
 // =============================================================================
@@ -32,10 +26,7 @@ fn test_notes_alias() {
 fn test_example_section() {
     let docstring = "Summary.\n\nExample:\n    >>> func(1)\n    1";
     let result = parse_google(docstring);
-    assert_eq!(
-        examples(&result).unwrap().text(result.source()),
-        ">>> func(1)\n    1"
-    );
+    assert_eq!(examples(&result).unwrap().text(result.source()), ">>> func(1)\n    1");
 }
 
 #[test]
@@ -94,8 +85,7 @@ fn test_todo_without_bullets() {
 
 #[test]
 fn test_todo_multiline() {
-    let docstring =
-        "Summary.\n\nTodo:\n    * Item one that\n        continues here.\n    * Item two.";
+    let docstring = "Summary.\n\nTodo:\n    * Item one that\n        continues here.\n    * Item two.";
     let result = parse_google(docstring);
     let t = todo(&result).unwrap();
     assert!(t.text(result.source()).contains("Item one that"));
@@ -112,10 +102,7 @@ fn test_attention_section() {
     let docstring = "Summary.\n\nAttention:\n    This requires careful handling.";
     let result = parse_google(docstring);
     let sections = all_sections(&result);
-    assert_eq!(
-        sections[0].section_kind(result.source()),
-        GoogleSectionKind::Attention
-    );
+    assert_eq!(sections[0].section_kind(result.source()), GoogleSectionKind::Attention);
     assert_eq!(
         sections[0].body_text().unwrap().text(result.source()),
         "This requires careful handling."
@@ -127,14 +114,8 @@ fn test_caution_section() {
     let docstring = "Summary.\n\nCaution:\n    Use with care.";
     let result = parse_google(docstring);
     let sections = all_sections(&result);
-    assert_eq!(
-        sections[0].section_kind(result.source()),
-        GoogleSectionKind::Caution
-    );
-    assert_eq!(
-        sections[0].body_text().unwrap().text(result.source()),
-        "Use with care."
-    );
+    assert_eq!(sections[0].section_kind(result.source()), GoogleSectionKind::Caution);
+    assert_eq!(sections[0].body_text().unwrap().text(result.source()), "Use with care.");
 }
 
 #[test]
@@ -142,10 +123,7 @@ fn test_danger_section() {
     let docstring = "Summary.\n\nDanger:\n    May cause data loss.";
     let result = parse_google(docstring);
     let sections = all_sections(&result);
-    assert_eq!(
-        sections[0].section_kind(result.source()),
-        GoogleSectionKind::Danger
-    );
+    assert_eq!(sections[0].section_kind(result.source()), GoogleSectionKind::Danger);
     assert_eq!(
         sections[0].body_text().unwrap().text(result.source()),
         "May cause data loss."
@@ -157,10 +135,7 @@ fn test_error_section() {
     let docstring = "Summary.\n\nError:\n    Known issue with large inputs.";
     let result = parse_google(docstring);
     let sections = all_sections(&result);
-    assert_eq!(
-        sections[0].section_kind(result.source()),
-        GoogleSectionKind::Error
-    );
+    assert_eq!(sections[0].section_kind(result.source()), GoogleSectionKind::Error);
     assert_eq!(
         sections[0].body_text().unwrap().text(result.source()),
         "Known issue with large inputs."
@@ -172,10 +147,7 @@ fn test_hint_section() {
     let docstring = "Summary.\n\nHint:\n    Try using a smaller batch size.";
     let result = parse_google(docstring);
     let sections = all_sections(&result);
-    assert_eq!(
-        sections[0].section_kind(result.source()),
-        GoogleSectionKind::Hint
-    );
+    assert_eq!(sections[0].section_kind(result.source()), GoogleSectionKind::Hint);
     assert_eq!(
         sections[0].body_text().unwrap().text(result.source()),
         "Try using a smaller batch size."
@@ -187,10 +159,7 @@ fn test_important_section() {
     let docstring = "Summary.\n\nImportant:\n    Must be called before init().";
     let result = parse_google(docstring);
     let sections = all_sections(&result);
-    assert_eq!(
-        sections[0].section_kind(result.source()),
-        GoogleSectionKind::Important
-    );
+    assert_eq!(sections[0].section_kind(result.source()), GoogleSectionKind::Important);
     assert_eq!(
         sections[0].body_text().unwrap().text(result.source()),
         "Must be called before init()."
@@ -202,10 +171,7 @@ fn test_tip_section() {
     let docstring = "Summary.\n\nTip:\n    Use vectorized operations for speed.";
     let result = parse_google(docstring);
     let sections = all_sections(&result);
-    assert_eq!(
-        sections[0].section_kind(result.source()),
-        GoogleSectionKind::Tip
-    );
+    assert_eq!(sections[0].section_kind(result.source()), GoogleSectionKind::Tip);
     assert_eq!(
         sections[0].body_text().unwrap().text(result.source()),
         "Use vectorized operations for speed."

@@ -8,10 +8,7 @@ use super::*;
 fn test_indented_docstring() {
     let docstring = "    Summary.\n\n    Args:\n        x (int): Value.";
     let result = parse_google(docstring);
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "Summary."
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "Summary.");
     let a = args(&result);
     assert_eq!(a.len(), 1);
     assert_eq!(a[0].name().text(result.source()), "x");
@@ -41,13 +38,7 @@ fn test_section_header_space_before_colon() {
     assert_eq!(a.len(), 1, "expected 1 arg from 'Args :'");
     assert_eq!(a[0].name().text(result.source()), "x");
 
-    assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
-        "Args"
-    );
+    assert_eq!(all_sections(&result)[0].header().name().text(result.source()), "Args");
     assert!(all_sections(&result)[0].header().colon().is_some());
 }
 
@@ -72,15 +63,9 @@ fn test_section_header_no_colon() {
 
     let header = all_sections(&result)[0].header();
     assert_eq!(header.name().text(result.source()), "Args");
-    assert!(
-        header.colon().is_none(),
-        "no COLON token for colonless header"
-    );
+    assert!(header.colon().is_none(), "no COLON token for colonless header");
     let missing = header.syntax().find_missing(SyntaxKind::COLON);
-    assert!(
-        missing.is_some(),
-        "colonless header should have a missing COLON"
-    );
+    assert!(missing.is_some(), "colonless header should have a missing COLON");
     assert!(missing.unwrap().is_missing());
 }
 
@@ -136,15 +121,9 @@ fn test_tab_indented_args() {
     let a = args(&result);
     assert_eq!(a.len(), 2);
     assert_eq!(a[0].name().text(result.source()), "x");
-    assert_eq!(
-        a[0].description().unwrap().text(result.source()),
-        "The value."
-    );
+    assert_eq!(a[0].description().unwrap().text(result.source()), "The value.");
     assert_eq!(a[1].name().text(result.source()), "y");
-    assert_eq!(
-        a[1].description().unwrap().text(result.source()),
-        "Another value."
-    );
+    assert_eq!(a[1].description().unwrap().text(result.source()), "Another value.");
 }
 
 /// Args entries with tab indent and descriptions with deeper tab+space indent.
@@ -169,10 +148,7 @@ fn test_tab_indented_returns() {
     assert!(r.is_some());
     let r = r.unwrap();
     assert_eq!(r.return_type().unwrap().text(result.source()), "int");
-    assert_eq!(
-        r.description().unwrap().text(result.source()),
-        "The result."
-    );
+    assert_eq!(r.description().unwrap().text(result.source()), "The result.");
 }
 
 /// Raises section with tab-indented entries.
@@ -217,10 +193,7 @@ fn test_missing_close_bracket() {
     );
     // Missing CLOSE_BRACKET token should be present.
     let missing = a[0].syntax().find_missing(SyntaxKind::CLOSE_BRACKET);
-    assert!(
-        missing.is_some(),
-        "should have a missing CLOSE_BRACKET token"
-    );
+    assert!(missing.is_some(), "should have a missing CLOSE_BRACKET token");
     assert!(missing.unwrap().is_missing());
     assert_eq!(a[0].description().unwrap().text(result.source()), "desc.");
 }
@@ -241,10 +214,7 @@ fn test_missing_colon_after_bracket() {
     let missing = a[0].syntax().find_missing(SyntaxKind::COLON);
     assert!(missing.is_some(), "should have a missing COLON token");
     assert!(missing.unwrap().is_missing());
-    assert_eq!(
-        a[0].description().unwrap().text(result.source()),
-        "description here."
-    );
+    assert_eq!(a[0].description().unwrap().text(result.source()), "description here.");
 }
 
 /// `arg1 (int` — missing close bracket and no colon/description.
@@ -260,11 +230,7 @@ fn test_missing_close_bracket_no_colon() {
     assert!(a[0].close_bracket().is_none());
     assert!(a[0].colon().is_none());
     // Missing CLOSE_BRACKET but no missing COLON (no description).
-    assert!(
-        a[0].syntax()
-            .find_missing(SyntaxKind::CLOSE_BRACKET)
-            .is_some()
-    );
+    assert!(a[0].syntax().find_missing(SyntaxKind::CLOSE_BRACKET).is_some());
     assert!(a[0].syntax().find_missing(SyntaxKind::COLON).is_none());
 }
 
@@ -307,9 +273,6 @@ fn test_colon_inside_nested_brackets_no_split() {
     let a = args(&result);
     assert_eq!(a.len(), 1);
     assert_eq!(a[0].name().text(result.source()), "arg1");
-    assert_eq!(
-        a[0].r#type().unwrap().text(result.source()),
-        "Dict[str:int]"
-    );
+    assert_eq!(a[0].r#type().unwrap().text(result.source()), "Dict[str:int]");
     assert!(a[0].description().is_none());
 }

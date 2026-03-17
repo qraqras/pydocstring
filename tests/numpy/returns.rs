@@ -17,27 +17,16 @@ y : float
 "#;
     let result = parse_numpy(docstring);
     assert_eq!(returns(&result).len(), 2);
+    assert_eq!(returns(&result)[0].name().map(|n| n.text(result.source())), Some("x"));
     assert_eq!(
-        returns(&result)[0].name().map(|n| n.text(result.source())),
-        Some("x")
-    );
-    assert_eq!(
-        returns(&result)[0]
-            .return_type()
-            .map(|t| t.text(result.source())),
+        returns(&result)[0].return_type().map(|t| t.text(result.source())),
         Some("int")
     );
     assert_eq!(
-        returns(&result)[0]
-            .description()
-            .unwrap()
-            .text(result.source()),
+        returns(&result)[0].description().unwrap().text(result.source()),
         "The first value."
     );
-    assert_eq!(
-        returns(&result)[1].name().map(|n| n.text(result.source())),
-        Some("y")
-    );
+    assert_eq!(returns(&result)[1].name().map(|n| n.text(result.source())), Some("y"));
 }
 
 /// Returns with no spaces around colon (named): `result:int`
@@ -59,10 +48,7 @@ fn test_returns_type_only() {
     let r = returns(&result);
     assert_eq!(r.len(), 1);
     assert_eq!(r[0].return_type().unwrap().text(result.source()), "int");
-    assert_eq!(
-        r[0].description().unwrap().text(result.source()),
-        "The result."
-    );
+    assert_eq!(r[0].description().unwrap().text(result.source()), "The result.");
 }
 
 /// Returns — `Return` alias.
@@ -72,13 +58,7 @@ fn test_return_alias() {
     let result = parse_numpy(docstring);
     let r = returns(&result);
     assert_eq!(r.len(), 1);
-    assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
-        "Return"
-    );
+    assert_eq!(all_sections(&result)[0].header().name().text(result.source()), "Return");
     assert_eq!(
         all_sections(&result)[0].section_kind(result.source()),
         NumPySectionKind::Returns
@@ -88,8 +68,7 @@ fn test_return_alias() {
 /// Returns with multiline description.
 #[test]
 fn test_returns_multiline_description() {
-    let docstring =
-        "Summary.\n\nReturns\n-------\nresult : int\n    First line.\n\n    Second paragraph.\n";
+    let docstring = "Summary.\n\nReturns\n-------\nresult : int\n    First line.\n\n    Second paragraph.\n";
     let result = parse_numpy(docstring);
     let r = returns(&result);
     assert_eq!(r.len(), 1);
@@ -109,10 +88,7 @@ fn test_yields_basic() {
     let y = yields(&result);
     assert_eq!(y.len(), 1);
     assert_eq!(y[0].return_type().unwrap().text(result.source()), "int");
-    assert_eq!(
-        y[0].description().unwrap().text(result.source()),
-        "The next value."
-    );
+    assert_eq!(y[0].description().unwrap().text(result.source()), "The next value.");
 }
 
 #[test]
@@ -127,8 +103,7 @@ fn test_yields_named() {
 
 #[test]
 fn test_yields_multiple() {
-    let docstring =
-        "Summary.\n\nYields\n------\nindex : int\n    The index.\nvalue : str\n    The value.\n";
+    let docstring = "Summary.\n\nYields\n------\nindex : int\n    The index.\nvalue : str\n    The value.\n";
     let result = parse_numpy(docstring);
     let y = yields(&result);
     assert_eq!(y.len(), 2);
@@ -143,13 +118,7 @@ fn test_yield_alias() {
     let result = parse_numpy(docstring);
     let y = yields(&result);
     assert_eq!(y.len(), 1);
-    assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
-        "Yield"
-    );
+    assert_eq!(all_sections(&result)[0].header().name().text(result.source()), "Yield");
     assert_eq!(
         all_sections(&result)[0].section_kind(result.source()),
         NumPySectionKind::Yields

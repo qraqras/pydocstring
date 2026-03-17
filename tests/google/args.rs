@@ -12,10 +12,7 @@ fn test_args_basic() {
     assert_eq!(a.len(), 1);
     assert_eq!(a[0].name().text(result.source()), "x");
     assert_eq!(a[0].r#type().unwrap().text(result.source()), "int");
-    assert_eq!(
-        a[0].description().unwrap().text(result.source()),
-        "The value."
-    );
+    assert_eq!(a[0].description().unwrap().text(result.source()), "The value.");
 }
 
 #[test]
@@ -37,10 +34,7 @@ fn test_args_no_type() {
     let a = args(&result);
     assert_eq!(a[0].name().text(result.source()), "x");
     assert!(a[0].r#type().is_none());
-    assert_eq!(
-        a[0].description().unwrap().text(result.source()),
-        "The value."
-    );
+    assert_eq!(a[0].description().unwrap().text(result.source()), "The value.");
 }
 
 /// Colon with no space after it: `name:description`
@@ -50,10 +44,7 @@ fn test_args_no_space_after_colon() {
     let result = parse_google(docstring);
     let a = args(&result);
     assert_eq!(a[0].name().text(result.source()), "x");
-    assert_eq!(
-        a[0].description().unwrap().text(result.source()),
-        "The value."
-    );
+    assert_eq!(a[0].description().unwrap().text(result.source()), "The value.");
 }
 
 /// Colon with extra spaces: `name:   description`
@@ -63,10 +54,7 @@ fn test_args_extra_spaces_after_colon() {
     let result = parse_google(docstring);
     let a = args(&result);
     assert_eq!(a[0].name().text(result.source()), "x");
-    assert_eq!(
-        a[0].description().unwrap().text(result.source()),
-        "The value."
-    );
+    assert_eq!(a[0].description().unwrap().text(result.source()), "The value.");
 }
 
 #[test]
@@ -101,14 +89,10 @@ fn test_args_tuple_type() {
 
 #[test]
 fn test_args_multiline_description() {
-    let docstring =
-        "Summary.\n\nArgs:\n    x (int): First line.\n        Second line.\n        Third line.";
+    let docstring = "Summary.\n\nArgs:\n    x (int): First line.\n        Second line.\n        Third line.";
     let result = parse_google(docstring);
     assert_eq!(
-        args(&result)[0]
-            .description()
-            .unwrap()
-            .text(result.source()),
+        args(&result)[0].description().unwrap().text(result.source()),
         "First line.\n        Second line.\n        Third line."
     );
 }
@@ -120,10 +104,7 @@ fn test_args_description_on_next_line() {
     let a = args(&result);
     assert_eq!(a[0].name().text(result.source()), "x");
     assert_eq!(a[0].r#type().unwrap().text(result.source()), "int");
-    assert_eq!(
-        a[0].description().unwrap().text(result.source()),
-        "The description."
-    );
+    assert_eq!(a[0].description().unwrap().text(result.source()), "The description.");
 }
 
 #[test]
@@ -133,15 +114,9 @@ fn test_args_varargs() {
     let a = args(&result);
     assert_eq!(a.len(), 2);
     assert_eq!(a[0].name().text(result.source()), "*args");
-    assert_eq!(
-        a[0].description().unwrap().text(result.source()),
-        "Positional args."
-    );
+    assert_eq!(a[0].description().unwrap().text(result.source()), "Positional args.");
     assert_eq!(a[1].name().text(result.source()), "**kwargs");
-    assert_eq!(
-        a[1].description().unwrap().text(result.source()),
-        "Keyword args."
-    );
+    assert_eq!(a[1].description().unwrap().text(result.source()), "Keyword args.");
 }
 
 #[test]
@@ -173,10 +148,7 @@ fn test_parameters_alias() {
     assert_eq!(args(&result).len(), 1);
     assert_eq!(args(&result)[0].name().text(result.source()), "x");
     assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
+        all_sections(&result)[0].header().name().text(result.source()),
         "Parameters"
     );
 }
@@ -186,13 +158,7 @@ fn test_params_alias() {
     let docstring = "Summary.\n\nParams:\n    x (int): The value.";
     let result = parse_google(docstring);
     assert_eq!(args(&result).len(), 1);
-    assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
-        "Params"
-    );
+    assert_eq!(all_sections(&result)[0].header().name().text(result.source()), "Params");
 }
 
 // =============================================================================
@@ -207,10 +173,7 @@ fn test_args_name_span() {
     let name = arg.name();
     // "x" starts at byte offset 20 (line 3, col 4)
     assert_eq!(name.range().start(), TextSize::new(20));
-    assert_eq!(
-        name.range().end(),
-        TextSize::new(name.range().start().raw() + 1)
-    );
+    assert_eq!(name.range().end(), TextSize::new(name.range().start().raw() + 1));
     assert_eq!(name.text(result.source()), "x");
 }
 
@@ -344,7 +307,8 @@ fn test_complex_optional_type() {
 
 #[test]
 fn test_keyword_args_basic() {
-    let docstring = "Summary.\n\nKeyword Args:\n    timeout (int): Timeout in seconds.\n    retries (int): Number of retries.";
+    let docstring =
+        "Summary.\n\nKeyword Args:\n    timeout (int): Timeout in seconds.\n    retries (int): Number of retries.";
     let result = parse_google(docstring);
     let ka = keyword_args(&result);
     assert_eq!(ka.len(), 2);
@@ -359,10 +323,7 @@ fn test_keyword_arguments_alias() {
     let result = parse_google(docstring);
     assert_eq!(keyword_args(&result).len(), 1);
     assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
+        all_sections(&result)[0].header().name().text(result.source()),
         "Keyword Arguments"
     );
 }
@@ -426,10 +387,7 @@ fn test_receive_alias() {
     let result = parse_google(docstring);
     assert_eq!(receives(&result).len(), 1);
     assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
+        all_sections(&result)[0].header().name().text(result.source()),
         "Receive"
     );
 }

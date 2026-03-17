@@ -29,19 +29,10 @@ Some notes here.
     assert_eq!(returns(&result).len(), 1);
     assert!(notes(&result).is_some());
     assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
+        all_sections(&result)[0].header().name().text(result.source()),
         "parameters"
     );
-    assert_eq!(
-        all_sections(&result)[2]
-            .header()
-            .name()
-            .text(result.source()),
-        "NOTES"
-    );
+    assert_eq!(all_sections(&result)[2].header().name().text(result.source()), "NOTES");
 }
 
 // =============================================================================
@@ -80,14 +71,8 @@ x : int
     let src = result.source();
 
     assert_eq!(doc(&result).summary().unwrap().text(src), "Summary line.");
-    assert_eq!(
-        all_sections(&result)[0].header().name().text(src),
-        "Parameters"
-    );
-    let underline = all_sections(&result)[0]
-        .header()
-        .underline()
-        .text(result.source());
+    assert_eq!(all_sections(&result)[0].header().name().text(src), "Parameters");
+    let underline = all_sections(&result)[0].header().underline().text(result.source());
     assert!(underline.chars().all(|c| c == '-'));
 
     let p = &parameters(&result)[0];
@@ -114,9 +99,7 @@ x : int
     Desc.
 "#;
     let result = parse_numpy(docstring);
-    let dep = doc(&result)
-        .deprecation()
-        .expect("deprecation should be parsed");
+    let dep = doc(&result).deprecation().expect("deprecation should be parsed");
     assert_eq!(dep.version().text(result.source()), "1.6.0");
     assert_eq!(
         dep.description().unwrap().text(result.source()),
@@ -155,14 +138,8 @@ Some notes.
     let result = parse_numpy(docstring);
     let s = all_sections(&result);
     assert_eq!(s.len(), 4);
-    assert_eq!(
-        s[0].section_kind(result.source()),
-        NumPySectionKind::Parameters
-    );
-    assert_eq!(
-        s[1].section_kind(result.source()),
-        NumPySectionKind::Returns
-    );
+    assert_eq!(s[0].section_kind(result.source()), NumPySectionKind::Parameters);
+    assert_eq!(s[1].section_kind(result.source()), NumPySectionKind::Returns);
     assert_eq!(s[2].section_kind(result.source()), NumPySectionKind::Raises);
     assert_eq!(s[3].section_kind(result.source()), NumPySectionKind::Notes);
 }
@@ -178,18 +155,14 @@ fn test_all_section_kinds_exist() {
 
 #[test]
 fn test_section_kind_from_name_unknown() {
-    assert_eq!(
-        NumPySectionKind::from_name("nonexistent"),
-        NumPySectionKind::Unknown
-    );
+    assert_eq!(NumPySectionKind::from_name("nonexistent"), NumPySectionKind::Unknown);
     assert!(!NumPySectionKind::is_known("nonexistent"));
     assert!(NumPySectionKind::is_known("parameters"));
 }
 
 #[test]
 fn test_stray_lines() {
-    let docstring =
-        "Summary.\n\nThis line is not a section.\n\nParameters\n----------\nx : int\n    Desc.\n";
+    let docstring = "Summary.\n\nThis line is not a section.\n\nParameters\n----------\nx : int\n    Desc.\n";
     let result = parse_numpy(docstring);
     // The non-section line might be treated as extended summary or stray line
     // depending on parser behavior. Just verify parameters are still parsed.
@@ -206,10 +179,7 @@ fn test_section_kind_display() {
     assert_eq!(format!("{}", NumPySectionKind::Returns), "Returns");
     assert_eq!(format!("{}", NumPySectionKind::Yields), "Yields");
     assert_eq!(format!("{}", NumPySectionKind::Receives), "Receives");
-    assert_eq!(
-        format!("{}", NumPySectionKind::OtherParameters),
-        "Other Parameters"
-    );
+    assert_eq!(format!("{}", NumPySectionKind::OtherParameters), "Other Parameters");
     assert_eq!(format!("{}", NumPySectionKind::Raises), "Raises");
     assert_eq!(format!("{}", NumPySectionKind::Warns), "Warns");
     assert_eq!(format!("{}", NumPySectionKind::Warnings), "Warnings");

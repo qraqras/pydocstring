@@ -9,17 +9,12 @@ fn test_indented_docstring() {
     let docstring = "    Summary line.\n\n    Parameters\n    ----------\n    x : int\n        Description of x.\n    y : str, optional\n        Description of y.\n\n    Returns\n    -------\n    bool\n        The result.\n";
     let result = parse_numpy(docstring);
 
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "Summary line."
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "Summary line.");
     assert_eq!(parameters(&result).len(), 2);
     let names0: Vec<_> = parameters(&result)[0].names().collect();
     assert_eq!(names0[0].text(result.source()), "x");
     assert_eq!(
-        parameters(&result)[0]
-            .r#type()
-            .map(|t| t.text(result.source())),
+        parameters(&result)[0].r#type().map(|t| t.text(result.source())),
         Some("int")
     );
     let names1: Vec<_> = parameters(&result)[1].names().collect();
@@ -27,25 +22,14 @@ fn test_indented_docstring() {
     assert!(parameters(&result)[1].optional().is_some());
     assert_eq!(returns(&result).len(), 1);
     assert_eq!(
-        returns(&result)[0]
-            .return_type()
-            .map(|t| t.text(result.source())),
+        returns(&result)[0].return_type().map(|t| t.text(result.source())),
         Some("bool")
     );
 
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "Summary line."
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "Summary line.");
     let names0b: Vec<_> = parameters(&result)[0].names().collect();
     assert_eq!(names0b[0].text(result.source()), "x");
-    assert_eq!(
-        parameters(&result)[0]
-            .r#type()
-            .unwrap()
-            .text(result.source()),
-        "int"
-    );
+    assert_eq!(parameters(&result)[0].r#type().unwrap().text(result.source()), "int");
 }
 
 #[test]
@@ -53,22 +37,13 @@ fn test_deeply_indented_docstring() {
     let docstring = "        Brief.\n\n        Parameters\n        ----------\n        a : float\n            The value.\n\n        Raises\n        ------\n        ValueError\n            If bad.\n";
     let result = parse_numpy(docstring);
 
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "Brief."
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "Brief.");
     assert_eq!(parameters(&result).len(), 1);
     let names: Vec<_> = parameters(&result)[0].names().collect();
     assert_eq!(names[0].text(result.source()), "a");
     assert_eq!(raises(&result).len(), 1);
-    assert_eq!(
-        raises(&result)[0].r#type().text(result.source()),
-        "ValueError"
-    );
-    assert_eq!(
-        raises(&result)[0].r#type().text(result.source()),
-        "ValueError"
-    );
+    assert_eq!(raises(&result)[0].r#type().text(result.source()), "ValueError");
+    assert_eq!(raises(&result)[0].r#type().text(result.source()), "ValueError");
 }
 
 #[test]
@@ -76,18 +51,10 @@ fn test_indented_with_deprecation() {
     let docstring = "    Summary.\n\n    .. deprecated:: 2.0.0\n        Use new_func instead.\n\n    Parameters\n    ----------\n    x : int\n        Desc.\n";
     let result = parse_numpy(docstring);
 
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "Summary."
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "Summary.");
     let dep = doc(&result).deprecation().expect("should have deprecation");
     assert_eq!(dep.version().text(result.source()), "2.0.0");
-    assert!(
-        dep.description()
-            .unwrap()
-            .text(result.source())
-            .contains("new_func")
-    );
+    assert!(dep.description().unwrap().text(result.source()).contains("new_func"));
     assert_eq!(parameters(&result).len(), 1);
     let names: Vec<_> = parameters(&result)[0].names().collect();
     assert_eq!(names[0].text(result.source()), "x");
@@ -95,22 +62,15 @@ fn test_indented_with_deprecation() {
 
 #[test]
 fn test_mixed_indent_first_line() {
-    let docstring =
-        "Summary.\n\n    Parameters\n    ----------\n    x : int\n        Description.\n";
+    let docstring = "Summary.\n\n    Parameters\n    ----------\n    x : int\n        Description.\n";
     let result = parse_numpy(docstring);
 
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "Summary."
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "Summary.");
     assert_eq!(parameters(&result).len(), 1);
     let names: Vec<_> = parameters(&result)[0].names().collect();
     assert_eq!(names[0].text(result.source()), "x");
     assert_eq!(
-        parameters(&result)[0]
-            .description()
-            .unwrap()
-            .text(result.source()),
+        parameters(&result)[0].description().unwrap().text(result.source()),
         "Description."
     );
 }

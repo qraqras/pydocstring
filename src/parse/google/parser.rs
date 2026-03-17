@@ -6,8 +6,7 @@
 use crate::cursor::{LineCursor, indent_len};
 use crate::parse::google::kind::GoogleSectionKind;
 use crate::parse::utils::{
-    find_colon_ignoring_parens, find_entry_colon, find_entry_open_bracket, find_matching_close,
-    strip_optional,
+    find_colon_ignoring_parens, find_entry_colon, find_entry_open_bracket, find_matching_close, strip_optional,
 };
 use crate::syntax::{Parsed, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 use crate::text::TextRange;
@@ -78,18 +77,14 @@ fn parse_entry_header(cursor: &LineCursor, parse_type: bool) -> EntryHeader {
                     if after_trimmed.starts_with(':') {
                         // `:` confirmed → COLON + DESC
                         let colon_abs = cp + 1 + (after_close.len() - after_trimmed.len());
-                        let colon_span =
-                            Some(TextRange::from_offset_len(entry_start + colon_abs, 1));
+                        let colon_span = Some(TextRange::from_offset_len(entry_start + colon_abs, 1));
                         let after_colon = &trimmed[colon_abs + 1..];
                         let desc = after_colon.trim();
                         let desc_span = if desc.is_empty() {
                             None
                         } else {
                             let ws = after_colon.len() - after_colon.trim_start().len();
-                            Some(TextRange::from_offset_len(
-                                entry_start + colon_abs + 1 + ws,
-                                desc.len(),
-                            ))
+                            Some(TextRange::from_offset_len(entry_start + colon_abs + 1 + ws, desc.len()))
                         };
                         (&trimmed[bracket_pos + 1..cp], cb, colon_span, desc_span)
                     } else if !after_trimmed.is_empty() {
@@ -109,18 +104,14 @@ fn parse_entry_header(cursor: &LineCursor, parse_type: bool) -> EntryHeader {
                     // No matching close bracket — look for colon ignoring paren depth.
                     if let Some(colon_abs) = find_colon_ignoring_parens(trimmed, bracket_pos + 1) {
                         let type_raw = &trimmed[bracket_pos + 1..colon_abs];
-                        let colon_span =
-                            Some(TextRange::from_offset_len(entry_start + colon_abs, 1));
+                        let colon_span = Some(TextRange::from_offset_len(entry_start + colon_abs, 1));
                         let after_colon = &trimmed[colon_abs + 1..];
                         let desc = after_colon.trim();
                         let desc_span = if desc.is_empty() {
                             None
                         } else {
                             let ws = after_colon.len() - after_colon.trim_start().len();
-                            Some(TextRange::from_offset_len(
-                                entry_start + colon_abs + 1 + ws,
-                                desc.len(),
-                            ))
+                            Some(TextRange::from_offset_len(entry_start + colon_abs + 1 + ws, desc.len()))
                         };
                         (type_raw, None, colon_span, desc_span)
                     } else {
@@ -135,16 +126,11 @@ fn parse_entry_header(cursor: &LineCursor, parse_type: bool) -> EntryHeader {
             let (clean_type, opt_rel) = strip_optional(type_trimmed);
 
             let type_span = if !clean_type.is_empty() {
-                Some(TextRange::from_offset_len(
-                    entry_start + type_offset,
-                    clean_type.len(),
-                ))
+                Some(TextRange::from_offset_len(entry_start + type_offset, clean_type.len()))
             } else {
                 None
             };
-            let opt_span = opt_rel.map(|r| {
-                TextRange::from_offset_len(entry_start + type_offset + r, "optional".len())
-            });
+            let opt_span = opt_rel.map(|r| TextRange::from_offset_len(entry_start + type_offset + r, "optional".len()));
 
             let type_info = Some(TypeInfo {
                 open_bracket,
@@ -230,10 +216,7 @@ fn try_parse_section_header(cursor: &LineCursor) -> Option<SectionHeaderInfo> {
     }
 
     let is_header = if has_colon {
-        !name.contains(':')
-            && name
-                .chars()
-                .all(|c| c.is_alphanumeric() || c.is_ascii_whitespace())
+        !name.contains(':') && name.chars().all(|c| c.is_alphanumeric() || c.is_ascii_whitespace())
     } else {
         GoogleSectionKind::is_known(&name.to_ascii_lowercase())
     };
@@ -269,15 +252,9 @@ fn try_parse_section_header(cursor: &LineCursor) -> Option<SectionHeaderInfo> {
 
 fn build_section_header_node(info: &SectionHeaderInfo) -> SyntaxNode {
     let mut children = Vec::new();
-    children.push(SyntaxElement::Token(SyntaxToken::new(
-        SyntaxKind::NAME,
-        info.name,
-    )));
+    children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::NAME, info.name)));
     if let Some(colon) = info.colon {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::COLON,
-            colon,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, colon)));
     } else {
         // Colon is grammatically required; emit a zero-length COLON token
         // at the position where it should appear (right after the name).
@@ -292,10 +269,7 @@ fn build_section_header_node(info: &SectionHeaderInfo) -> SyntaxNode {
 /// Build a SyntaxNode for an arg-like entry (GoogleArg, GoogleAttribute, GoogleMethod).
 fn build_arg_node(kind: SyntaxKind, header: &EntryHeader, range: TextRange) -> SyntaxNode {
     let mut children = Vec::new();
-    children.push(SyntaxElement::Token(SyntaxToken::new(
-        SyntaxKind::NAME,
-        header.name,
-    )));
+    children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::NAME, header.name)));
     if let Some(ti) = &header.type_info {
         children.push(SyntaxElement::Token(SyntaxToken::new(
             SyntaxKind::OPEN_BRACKET,
@@ -305,10 +279,7 @@ fn build_arg_node(kind: SyntaxKind, header: &EntryHeader, range: TextRange) -> S
             children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::TYPE, t)));
         }
         if let Some(cb) = ti.close_bracket {
-            children.push(SyntaxElement::Token(SyntaxToken::new(
-                SyntaxKind::CLOSE_BRACKET,
-                cb,
-            )));
+            children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::CLOSE_BRACKET, cb)));
         } else {
             // Close bracket expected but missing.
             let missing_pos = ti.r#type.map(|t| t.end()).unwrap_or(ti.open_bracket.end());
@@ -318,29 +289,18 @@ fn build_arg_node(kind: SyntaxKind, header: &EntryHeader, range: TextRange) -> S
             )));
         }
         if let Some(opt) = ti.optional {
-            children.push(SyntaxElement::Token(SyntaxToken::new(
-                SyntaxKind::OPTIONAL,
-                opt,
-            )));
+            children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::OPTIONAL, opt)));
         }
     }
     if let Some(colon) = header.colon {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::COLON,
-            colon,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, colon)));
     } else if header.type_info.is_some() && header.first_description.is_some() {
         // Bracket-style entry with text after it but no colon.
         let missing_pos = header
             .type_info
             .as_ref()
             .and_then(|ti| ti.close_bracket.map(|cb| cb.end()))
-            .or_else(|| {
-                header
-                    .type_info
-                    .as_ref()
-                    .and_then(|ti| ti.r#type.map(|t| t.end()))
-            })
+            .or_else(|| header.type_info.as_ref().and_then(|ti| ti.r#type.map(|t| t.end())))
             .unwrap_or(header.name.end());
         children.push(SyntaxElement::Token(SyntaxToken::new(
             SyntaxKind::COLON,
@@ -348,10 +308,7 @@ fn build_arg_node(kind: SyntaxKind, header: &EntryHeader, range: TextRange) -> S
         )));
     }
     if let Some(desc) = header.first_description {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::DESCRIPTION,
-            desc,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, desc)));
     }
     // Ensure children are in source order (needed when colon/description
     // appear before the close bracket, e.g., `arg (int:desc.)`).
@@ -362,21 +319,12 @@ fn build_arg_node(kind: SyntaxKind, header: &EntryHeader, range: TextRange) -> S
 /// Build a SyntaxNode for an exception entry.
 fn build_exception_node(header: &EntryHeader, range: TextRange) -> SyntaxNode {
     let mut children = Vec::new();
-    children.push(SyntaxElement::Token(SyntaxToken::new(
-        SyntaxKind::TYPE,
-        header.name,
-    )));
+    children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::TYPE, header.name)));
     if let Some(colon) = header.colon {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::COLON,
-            colon,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, colon)));
     }
     if let Some(desc) = header.first_description {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::DESCRIPTION,
-            desc,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, desc)));
     }
     SyntaxNode::new(SyntaxKind::GOOGLE_EXCEPTION, range, children)
 }
@@ -389,16 +337,10 @@ fn build_warning_node(header: &EntryHeader, range: TextRange) -> SyntaxNode {
         header.name,
     )));
     if let Some(colon) = header.colon {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::COLON,
-            colon,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, colon)));
     }
     if let Some(desc) = header.first_description {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::DESCRIPTION,
-            desc,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, desc)));
     }
     SyntaxNode::new(SyntaxKind::GOOGLE_WARNING, range, children)
 }
@@ -422,16 +364,10 @@ fn build_see_also_node(header: &EntryHeader, range: TextRange, source: &str) -> 
         offset += part.len() + 1;
     }
     if let Some(colon) = header.colon {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::COLON,
-            colon,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, colon)));
     }
     if let Some(desc) = header.first_description {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::DESCRIPTION,
-            desc,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, desc)));
     }
     SyntaxNode::new(SyntaxKind::GOOGLE_SEE_ALSO_ITEM, range, children)
 }
@@ -452,11 +388,7 @@ fn parse_entry(cursor: &LineCursor, parse_type: bool) -> (EntryHeader, TextRange
     (header, entry_range)
 }
 
-fn build_content_range(
-    cursor: &LineCursor,
-    first: Option<usize>,
-    last: usize,
-) -> Option<TextRange> {
+fn build_content_range(cursor: &LineCursor, first: Option<usize>, last: usize) -> Option<TextRange> {
     first.map(|f| {
         let first_line = cursor.line_text(f);
         let first_col = indent_len(first_line);
@@ -485,10 +417,7 @@ fn extend_last_node_description(nodes: &mut [SyntaxElement], cont: TextRange) {
             }
         }
         if !found_desc {
-            node.push_child(SyntaxElement::Token(SyntaxToken::new(
-                SyntaxKind::DESCRIPTION,
-                cont,
-            )));
+            node.push_child(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, cont)));
         }
         // Extend node range
         node.extend_range_to(cont.end());
@@ -512,18 +441,10 @@ fn process_arg_line(
         *entry_indent = Some(indent_cols);
     }
     let (header, entry_range) = parse_entry(cursor, node_kind != SyntaxKind::GOOGLE_METHOD);
-    nodes.push(SyntaxElement::Node(build_arg_node(
-        node_kind,
-        &header,
-        entry_range,
-    )));
+    nodes.push(SyntaxElement::Node(build_arg_node(node_kind, &header, entry_range)));
 }
 
-fn process_exception_line(
-    cursor: &LineCursor,
-    nodes: &mut Vec<SyntaxElement>,
-    entry_indent: &mut Option<usize>,
-) {
+fn process_exception_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, entry_indent: &mut Option<usize>) {
     let indent_cols = cursor.current_indent_columns();
     if let Some(base) = *entry_indent {
         if indent_cols > base {
@@ -535,17 +456,10 @@ fn process_exception_line(
         *entry_indent = Some(indent_cols);
     }
     let (header, entry_range) = parse_entry(cursor, false);
-    nodes.push(SyntaxElement::Node(build_exception_node(
-        &header,
-        entry_range,
-    )));
+    nodes.push(SyntaxElement::Node(build_exception_node(&header, entry_range)));
 }
 
-fn process_warning_line(
-    cursor: &LineCursor,
-    nodes: &mut Vec<SyntaxElement>,
-    entry_indent: &mut Option<usize>,
-) {
+fn process_warning_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, entry_indent: &mut Option<usize>) {
     let indent_cols = cursor.current_indent_columns();
     if let Some(base) = *entry_indent {
         if indent_cols > base {
@@ -557,17 +471,10 @@ fn process_warning_line(
         *entry_indent = Some(indent_cols);
     }
     let (header, entry_range) = parse_entry(cursor, false);
-    nodes.push(SyntaxElement::Node(build_warning_node(
-        &header,
-        entry_range,
-    )));
+    nodes.push(SyntaxElement::Node(build_warning_node(&header, entry_range)));
 }
 
-fn process_see_also_line(
-    cursor: &LineCursor,
-    nodes: &mut Vec<SyntaxElement>,
-    entry_indent: &mut Option<usize>,
-) {
+fn process_see_also_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, entry_indent: &mut Option<usize>) {
     let indent_cols = cursor.current_indent_columns();
     if let Some(base) = *entry_indent {
         if indent_cols > base {
@@ -641,22 +548,13 @@ impl ReturnsState {
         let range = self.range?;
         let mut children = Vec::new();
         if let Some(rt) = self.return_type {
-            children.push(SyntaxElement::Token(SyntaxToken::new(
-                SyntaxKind::RETURN_TYPE,
-                rt,
-            )));
+            children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::RETURN_TYPE, rt)));
         }
         if let Some(colon) = self.colon {
-            children.push(SyntaxElement::Token(SyntaxToken::new(
-                SyntaxKind::COLON,
-                colon,
-            )));
+            children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, colon)));
         }
         if let Some(desc) = self.description {
-            children.push(SyntaxElement::Token(SyntaxToken::new(
-                SyntaxKind::DESCRIPTION,
-                desc,
-            )));
+            children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, desc)));
         }
         Some(SyntaxNode::new(kind, range, children))
     }
@@ -730,10 +628,7 @@ impl SectionBody {
             Self::Warns(nodes) => nodes,
             Self::SeeAlso(nodes) => nodes,
             Self::FreeText(range) => match range {
-                Some(r) => vec![SyntaxElement::Token(SyntaxToken::new(
-                    SyntaxKind::BODY_TEXT,
-                    r,
-                ))],
+                Some(r) => vec![SyntaxElement::Token(SyntaxToken::new(SyntaxKind::BODY_TEXT, r))],
                 None => vec![],
             },
         }
@@ -771,11 +666,7 @@ pub fn parse_google(input: &str) -> Parsed {
 
     line_cursor.skip_blanks();
     if line_cursor.is_eof() {
-        let root = SyntaxNode::new(
-            SyntaxKind::GOOGLE_DOCSTRING,
-            line_cursor.full_range(),
-            root_children,
-        );
+        let root = SyntaxNode::new(SyntaxKind::GOOGLE_DOCSTRING, line_cursor.full_range(), root_children);
         return Parsed::new(input.to_string(), root);
     }
 
@@ -869,12 +760,7 @@ pub fn parse_google(input: &str) -> Parsed {
 
     // Flush final section
     if let Some(header) = current_header.take() {
-        flush_section(
-            &line_cursor,
-            &mut root_children,
-            header,
-            current_body.take().unwrap(),
-        );
+        flush_section(&line_cursor, &mut root_children, header, current_body.take().unwrap());
     }
 
     // Finalise at EOF
@@ -891,11 +777,7 @@ pub fn parse_google(input: &str) -> Parsed {
         )));
     }
 
-    let root = SyntaxNode::new(
-        SyntaxKind::GOOGLE_DOCSTRING,
-        line_cursor.full_range(),
-        root_children,
-    );
+    let root = SyntaxNode::new(SyntaxKind::GOOGLE_DOCSTRING, line_cursor.full_range(), root_children);
     Parsed::new(input.to_string(), root)
 }
 
@@ -973,10 +855,7 @@ mod tests {
         assert!(header.type_info.is_some());
         let ti = header.type_info.unwrap();
         assert_eq!(ti.r#type.unwrap().source_text(src), "int");
-        assert_eq!(
-            header.first_description.unwrap().source_text(src),
-            "Description"
-        );
+        assert_eq!(header.first_description.unwrap().source_text(src), "Description");
     }
 
     #[test]
@@ -996,10 +875,7 @@ mod tests {
         let header = header_from(src);
         assert_eq!(header.name.source_text(src), "name");
         assert!(header.type_info.is_none());
-        assert_eq!(
-            header.first_description.unwrap().source_text(src),
-            "Description"
-        );
+        assert_eq!(header.first_description.unwrap().source_text(src), "Description");
     }
 
     #[test]
@@ -1044,10 +920,7 @@ mod tests {
         let header = header_from(src);
         assert_eq!(header.name.source_text(src), "name");
         assert!(header.type_info.is_none());
-        assert_eq!(
-            header.first_description.unwrap().source_text(src),
-            "Description"
-        );
+        assert_eq!(header.first_description.unwrap().source_text(src), "Description");
     }
 
     #[test]
@@ -1056,10 +929,7 @@ mod tests {
         let header = header_from(src);
         assert_eq!(header.name.source_text(src), "name");
         assert!(header.type_info.is_none());
-        assert_eq!(
-            header.first_description.unwrap().source_text(src),
-            "Description"
-        );
+        assert_eq!(header.first_description.unwrap().source_text(src), "Description");
     }
 
     #[test]
@@ -1069,10 +939,7 @@ mod tests {
         // Strict mode: brackets without space are NOT treated as type
         assert_eq!(header.name.source_text(src), "name(int)");
         assert!(header.type_info.is_none());
-        assert_eq!(
-            header.first_description.unwrap().source_text(src),
-            "Description"
-        );
+        assert_eq!(header.first_description.unwrap().source_text(src), "Description");
     }
 
     #[test]
@@ -1084,10 +951,7 @@ mod tests {
         assert!(header.type_info.is_some());
         let ti = header.type_info.unwrap();
         assert_eq!(ti.r#type.unwrap().source_text(src), "int");
-        assert_eq!(
-            header.first_description.unwrap().source_text(src),
-            "Description"
-        );
+        assert_eq!(header.first_description.unwrap().source_text(src), "Description");
     }
 
     #[test]

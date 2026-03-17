@@ -184,11 +184,7 @@ pub(crate) fn try_parse_bracket_entry(text: &str) -> Option<BracketEntry<'_>> {
     // Determine where the type portion ends. Normally at close_pos,
     // but if a colon is inside the brackets, it ends at the colon.
     let type_end = if let Some(c) = colon {
-        if c > bracket_pos && c < close_pos {
-            c
-        } else {
-            close_pos
-        }
+        if c > bracket_pos && c < close_pos { c } else { close_pos }
     } else {
         close_pos
     };
@@ -335,10 +331,7 @@ mod tests {
     fn test_strip_optional_basic() {
         assert_eq!(strip_optional("int, optional"), ("int", Some(5)));
         assert_eq!(strip_optional("int"), ("int", None));
-        assert_eq!(
-            strip_optional("Dict[str, int], optional"),
-            ("Dict[str, int]", Some(16))
-        );
+        assert_eq!(strip_optional("Dict[str, int], optional"), ("Dict[str, int]", Some(16)));
         assert_eq!(strip_optional("optional"), ("", Some(0)));
         assert_eq!(strip_optional("int,optional"), ("int", Some(4)));
         assert_eq!(strip_optional("int,  optional"), ("int", Some(6)));

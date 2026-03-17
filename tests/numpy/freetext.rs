@@ -15,12 +15,7 @@ This is an important note about the function.
     let result = parse_numpy(docstring);
 
     assert!(notes(&result).is_some());
-    assert!(
-        notes(&result)
-            .unwrap()
-            .text(result.source())
-            .contains("important note")
-    );
+    assert!(notes(&result).unwrap().text(result.source()).contains("important note"));
 }
 
 /// `Note` alias for Notes.
@@ -29,13 +24,7 @@ fn test_note_alias() {
     let docstring = "Summary.\n\nNote\n----\nThis is a note.\n";
     let result = parse_numpy(docstring);
     assert!(notes(&result).is_some());
-    assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
-        "Note"
-    );
+    assert_eq!(all_sections(&result)[0].header().name().text(result.source()), "Note");
     assert_eq!(
         all_sections(&result)[0].section_kind(result.source()),
         NumPySectionKind::Notes
@@ -73,10 +62,7 @@ fn test_warning_alias() {
     let result = parse_numpy(docstring);
     assert!(warnings_text(&result).is_some());
     assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
+        all_sections(&result)[0].header().name().text(result.source()),
         "Warning"
     );
     assert_eq!(
@@ -115,10 +101,7 @@ fn test_example_alias() {
     let result = parse_numpy(docstring);
     assert!(examples(&result).is_some());
     assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
+        all_sections(&result)[0].header().name().text(result.source()),
         "Example"
     );
     assert_eq!(
@@ -196,17 +179,13 @@ fn test_see_also_no_space_before_colon() {
 /// See Also with multiple items with descriptions.
 #[test]
 fn test_see_also_multiple_with_descriptions() {
-    let docstring =
-        "Summary.\n\nSee Also\n--------\nfunc_a : First function.\nfunc_b : Second function.\n";
+    let docstring = "Summary.\n\nSee Also\n--------\nfunc_a : First function.\nfunc_b : Second function.\n";
     let result = parse_numpy(docstring);
     let sa = see_also(&result);
     assert_eq!(sa.len(), 2);
     let names0: Vec<_> = sa[0].names().collect();
     assert_eq!(names0[0].text(result.source()), "func_a");
-    assert_eq!(
-        sa[0].description().unwrap().text(result.source()),
-        "First function."
-    );
+    assert_eq!(sa[0].description().unwrap().text(result.source()), "First function.");
     let names1: Vec<_> = sa[1].names().collect();
     assert_eq!(names1[0].text(result.source()), "func_b");
 }
@@ -239,21 +218,9 @@ References
     let refs = references(&result);
     assert_eq!(refs.len(), 2);
     assert_eq!(refs[0].number().unwrap().text(result.source()), "1");
-    assert!(
-        refs[0]
-            .content()
-            .unwrap()
-            .text(result.source())
-            .contains("Author A")
-    );
+    assert!(refs[0].content().unwrap().text(result.source()).contains("Author A"));
     assert_eq!(refs[1].number().unwrap().text(result.source()), "2");
-    assert!(
-        refs[1]
-            .content()
-            .unwrap()
-            .text(result.source())
-            .contains("Author B")
-    );
+    assert!(refs[1].content().unwrap().text(result.source()).contains("Author B"));
 }
 
 /// References with directive markers.
@@ -264,10 +231,7 @@ fn test_references_directive_markers() {
     let refs = references(&result);
     assert_eq!(refs.len(), 1);
     assert!(refs[0].directive_marker().is_some());
-    assert_eq!(
-        refs[0].directive_marker().unwrap().text(result.source()),
-        ".."
-    );
+    assert_eq!(refs[0].directive_marker().unwrap().text(result.source()), "..");
     assert!(refs[0].open_bracket().is_some());
     assert!(refs[0].close_bracket().is_some());
 }

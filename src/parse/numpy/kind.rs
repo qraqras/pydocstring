@@ -106,10 +106,7 @@ impl NumPySectionKind {
 
     /// Whether this section kind has free-text body.
     pub fn is_freetext(&self) -> bool {
-        matches!(
-            self,
-            Self::Notes | Self::Examples | Self::Warnings | Self::Unknown
-        )
+        matches!(self, Self::Notes | Self::Examples | Self::Warnings | Self::Unknown)
     }
 }
 

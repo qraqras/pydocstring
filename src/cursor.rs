@@ -109,11 +109,7 @@ impl<'a> LineCursor<'a> {
     /// Equivalent to
     /// `make_line_range(line, current_indent(), current_trimmed().len())`.
     pub fn current_trimmed_range(&self) -> TextRange {
-        self.make_line_range(
-            self.line,
-            self.current_indent(),
-            self.current_trimmed().len(),
-        )
+        self.make_line_range(self.line, self.current_indent(), self.current_trimmed().len())
     }
 
     // ── Arbitrary-line helpers ──────────────────────────────────────
@@ -140,13 +136,7 @@ impl<'a> LineCursor<'a> {
     // ── Span construction ──────────────────────────────────────────
 
     /// Build a [`TextRange`] from (line, col) pairs.
-    pub fn make_range(
-        &self,
-        start_line: usize,
-        start_col: usize,
-        end_line: usize,
-        end_col: usize,
-    ) -> TextRange {
+    pub fn make_range(&self, start_line: usize, start_col: usize, end_line: usize, end_col: usize) -> TextRange {
         TextRange::new(
             TextSize::new((self.offsets[start_line] + start_col) as u32),
             TextSize::new((self.offsets[end_line] + end_col) as u32),
@@ -186,10 +176,7 @@ impl<'a> LineCursor<'a> {
 
     /// Convert a byte offset to `(line, col)`.
     pub fn offset_to_line_col(&self, offset: usize) -> (usize, usize) {
-        let line = self
-            .offsets
-            .partition_point(|&o| o <= offset)
-            .saturating_sub(1);
+        let line = self.offsets.partition_point(|&o| o <= offset).saturating_sub(1);
         let col = offset - self.offsets[line];
         (line, col)
     }

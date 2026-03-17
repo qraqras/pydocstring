@@ -227,8 +227,7 @@ fn numpy_parameters_basic() {
 
 #[test]
 fn numpy_parameters_optional() {
-    let parsed =
-        parse_numpy("Summary.\n\nParameters\n----------\nx : int, optional\n    The value.");
+    let parsed = parse_numpy("Summary.\n\nParameters\n----------\nx : int, optional\n    The value.");
     let doc = numpy_to_model(&parsed).unwrap();
     match &doc.sections[0] {
         Section::Parameters(params) => {
@@ -252,8 +251,7 @@ fn numpy_parameters_multiple_names() {
 
 #[test]
 fn numpy_parameters_default_value() {
-    let parsed =
-        parse_numpy("Summary.\n\nParameters\n----------\nx : int, default: 0\n    The value.");
+    let parsed = parse_numpy("Summary.\n\nParameters\n----------\nx : int, default: 0\n    The value.");
     let doc = numpy_to_model(&parsed).unwrap();
     match &doc.sections[0] {
         Section::Parameters(params) => {
@@ -388,8 +386,7 @@ fn numpy_google_style_entry_to_model() {
 
 #[test]
 fn numpy_google_style_optional_to_model() {
-    let parsed =
-        parse_numpy("Summary.\n\nParameters\n----------\nname (str, optional): The name.\n");
+    let parsed = parse_numpy("Summary.\n\nParameters\n----------\nname (str, optional): The name.\n");
     let doc = numpy_to_model(&parsed).unwrap();
     let params = match &doc.sections[0] {
         Section::Parameters(p) => p,

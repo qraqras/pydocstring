@@ -239,11 +239,7 @@ pub struct SyntaxNode {
 impl SyntaxNode {
     /// Creates a new node with the given kind, range, and children.
     pub fn new(kind: SyntaxKind, range: TextRange, children: Vec<SyntaxElement>) -> Self {
-        Self {
-            kind,
-            range,
-            children,
-        }
+        Self { kind, range, children }
     }
 
     /// The kind of this node.
@@ -394,13 +390,7 @@ impl SyntaxToken {
         for _ in 0..indent {
             out.push_str("  ");
         }
-        let _ = writeln!(
-            out,
-            "{}: {:?}@{}",
-            self.kind.name(),
-            self.text(src),
-            self.range
-        );
+        let _ = writeln!(out, "{}: {:?}@{}", self.kind.name(), self.text(src), self.range);
     }
 }
 
@@ -536,10 +526,7 @@ mod tests {
     #[test]
     fn test_syntax_token_text() {
         let source = "hello world";
-        let token = SyntaxToken::new(
-            SyntaxKind::NAME,
-            TextRange::new(TextSize::new(0), TextSize::new(5)),
-        );
+        let token = SyntaxToken::new(SyntaxKind::NAME, TextRange::new(TextSize::new(0), TextSize::new(5)));
         assert_eq!(token.text(source), "hello");
     }
 
@@ -586,11 +573,7 @@ mod tests {
             vec![SyntaxElement::Node(child)],
         );
 
-        assert!(
-            parent
-                .find_node(SyntaxKind::GOOGLE_SECTION_HEADER)
-                .is_some()
-        );
+        assert!(parent.find_node(SyntaxKind::GOOGLE_SECTION_HEADER).is_some());
         assert!(parent.find_node(SyntaxKind::GOOGLE_ARG).is_none());
         assert_eq!(parent.nodes(SyntaxKind::GOOGLE_SECTION_HEADER).count(), 1);
     }
@@ -633,10 +616,7 @@ mod tests {
                             )),
                             SyntaxElement::Token(SyntaxToken::new(
                                 SyntaxKind::DESCRIPTION,
-                                TextRange::new(
-                                    TextSize::new(13),
-                                    TextSize::new(source.len() as u32),
-                                ),
+                                TextRange::new(TextSize::new(13), TextSize::new(source.len() as u32)),
                             )),
                         ],
                     )),
@@ -683,10 +663,7 @@ mod tests {
             }
         }
 
-        let mut counter = Counter {
-            nodes: 0,
-            tokens: 0,
-        };
+        let mut counter = Counter { nodes: 0, tokens: 0 };
         walk(&root, &mut counter);
         assert_eq!(counter.nodes, 1);
         assert_eq!(counter.tokens, 1);
