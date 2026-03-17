@@ -276,10 +276,21 @@ impl SyntaxNode {
         self.range = TextRange::new(self.range.start(), end);
     }
 
-    /// Find the first token child with the given kind.
+    /// Find the first present (non-missing) token child with the given kind.
+    ///
+    /// Zero-length tokens are considered missing and are excluded.
+    /// Use [`find_missing`](Self::find_missing) to find missing tokens.
     pub fn find_token(&self, kind: SyntaxKind) -> Option<&SyntaxToken> {
         self.children.iter().find_map(|c| match c {
-            SyntaxElement::Token(t) if t.kind() == kind => Some(t),
+            SyntaxElement::Token(t) if t.kind() == kind && !t.is_missing() => Some(t),
+            _ => None,
+        })
+    }
+
+    /// Find the first missing (zero-length) token child with the given kind.
+    pub fn find_missing(&self, kind: SyntaxKind) -> Option<&SyntaxToken> {
+        self.children.iter().find_map(|c| match c {
+            SyntaxElement::Token(t) if t.kind() == kind && t.is_missing() => Some(t),
             _ => None,
         })
     }
@@ -361,6 +372,11 @@ impl SyntaxToken {
     /// The source range of this token.
     pub fn range(&self) -> &TextRange {
         &self.range
+    }
+
+    /// Whether this token is missing from the source (zero-length placeholder).
+    pub fn is_missing(&self) -> bool {
+        self.range.is_empty()
     }
 
     /// Extract the corresponding text slice from source.
