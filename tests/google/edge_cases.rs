@@ -276,3 +276,38 @@ fn test_colon_inside_nested_brackets_no_split() {
     assert_eq!(a[0].r#type().unwrap().text(result.source()), "Dict[str:int]");
     assert!(a[0].description().is_none());
 }
+
+// =============================================================================
+// Arg entry with no description — must not become a section header
+// =============================================================================
+
+/// `b :` (space before colon, no description) must be parsed as an arg entry,
+/// not mistaken for a section header.  Regression test for the case where any
+/// `word:` pattern inside a section body was mis-classified as a new section.
+#[test]
+fn test_arg_no_description_space_before_colon_not_header() {
+    let input = "Args:\n    a (int): An integer parameter.\n    b :\n    c : A parameter.";
+    let result = parse_google(input);
+
+    // Only one section (Args), not three.
+    let sections = all_sections(&result);
+    assert_eq!(sections.len(), 1, "b : should not be a section header");
+
+    let a = args(&result);
+    assert_eq!(a.len(), 3, "expected 3 arg entries");
+
+    assert_eq!(a[0].name().text(result.source()), "a");
+    assert_eq!(a[0].r#type().unwrap().text(result.source()), "int");
+    assert_eq!(
+        a[0].description().unwrap().text(result.source()),
+        "An integer parameter."
+    );
+
+    assert_eq!(a[1].name().text(result.source()), "b");
+    assert!(a[1].r#type().is_none());
+    assert!(a[1].description().is_none());
+
+    assert_eq!(a[2].name().text(result.source()), "c");
+    assert!(a[2].r#type().is_none());
+    assert_eq!(a[2].description().unwrap().text(result.source()), "A parameter.");
+}

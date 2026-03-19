@@ -205,6 +205,7 @@ struct SectionHeaderInfo {
     kind: GoogleSectionKind,
     name: TextRange,
     colon: Option<TextRange>,
+    indent_columns: usize,
 }
 
 fn try_parse_section_header(cursor: &LineCursor) -> Option<SectionHeaderInfo> {
@@ -243,6 +244,7 @@ fn try_parse_section_header(cursor: &LineCursor) -> Option<SectionHeaderInfo> {
         kind,
         name: cursor.make_line_range(cursor.line, col, header_name.len()),
         colon,
+        indent_columns: cursor.current_indent_columns(),
     })
 }
 
@@ -696,7 +698,13 @@ pub fn parse_google(input: &str) -> Parsed {
         }
 
         // --- Detect section header ---
-        if let Some(header_info) = try_parse_section_header(&line_cursor) {
+        // Lines that are strictly more indented than the current section header
+        // are body entries (e.g., `b :` inside an Args block) and must never
+        // be mistaken for a new section header.
+        let may_be_header = current_header
+            .as_ref()
+            .is_none_or(|h| line_cursor.current_indent_columns() <= h.indent_columns);
+        if may_be_header && let Some(header_info) = try_parse_section_header(&line_cursor) {
             // Finalise pending pre-section content
             if !summary_done {
                 if summary_first.is_some() {
