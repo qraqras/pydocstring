@@ -1,8 +1,7 @@
 //! Convert a Google-style AST into the style-independent [`Docstring`] model.
 
 use crate::model::{
-    Attribute, Docstring, ExceptionEntry, FreeSectionKind, Method, Parameter, Return, Section,
-    SeeAlsoEntry,
+    Attribute, Docstring, ExceptionEntry, FreeSectionKind, Method, Parameter, Return, Section, SeeAlsoEntry,
 };
 use crate::parse::google::kind::GoogleSectionKind;
 use crate::parse::google::nodes::{GoogleDocstring, GoogleSection};
@@ -18,10 +17,7 @@ pub fn to_model(parsed: &Parsed) -> Option<Docstring> {
     let summary = root.summary().map(|t| t.text(source).to_owned());
     let extended_summary = root.extended_summary().map(|t| t.text(source).to_owned());
 
-    let sections = root
-        .sections()
-        .map(|s| convert_section(&s, source))
-        .collect();
+    let sections = root.sections().map(|s| convert_section(&s, source)).collect();
 
     Some(Docstring {
         summary,
@@ -65,12 +61,9 @@ fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
                 _ => unreachable!(),
             }
         }
-        GoogleSectionKind::Raises => Section::Raises(
-            section
-                .exceptions()
-                .map(|e| convert_exception(&e, source))
-                .collect(),
-        ),
+        GoogleSectionKind::Raises => {
+            Section::Raises(section.exceptions().map(|e| convert_exception(&e, source)).collect())
+        }
         GoogleSectionKind::Warns => Section::Warns(
             section
                 .warnings()
@@ -128,15 +121,10 @@ fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
                 GoogleSectionKind::Hint => FreeSectionKind::Hint,
                 GoogleSectionKind::Important => FreeSectionKind::Important,
                 GoogleSectionKind::Tip => FreeSectionKind::Tip,
-                GoogleSectionKind::Unknown => {
-                    FreeSectionKind::Unknown(section.header().name().text(source).to_owned())
-                }
+                GoogleSectionKind::Unknown => FreeSectionKind::Unknown(section.header().name().text(source).to_owned()),
                 _ => unreachable!(),
             };
-            Section::FreeText {
-                kind: free_kind,
-                body,
-            }
+            Section::FreeText { kind: free_kind, body }
         }
     }
 }
@@ -151,10 +139,7 @@ fn convert_arg(arg: &crate::parse::google::nodes::GoogleArg<'_>, source: &str) -
     }
 }
 
-fn convert_exception(
-    exc: &crate::parse::google::nodes::GoogleException<'_>,
-    source: &str,
-) -> ExceptionEntry {
+fn convert_exception(exc: &crate::parse::google::nodes::GoogleException<'_>, source: &str) -> ExceptionEntry {
     ExceptionEntry {
         type_name: exc.r#type().text(source).to_owned(),
         description: exc.description().map(|t| t.text(source).to_owned()),

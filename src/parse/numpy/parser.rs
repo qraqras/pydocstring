@@ -5,9 +5,7 @@
 
 use crate::cursor::{LineCursor, indent_columns, indent_len};
 use crate::parse::numpy::kind::NumPySectionKind;
-use crate::parse::utils::{
-    find_entry_colon, find_matching_close, split_comma_parts, try_parse_bracket_entry,
-};
+use crate::parse::utils::{find_entry_colon, find_matching_close, split_comma_parts, try_parse_bracket_entry};
 use crate::syntax::{Parsed, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 use crate::text::TextRange;
 
@@ -109,12 +107,7 @@ struct ParamHeaderParts {
     first_description: Option<TextRange>,
 }
 
-fn parse_name_and_type(
-    text: &str,
-    line_idx: usize,
-    col_base: usize,
-    cursor: &LineCursor,
-) -> ParamHeaderParts {
+fn parse_name_and_type(text: &str, line_idx: usize, col_base: usize, cursor: &LineCursor) -> ParamHeaderParts {
     // --- Google-style bracket pattern: `name (type): desc` ---
     if let Some(result) = try_parse_google_style_entry(text, line_idx, col_base, cursor) {
         return result;
@@ -171,8 +164,7 @@ fn parse_name_and_type(
         }
 
         if seg == "optional" {
-            let seg_abs =
-                type_abs_start + seg_offset + (seg_raw.len() - seg_raw.trim_start().len());
+            let seg_abs = type_abs_start + seg_offset + (seg_raw.len() - seg_raw.trim_start().len());
             optional = Some(TextRange::from_offset_len(seg_abs, "optional".len()));
         } else if let Some(stripped) = seg.strip_prefix("default") {
             let ws_lead = seg_raw.len() - seg_raw.trim_start().len();
@@ -245,11 +237,7 @@ fn try_parse_google_style_entry(
     let names = parse_name_list(entry.name, line_idx, col_base, cursor);
 
     let param_type = if !entry.clean_type.is_empty() {
-        Some(cursor.make_line_range(
-            line_idx,
-            col_base + entry.type_offset,
-            entry.clean_type.len(),
-        ))
+        Some(cursor.make_line_range(line_idx, col_base + entry.type_offset, entry.clean_type.len()))
     } else {
         None
     };
@@ -258,9 +246,7 @@ fn try_parse_google_style_entry(
         .optional_offset
         .map(|r| cursor.make_line_range(line_idx, col_base + r, "optional".len()));
 
-    let colon = entry
-        .colon
-        .map(|c| cursor.make_line_range(line_idx, col_base + c, 1));
+    let colon = entry.colon.map(|c| cursor.make_line_range(line_idx, col_base + c, 1));
 
     let first_description = entry
         .description_offset
@@ -278,12 +264,7 @@ fn try_parse_google_style_entry(
     })
 }
 
-fn parse_name_list(
-    text: &str,
-    line_idx: usize,
-    col_base: usize,
-    cursor: &LineCursor,
-) -> Vec<TextRange> {
+fn parse_name_list(text: &str, line_idx: usize, col_base: usize, cursor: &LineCursor) -> Vec<TextRange> {
     let mut names = Vec::new();
     let mut byte_pos = 0usize;
 
@@ -315,31 +296,19 @@ fn build_section_header_node(info: &SectionHeaderInfo) -> SyntaxNode {
 fn build_parameter_node(parts: &ParamHeaderParts, range: TextRange) -> SyntaxNode {
     let mut children = Vec::new();
     for name in &parts.names {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::NAME,
-            *name,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::NAME, *name)));
     }
     if let Some(colon) = parts.colon {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::COLON,
-            colon,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, colon)));
     }
     if let Some(t) = parts.param_type {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::TYPE, t)));
     }
     if let Some(opt) = parts.optional {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::OPTIONAL,
-            opt,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::OPTIONAL, opt)));
     }
     if let Some(dk) = parts.default_keyword {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::DEFAULT_KEYWORD,
-            dk,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DEFAULT_KEYWORD, dk)));
     }
     if let Some(ds) = parts.default_separator {
         children.push(SyntaxElement::Token(SyntaxToken::new(
@@ -348,16 +317,10 @@ fn build_parameter_node(parts: &ParamHeaderParts, range: TextRange) -> SyntaxNod
         )));
     }
     if let Some(dv) = parts.default_value {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::DEFAULT_VALUE,
-            dv,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DEFAULT_VALUE, dv)));
     }
     if let Some(desc) = parts.first_description {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::DESCRIPTION,
-            desc,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, desc)));
     }
     SyntaxNode::new(SyntaxKind::NUMPY_PARAMETER, range, children)
 }
@@ -376,10 +339,7 @@ fn build_returns_node(
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, c)));
     }
     if let Some(rt) = return_type {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::RETURN_TYPE,
-            rt,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::RETURN_TYPE, rt)));
     }
     SyntaxNode::new(SyntaxKind::NUMPY_RETURNS, range, children)
 }
@@ -391,18 +351,12 @@ fn build_exception_node(
     range: TextRange,
 ) -> SyntaxNode {
     let mut children = Vec::new();
-    children.push(SyntaxElement::Token(SyntaxToken::new(
-        SyntaxKind::TYPE,
-        exc_type,
-    )));
+    children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::TYPE, exc_type)));
     if let Some(c) = colon {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, c)));
     }
     if let Some(d) = first_desc {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::DESCRIPTION,
-            d,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, d)));
     }
     SyntaxNode::new(SyntaxKind::NUMPY_EXCEPTION, range, children)
 }
@@ -414,18 +368,12 @@ fn build_warning_node(
     range: TextRange,
 ) -> SyntaxNode {
     let mut children = Vec::new();
-    children.push(SyntaxElement::Token(SyntaxToken::new(
-        SyntaxKind::TYPE,
-        warn_type,
-    )));
+    children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::TYPE, warn_type)));
     if let Some(c) = colon {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, c)));
     }
     if let Some(d) = first_desc {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::DESCRIPTION,
-            d,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, d)));
     }
     SyntaxNode::new(SyntaxKind::NUMPY_WARNING, range, children)
 }
@@ -442,19 +390,13 @@ fn build_see_also_node(
     let mut children = Vec::new();
     let names = parse_name_list(names_str, names_line, names_col, cursor);
     for name in &names {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::NAME,
-            *name,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::NAME, *name)));
     }
     if let Some(c) = colon {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, c)));
     }
     if let Some(d) = description {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::DESCRIPTION,
-            d,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, d)));
     }
     SyntaxNode::new(SyntaxKind::NUMPY_SEE_ALSO_ITEM, range, children)
 }
@@ -463,16 +405,10 @@ fn build_attribute_node(parts: &ParamHeaderParts, range: TextRange) -> SyntaxNod
     let mut children = Vec::new();
     // Attributes use the first name only.
     if let Some(name) = parts.names.first() {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::NAME,
-            *name,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::NAME, *name)));
     }
     if let Some(colon) = parts.colon {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::COLON,
-            colon,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, colon)));
     }
     if let Some(t) = parts.param_type {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::TYPE, t)));
@@ -482,10 +418,7 @@ fn build_attribute_node(parts: &ParamHeaderParts, range: TextRange) -> SyntaxNod
 
 fn build_method_node(name: TextRange, colon: Option<TextRange>, range: TextRange) -> SyntaxNode {
     let mut children = Vec::new();
-    children.push(SyntaxElement::Token(SyntaxToken::new(
-        SyntaxKind::NAME,
-        name,
-    )));
+    children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::NAME, name)));
     if let Some(c) = colon {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, c)));
     }
@@ -510,29 +443,20 @@ fn build_reference_node_rst(
         open_bracket,
     )));
     if let Some(n) = number {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::NUMBER,
-            n,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::NUMBER, n)));
     }
     children.push(SyntaxElement::Token(SyntaxToken::new(
         SyntaxKind::CLOSE_BRACKET,
         close_bracket,
     )));
     if let Some(c) = content {
-        children.push(SyntaxElement::Token(SyntaxToken::new(
-            SyntaxKind::CONTENT,
-            c,
-        )));
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::CONTENT, c)));
     }
     SyntaxNode::new(SyntaxKind::NUMPY_REFERENCE, range, children)
 }
 
 fn build_reference_node_plain(content: TextRange, range: TextRange) -> SyntaxNode {
-    let children = vec![SyntaxElement::Token(SyntaxToken::new(
-        SyntaxKind::CONTENT,
-        content,
-    ))];
+    let children = vec![SyntaxElement::Token(SyntaxToken::new(SyntaxKind::CONTENT, content))];
     SyntaxNode::new(SyntaxKind::NUMPY_REFERENCE, range, children)
 }
 
@@ -553,10 +477,7 @@ fn extend_last_node_description(nodes: &mut [SyntaxElement], cont: TextRange) {
             }
         }
         if !found_desc {
-            node.push_child(SyntaxElement::Token(SyntaxToken::new(
-                SyntaxKind::DESCRIPTION,
-                cont,
-            )));
+            node.push_child(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, cont)));
         }
         node.extend_range_to(cont.end());
     }
@@ -576,20 +497,13 @@ fn extend_last_ref_content(nodes: &mut [SyntaxElement], cont: TextRange) {
             }
         }
         if !found_content {
-            node.push_child(SyntaxElement::Token(SyntaxToken::new(
-                SyntaxKind::CONTENT,
-                cont,
-            )));
+            node.push_child(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::CONTENT, cont)));
         }
         node.extend_range_to(cont.end());
     }
 }
 
-fn process_parameter_line(
-    cursor: &LineCursor,
-    nodes: &mut Vec<SyntaxElement>,
-    entry_indent: &mut Option<usize>,
-) {
+fn process_parameter_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, entry_indent: &mut Option<usize>) {
     let indent_cols = cursor.current_indent_columns();
     if let Some(base) = *entry_indent {
         if indent_cols > base {
@@ -605,17 +519,10 @@ fn process_parameter_line(
     let trimmed = cursor.current_trimmed();
     let parts = parse_name_and_type(trimmed, cursor.line, col, cursor);
     let entry_range = cursor.current_trimmed_range();
-    nodes.push(SyntaxElement::Node(build_parameter_node(
-        &parts,
-        entry_range,
-    )));
+    nodes.push(SyntaxElement::Node(build_parameter_node(&parts, entry_range)));
 }
 
-fn process_returns_line(
-    cursor: &LineCursor,
-    nodes: &mut Vec<SyntaxElement>,
-    entry_indent: &mut Option<usize>,
-) {
+fn process_returns_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, entry_indent: &mut Option<usize>) {
     let indent_cols = cursor.current_indent_columns();
     if let Some(base) = *entry_indent {
         if indent_cols > base {
@@ -659,11 +566,7 @@ fn process_returns_line(
     )));
 }
 
-fn process_raises_line(
-    cursor: &LineCursor,
-    nodes: &mut Vec<SyntaxElement>,
-    entry_indent: &mut Option<usize>,
-) {
+fn process_raises_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, entry_indent: &mut Option<usize>) {
     let indent_cols = cursor.current_indent_columns();
     if let Some(base) = *entry_indent {
         if indent_cols > base {
@@ -706,11 +609,7 @@ fn process_raises_line(
     )));
 }
 
-fn process_warning_line(
-    cursor: &LineCursor,
-    nodes: &mut Vec<SyntaxElement>,
-    entry_indent: &mut Option<usize>,
-) {
+fn process_warning_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, entry_indent: &mut Option<usize>) {
     let indent_cols = cursor.current_indent_columns();
     if let Some(base) = *entry_indent {
         if indent_cols > base {
@@ -753,11 +652,7 @@ fn process_warning_line(
     )));
 }
 
-fn process_see_also_line(
-    cursor: &LineCursor,
-    nodes: &mut Vec<SyntaxElement>,
-    entry_indent: &mut Option<usize>,
-) {
+fn process_see_also_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, entry_indent: &mut Option<usize>) {
     let indent_cols = cursor.current_indent_columns();
     if let Some(base) = *entry_indent {
         if indent_cols > base {
@@ -802,11 +697,7 @@ fn process_see_also_line(
     )));
 }
 
-fn process_attribute_line(
-    cursor: &LineCursor,
-    nodes: &mut Vec<SyntaxElement>,
-    entry_indent: &mut Option<usize>,
-) {
+fn process_attribute_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, entry_indent: &mut Option<usize>) {
     let indent_cols = cursor.current_indent_columns();
     if let Some(base) = *entry_indent {
         if indent_cols > base {
@@ -822,17 +713,10 @@ fn process_attribute_line(
     let trimmed = cursor.current_trimmed();
     let parts = parse_name_and_type(trimmed, cursor.line, col, cursor);
     let entry_range = cursor.current_trimmed_range();
-    nodes.push(SyntaxElement::Node(build_attribute_node(
-        &parts,
-        entry_range,
-    )));
+    nodes.push(SyntaxElement::Node(build_attribute_node(&parts, entry_range)));
 }
 
-fn process_method_line(
-    cursor: &LineCursor,
-    nodes: &mut Vec<SyntaxElement>,
-    entry_indent: &mut Option<usize>,
-) {
+fn process_method_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, entry_indent: &mut Option<usize>) {
     let indent_cols = cursor.current_indent_columns();
     if let Some(base) = *entry_indent {
         if indent_cols > base {
@@ -858,18 +742,10 @@ fn process_method_line(
     };
 
     let entry_range = cursor.current_trimmed_range();
-    nodes.push(SyntaxElement::Node(build_method_node(
-        name,
-        colon,
-        entry_range,
-    )));
+    nodes.push(SyntaxElement::Node(build_method_node(name, colon, entry_range)));
 }
 
-fn process_reference_line(
-    cursor: &LineCursor,
-    nodes: &mut Vec<SyntaxElement>,
-    entry_indent: &mut Option<usize>,
-) {
+fn process_reference_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, entry_indent: &mut Option<usize>) {
     let indent_cols = cursor.current_indent_columns();
     if let Some(base) = *entry_indent {
         if indent_cols > base {
@@ -900,10 +776,8 @@ fn process_reference_line(
             } else {
                 None
             };
-            let line_end_offset =
-                cursor.substr_offset(cursor.current_line_text()) + cursor.current_line_text().len();
-            let after_on_line =
-                &cursor.source()[abs_close + 1..line_end_offset.min(cursor.source().len())];
+            let line_end_offset = cursor.substr_offset(cursor.current_line_text()) + cursor.current_line_text().len();
+            let after_on_line = &cursor.source()[abs_close + 1..line_end_offset.min(cursor.source().len())];
             let content_str = after_on_line.trim();
             let content = if !content_str.is_empty() {
                 Some(TextRange::from_offset_len(
@@ -999,10 +873,7 @@ impl SectionBody {
             Self::Methods(nodes) => nodes,
             Self::FreeText(range) => {
                 if let Some(r) = range {
-                    vec![SyntaxElement::Token(SyntaxToken::new(
-                        SyntaxKind::BODY_TEXT,
-                        r,
-                    ))]
+                    vec![SyntaxElement::Token(SyntaxToken::new(SyntaxKind::BODY_TEXT, r))]
                 } else {
                     vec![]
                 }
@@ -1042,11 +913,7 @@ pub fn parse_numpy(input: &str) -> Parsed {
 
     cursor.skip_blanks();
     if cursor.is_eof() {
-        let root = SyntaxNode::new(
-            SyntaxKind::NUMPY_DOCSTRING,
-            cursor.full_range(),
-            root_children,
-        );
+        let root = SyntaxNode::new(SyntaxKind::NUMPY_DOCSTRING, cursor.full_range(), root_children);
         return Parsed::new(input.to_string(), root);
     }
 
@@ -1074,10 +941,7 @@ pub fn parse_numpy(input: &str) -> Parsed {
             let last_col = indent_len(last_text) + last_text.trim().len();
             let range = cursor.make_range(start_line, start_col, last_line, last_col);
             if !range.is_empty() {
-                root_children.push(SyntaxElement::Token(SyntaxToken::new(
-                    SyntaxKind::SUMMARY,
-                    range,
-                )));
+                root_children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::SUMMARY, range)));
             }
         }
     }
@@ -1126,10 +990,7 @@ pub fn parse_numpy(input: &str) -> Parsed {
             let desc_range = collect_description(&mut cursor, indent_columns(line));
 
             if let Some(desc) = desc_range {
-                dep_children.push(SyntaxElement::Token(SyntaxToken::new(
-                    SyntaxKind::DESCRIPTION,
-                    desc,
-                )));
+                dep_children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, desc)));
             }
 
             // Compute deprecation span
@@ -1194,8 +1055,7 @@ pub fn parse_numpy(input: &str) -> Parsed {
         if let Some(header_info) = try_detect_header(&cursor) {
             // Flush previous section
             if let Some(prev_header) = current_header.take() {
-                let section_node =
-                    flush_section(&cursor, prev_header, current_body.take().unwrap());
+                let section_node = flush_section(&cursor, prev_header, current_body.take().unwrap());
                 root_children.push(SyntaxElement::Node(section_node));
             }
 
@@ -1225,11 +1085,7 @@ pub fn parse_numpy(input: &str) -> Parsed {
         root_children.push(SyntaxElement::Node(section_node));
     }
 
-    let root = SyntaxNode::new(
-        SyntaxKind::NUMPY_DOCSTRING,
-        cursor.full_range(),
-        root_children,
-    );
+    let root = SyntaxNode::new(SyntaxKind::NUMPY_DOCSTRING, cursor.full_range(), root_children);
     Parsed::new(input.to_string(), root)
 }
 
@@ -1265,10 +1121,7 @@ mod tests {
     fn test_try_detect_header() {
         let c1 = LineCursor::new("Parameters\n----------");
         assert!(try_detect_header(&c1).is_some());
-        assert_eq!(
-            try_detect_header(&c1).unwrap().kind,
-            NumPySectionKind::Parameters
-        );
+        assert_eq!(try_detect_header(&c1).unwrap().kind, NumPySectionKind::Parameters);
 
         let c2 = LineCursor::new("just text\nmore text");
         assert!(try_detect_header(&c2).is_none());
@@ -1283,10 +1136,7 @@ mod tests {
         assert!(try_detect_header(&c5).is_some());
         c5.line = 3;
         assert!(try_detect_header(&c5).is_some());
-        assert_eq!(
-            try_detect_header(&c5).unwrap().kind,
-            NumPySectionKind::Returns
-        );
+        assert_eq!(try_detect_header(&c5).unwrap().kind, NumPySectionKind::Returns);
     }
 
     #[test]

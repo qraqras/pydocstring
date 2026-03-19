@@ -3,8 +3,8 @@
 pub use pydocstring::parse::numpy::{
     kind::NumPySectionKind,
     nodes::{
-        NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod,
-        NumPyParameter, NumPyReference, NumPyReturns, NumPySection, NumPySeeAlsoItem, NumPyWarning,
+        NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod, NumPyParameter, NumPyReference,
+        NumPyReturns, NumPySection, NumPySeeAlsoItem, NumPyWarning,
     },
     parse_numpy,
 };
@@ -37,12 +37,7 @@ pub fn all_sections<'a>(result: &'a Parsed) -> Vec<NumPySection<'a>> {
 pub fn parameters<'a>(result: &'a Parsed) -> Vec<NumPyParameter<'a>> {
     doc(result)
         .sections()
-        .filter(|s| {
-            matches!(
-                s.section_kind(result.source()),
-                NumPySectionKind::Parameters
-            )
-        })
+        .filter(|s| matches!(s.section_kind(result.source()), NumPySectionKind::Parameters))
         .flat_map(|s| s.parameters().collect::<Vec<_>>())
         .collect()
 }
@@ -90,12 +85,7 @@ pub fn see_also<'a>(result: &'a Parsed) -> Vec<NumPySeeAlsoItem<'a>> {
 pub fn references<'a>(result: &'a Parsed) -> Vec<NumPyReference<'a>> {
     doc(result)
         .sections()
-        .filter(|s| {
-            matches!(
-                s.section_kind(result.source()),
-                NumPySectionKind::References
-            )
-        })
+        .filter(|s| matches!(s.section_kind(result.source()), NumPySectionKind::References))
         .flat_map(|s| s.references().collect::<Vec<_>>())
         .collect()
 }
@@ -125,12 +115,7 @@ pub fn receives<'a>(result: &'a Parsed) -> Vec<NumPyParameter<'a>> {
 pub fn other_parameters<'a>(result: &'a Parsed) -> Vec<NumPyParameter<'a>> {
     doc(result)
         .sections()
-        .filter(|s| {
-            matches!(
-                s.section_kind(result.source()),
-                NumPySectionKind::OtherParameters
-            )
-        })
+        .filter(|s| matches!(s.section_kind(result.source()), NumPySectionKind::OtherParameters))
         .flat_map(|s| s.parameters().collect::<Vec<_>>())
         .collect()
 }
@@ -138,12 +123,7 @@ pub fn other_parameters<'a>(result: &'a Parsed) -> Vec<NumPyParameter<'a>> {
 pub fn attributes<'a>(result: &'a Parsed) -> Vec<NumPyAttribute<'a>> {
     doc(result)
         .sections()
-        .filter(|s| {
-            matches!(
-                s.section_kind(result.source()),
-                NumPySectionKind::Attributes
-            )
-        })
+        .filter(|s| matches!(s.section_kind(result.source()), NumPySectionKind::Attributes))
         .flat_map(|s| s.attributes().collect::<Vec<_>>())
         .collect()
 }

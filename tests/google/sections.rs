@@ -72,10 +72,7 @@ fn test_section_header_span() {
     let result = parse_google(docstring);
     let header = all_sections(&result)[0].header();
     assert_eq!(header.name().text(result.source()), "Args");
-    assert_eq!(
-        header.syntax().range().source_text(result.source()),
-        "Args:"
-    );
+    assert_eq!(header.syntax().range().source_text(result.source()), "Args:");
 }
 
 #[test]
@@ -100,10 +97,7 @@ fn test_unknown_section_preserved() {
     let sections = all_sections(&result);
     assert_eq!(sections.len(), 1);
     assert_eq!(sections[0].header().name().text(result.source()), "Custom");
-    assert_eq!(
-        sections[0].section_kind(result.source()),
-        GoogleSectionKind::Unknown
-    );
+    assert_eq!(sections[0].section_kind(result.source()), GoogleSectionKind::Unknown);
     assert_eq!(
         sections[0].body_text().unwrap().text(result.source()),
         "Some custom content."
@@ -112,8 +106,7 @@ fn test_unknown_section_preserved() {
 
 #[test]
 fn test_unknown_section_with_known() {
-    let docstring =
-        "Summary.\n\nArgs:\n    x: Value.\n\nCustom:\n    Content.\n\nReturns:\n    int: Result.";
+    let docstring = "Summary.\n\nArgs:\n    x: Value.\n\nCustom:\n    Content.\n\nReturns:\n    int: Result.";
     let result = parse_google(docstring);
     let sections = all_sections(&result);
     assert_eq!(sections.len(), 3);
@@ -130,14 +123,8 @@ fn test_multiple_unknown_sections() {
     let result = parse_google(docstring);
     let sections = all_sections(&result);
     assert_eq!(sections.len(), 2);
-    assert_eq!(
-        sections[0].header().name().text(result.source()),
-        "Custom One"
-    );
-    assert_eq!(
-        sections[1].header().name().text(result.source()),
-        "Custom Two"
-    );
+    assert_eq!(sections[0].header().name().text(result.source()), "Custom One");
+    assert_eq!(sections[1].header().name().text(result.source()), "Custom Two");
 }
 
 // =============================================================================
@@ -218,21 +205,11 @@ fn test_span_source_text_round_trip() {
     let docstring = "Summary.\n\nArgs:\n    x (int): Value.\n\nReturns:\n    bool: Success.";
     let result = parse_google(docstring);
 
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "Summary."
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "Summary.");
     assert_eq!(args(&result)[0].name().text(result.source()), "x");
+    assert_eq!(args(&result)[0].r#type().unwrap().text(result.source()), "int");
     assert_eq!(
-        args(&result)[0].r#type().unwrap().text(result.source()),
-        "int"
-    );
-    assert_eq!(
-        returns(&result)
-            .unwrap()
-            .return_type()
-            .unwrap()
-            .text(result.source()),
+        returns(&result).unwrap().return_type().unwrap().text(result.source()),
         "bool"
     );
 }

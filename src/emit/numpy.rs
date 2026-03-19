@@ -1,8 +1,8 @@
 //! Emit a [`Docstring`] as a NumPy-style docstring.
 
 use crate::model::{
-    Attribute, Deprecation, Docstring, ExceptionEntry, FreeSectionKind, Method, Parameter,
-    Reference, Return, Section, SeeAlsoEntry,
+    Attribute, Deprecation, Docstring, ExceptionEntry, FreeSectionKind, Method, Parameter, Reference, Return, Section,
+    SeeAlsoEntry,
 };
 
 /// Emit a [`Docstring`] as a NumPy-style docstring string.

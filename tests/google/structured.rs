@@ -30,10 +30,7 @@ fn test_attribute_singular_alias() {
     let result = parse_google(docstring);
     assert_eq!(attributes(&result).len(), 1);
     assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
+        all_sections(&result)[0].header().name().text(result.source()),
         "Attribute"
     );
 }
@@ -49,10 +46,7 @@ fn test_methods_basic() {
     let m = methods(&result);
     assert_eq!(m.len(), 2);
     assert_eq!(m[0].name().text(result.source()), "reset()");
-    assert_eq!(
-        m[0].description().unwrap().text(result.source()),
-        "Reset the state."
-    );
+    assert_eq!(m[0].description().unwrap().text(result.source()), "Reset the state.");
     assert_eq!(m[1].name().text(result.source()), "update(data)");
 }
 
@@ -74,10 +68,7 @@ fn test_methods_section_body_variant() {
     let docstring = "Summary.\n\nMethods:\n    foo(): Does bar.";
     let result = parse_google(docstring);
     let sections = all_sections(&result);
-    assert_eq!(
-        sections[0].section_kind(result.source()),
-        GoogleSectionKind::Methods
-    );
+    assert_eq!(sections[0].section_kind(result.source()), GoogleSectionKind::Methods);
     assert_eq!(sections[0].methods().count(), 1);
 }
 
@@ -133,9 +124,6 @@ fn test_see_also_section_body_variant() {
     let docstring = "Summary.\n\nSee Also:\n    func_a: Desc.";
     let result = parse_google(docstring);
     let sections = all_sections(&result);
-    assert_eq!(
-        sections[0].section_kind(result.source()),
-        GoogleSectionKind::SeeAlso
-    );
+    assert_eq!(sections[0].section_kind(result.source()), GoogleSectionKind::SeeAlso);
     assert_eq!(sections[0].see_also_items().count(), 1);
 }

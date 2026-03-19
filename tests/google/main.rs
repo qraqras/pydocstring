@@ -1,10 +1,10 @@
 //! Integration tests for Google-style docstring parser.
 
 pub use pydocstring::parse::google::{
-    GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturns,
-    GoogleSection, GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning, parse_google,
+    GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturns, GoogleSection,
+    GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning, parse_google,
 };
-pub use pydocstring::syntax::{Parsed, SyntaxToken};
+pub use pydocstring::syntax::{Parsed, SyntaxKind, SyntaxToken};
 pub use pydocstring::text::TextSize;
 
 mod args;
@@ -62,12 +62,7 @@ pub fn raises<'a>(result: &'a Parsed) -> Vec<GoogleException<'a>> {
 pub fn attributes<'a>(result: &'a Parsed) -> Vec<GoogleAttribute<'a>> {
     doc(result)
         .sections()
-        .filter(|s| {
-            matches!(
-                s.section_kind(result.source()),
-                GoogleSectionKind::Attributes
-            )
-        })
+        .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Attributes))
         .flat_map(|s| s.attributes().collect::<Vec<_>>())
         .collect()
 }
@@ -75,12 +70,7 @@ pub fn attributes<'a>(result: &'a Parsed) -> Vec<GoogleAttribute<'a>> {
 pub fn keyword_args<'a>(result: &'a Parsed) -> Vec<GoogleArg<'a>> {
     doc(result)
         .sections()
-        .filter(|s| {
-            matches!(
-                s.section_kind(result.source()),
-                GoogleSectionKind::KeywordArgs
-            )
-        })
+        .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::KeywordArgs))
         .flat_map(|s| s.args().collect::<Vec<_>>())
         .collect()
 }
@@ -88,12 +78,7 @@ pub fn keyword_args<'a>(result: &'a Parsed) -> Vec<GoogleArg<'a>> {
 pub fn other_parameters<'a>(result: &'a Parsed) -> Vec<GoogleArg<'a>> {
     doc(result)
         .sections()
-        .filter(|s| {
-            matches!(
-                s.section_kind(result.source()),
-                GoogleSectionKind::OtherParameters
-            )
-        })
+        .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::OtherParameters))
         .flat_map(|s| s.args().collect::<Vec<_>>())
         .collect()
 }
@@ -154,12 +139,7 @@ pub fn todo(result: &Parsed) -> Option<&SyntaxToken> {
 pub fn references(result: &Parsed) -> Option<&SyntaxToken> {
     doc(result)
         .sections()
-        .find(|s| {
-            matches!(
-                s.section_kind(result.source()),
-                GoogleSectionKind::References
-            )
-        })
+        .find(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::References))
         .and_then(|s| s.body_text())
 }
 

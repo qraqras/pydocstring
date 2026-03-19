@@ -8,10 +8,7 @@ use super::*;
 fn test_indented_docstring() {
     let docstring = "    Summary.\n\n    Args:\n        x (int): Value.";
     let result = parse_google(docstring);
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "Summary."
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "Summary.");
     let a = args(&result);
     assert_eq!(a.len(), 1);
     assert_eq!(a[0].name().text(result.source()), "x");
@@ -41,13 +38,7 @@ fn test_section_header_space_before_colon() {
     assert_eq!(a.len(), 1, "expected 1 arg from 'Args :'");
     assert_eq!(a[0].name().text(result.source()), "x");
 
-    assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
-        "Args"
-    );
+    assert_eq!(all_sections(&result)[0].header().name().text(result.source()), "Args");
     assert!(all_sections(&result)[0].header().colon().is_some());
 }
 
@@ -61,6 +52,7 @@ fn test_returns_space_before_colon() {
 }
 
 /// Colonless `Args` should be parsed as Args section.
+/// The section header should contain a missing COLON token.
 #[test]
 fn test_section_header_no_colon() {
     let input = "Summary.\n\nArgs\n    x (int): The value.";
@@ -69,14 +61,12 @@ fn test_section_header_no_colon() {
     assert_eq!(a.len(), 1, "expected 1 arg from colonless 'Args'");
     assert_eq!(a[0].name().text(result.source()), "x");
 
-    assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
-        "Args"
-    );
-    assert!(all_sections(&result)[0].header().colon().is_none());
+    let header = all_sections(&result)[0].header();
+    assert_eq!(header.name().text(result.source()), "Args");
+    assert!(header.colon().is_none(), "no COLON token for colonless header");
+    let missing = header.syntax().find_missing(SyntaxKind::COLON);
+    assert!(missing.is_some(), "colonless header should have a missing COLON");
+    assert!(missing.unwrap().is_missing());
 }
 
 /// Colonless `Returns` should be parsed as Returns section.
@@ -131,15 +121,9 @@ fn test_tab_indented_args() {
     let a = args(&result);
     assert_eq!(a.len(), 2);
     assert_eq!(a[0].name().text(result.source()), "x");
-    assert_eq!(
-        a[0].description().unwrap().text(result.source()),
-        "The value."
-    );
+    assert_eq!(a[0].description().unwrap().text(result.source()), "The value.");
     assert_eq!(a[1].name().text(result.source()), "y");
-    assert_eq!(
-        a[1].description().unwrap().text(result.source()),
-        "Another value."
-    );
+    assert_eq!(a[1].description().unwrap().text(result.source()), "Another value.");
 }
 
 /// Args entries with tab indent and descriptions with deeper tab+space indent.
@@ -164,10 +148,7 @@ fn test_tab_indented_returns() {
     assert!(r.is_some());
     let r = r.unwrap();
     assert_eq!(r.return_type().unwrap().text(result.source()), "int");
-    assert_eq!(
-        r.description().unwrap().text(result.source()),
-        "The result."
-    );
+    assert_eq!(r.description().unwrap().text(result.source()), "The result.");
 }
 
 /// Raises section with tab-indented entries.
@@ -189,4 +170,144 @@ fn test_tab_indented_section_header() {
     let a = args(&result);
     assert_eq!(a.len(), 1);
     assert_eq!(a[0].name().text(result.source()), "x");
+}
+
+// =============================================================================
+// Missing token tests
+// =============================================================================
+
+/// `arg1 (int : desc.` — missing close bracket.
+/// Parser should preserve type info with a missing CLOSE_BRACKET.
+#[test]
+fn test_missing_close_bracket() {
+    let input = "Args:\n   arg1 (int : desc.";
+    let result = parse_google(input);
+    let a = args(&result);
+    assert_eq!(a.len(), 1);
+    assert_eq!(a[0].name().text(result.source()), "arg1");
+    assert!(a[0].open_bracket().is_some());
+    assert_eq!(a[0].r#type().unwrap().text(result.source()), "int");
+    assert!(
+        a[0].close_bracket().is_none(),
+        "no CLOSE_BRACKET when bracket is unmatched"
+    );
+    // Missing CLOSE_BRACKET token should be present.
+    let missing = a[0].syntax().find_missing(SyntaxKind::CLOSE_BRACKET);
+    assert!(missing.is_some(), "should have a missing CLOSE_BRACKET token");
+    assert!(missing.unwrap().is_missing());
+    assert_eq!(a[0].description().unwrap().text(result.source()), "desc.");
+}
+
+/// `arg1 (int) desc` — close bracket present but colon missing before description.
+#[test]
+fn test_missing_colon_after_bracket() {
+    let input = "Args:\n    arg1 (int) description here.";
+    let result = parse_google(input);
+    let a = args(&result);
+    assert_eq!(a.len(), 1);
+    assert_eq!(a[0].name().text(result.source()), "arg1");
+    assert_eq!(a[0].r#type().unwrap().text(result.source()), "int");
+    assert!(a[0].open_bracket().is_some());
+    assert!(a[0].close_bracket().is_some());
+    assert!(a[0].colon().is_none(), "no COLON token");
+    // Missing COLON token.
+    let missing = a[0].syntax().find_missing(SyntaxKind::COLON);
+    assert!(missing.is_some(), "should have a missing COLON token");
+    assert!(missing.unwrap().is_missing());
+    assert_eq!(a[0].description().unwrap().text(result.source()), "description here.");
+}
+
+/// `arg1 (int` — missing close bracket and no colon/description.
+#[test]
+fn test_missing_close_bracket_no_colon() {
+    let input = "Args:\n    arg1 (int";
+    let result = parse_google(input);
+    let a = args(&result);
+    assert_eq!(a.len(), 1);
+    assert_eq!(a[0].name().text(result.source()), "arg1");
+    assert_eq!(a[0].r#type().unwrap().text(result.source()), "int");
+    assert!(a[0].open_bracket().is_some());
+    assert!(a[0].close_bracket().is_none());
+    assert!(a[0].colon().is_none());
+    // Missing CLOSE_BRACKET but no missing COLON (no description).
+    assert!(a[0].syntax().find_missing(SyntaxKind::CLOSE_BRACKET).is_some());
+    assert!(a[0].syntax().find_missing(SyntaxKind::COLON).is_none());
+}
+
+/// `arg1 (int desc.` — no close bracket and no colon.
+/// Entire content after `(` is TYPE; no colon/description.
+#[test]
+fn test_missing_bracket_no_colon_no_split() {
+    let input = "Args:\n    arg1 (int desc.";
+    let result = parse_google(input);
+    let a = args(&result);
+    assert_eq!(a.len(), 1);
+    assert_eq!(a[0].name().text(result.source()), "arg1");
+    assert_eq!(a[0].r#type().unwrap().text(result.source()), "int desc.");
+    assert!(a[0].close_bracket().is_none());
+    assert!(a[0].colon().is_none());
+    assert!(a[0].description().is_none());
+}
+
+/// `arg1 (int:desc.)` — colon inside brackets.
+/// Entire bracket content is TYPE; colon inside brackets is not treated as separator.
+#[test]
+fn test_colon_inside_brackets() {
+    let input = "Args:\n    arg1 (int:desc.)";
+    let result = parse_google(input);
+    let a = args(&result);
+    assert_eq!(a.len(), 1);
+    assert_eq!(a[0].name().text(result.source()), "arg1");
+    assert_eq!(a[0].r#type().unwrap().text(result.source()), "int:desc.");
+    assert!(a[0].open_bracket().is_some());
+    assert!(a[0].close_bracket().is_some());
+    assert!(a[0].colon().is_none());
+    assert!(a[0].description().is_none());
+}
+
+/// `arg1 (Dict[str:int])` — colon inside nested brackets should NOT split.
+#[test]
+fn test_colon_inside_nested_brackets_no_split() {
+    let input = "Args:\n    arg1 (Dict[str:int])";
+    let result = parse_google(input);
+    let a = args(&result);
+    assert_eq!(a.len(), 1);
+    assert_eq!(a[0].name().text(result.source()), "arg1");
+    assert_eq!(a[0].r#type().unwrap().text(result.source()), "Dict[str:int]");
+    assert!(a[0].description().is_none());
+}
+
+// =============================================================================
+// Arg entry with no description — must not become a section header
+// =============================================================================
+
+/// `b :` (space before colon, no description) must be parsed as an arg entry,
+/// not mistaken for a section header.  Regression test for the case where any
+/// `word:` pattern inside a section body was mis-classified as a new section.
+#[test]
+fn test_arg_no_description_space_before_colon_not_header() {
+    let input = "Args:\n    a (int): An integer parameter.\n    b :\n    c : A parameter.";
+    let result = parse_google(input);
+
+    // Only one section (Args), not three.
+    let sections = all_sections(&result);
+    assert_eq!(sections.len(), 1, "b : should not be a section header");
+
+    let a = args(&result);
+    assert_eq!(a.len(), 3, "expected 3 arg entries");
+
+    assert_eq!(a[0].name().text(result.source()), "a");
+    assert_eq!(a[0].r#type().unwrap().text(result.source()), "int");
+    assert_eq!(
+        a[0].description().unwrap().text(result.source()),
+        "An integer parameter."
+    );
+
+    assert_eq!(a[1].name().text(result.source()), "b");
+    assert!(a[1].r#type().is_none());
+    assert!(a[1].description().is_none());
+
+    assert_eq!(a[2].name().text(result.source()), "c");
+    assert!(a[2].r#type().is_none());
+    assert_eq!(a[2].description().unwrap().text(result.source()), "A parameter.");
 }

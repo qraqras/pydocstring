@@ -50,9 +50,7 @@ impl<'a> GoogleDocstring<'a> {
 
     /// Iterate over all section nodes.
     pub fn sections(&self) -> impl Iterator<Item = GoogleSection<'a>> {
-        self.0
-            .nodes(SyntaxKind::GOOGLE_SECTION)
-            .filter_map(GoogleSection::cast)
+        self.0.nodes(SyntaxKind::GOOGLE_SECTION).filter_map(GoogleSection::cast)
     }
 
     /// Iterate over stray line tokens.
@@ -86,9 +84,7 @@ impl<'a> GoogleSection<'a> {
 
     /// Iterate over arg entry nodes in this section.
     pub fn args(&self) -> impl Iterator<Item = GoogleArg<'a>> {
-        self.0
-            .nodes(SyntaxKind::GOOGLE_ARG)
-            .filter_map(GoogleArg::cast)
+        self.0.nodes(SyntaxKind::GOOGLE_ARG).filter_map(GoogleArg::cast)
     }
 
     /// Returns entry node in this section, if present.
@@ -107,9 +103,7 @@ impl<'a> GoogleSection<'a> {
 
     /// Iterate over warning entry nodes.
     pub fn warnings(&self) -> impl Iterator<Item = GoogleWarning<'a>> {
-        self.0
-            .nodes(SyntaxKind::GOOGLE_WARNING)
-            .filter_map(GoogleWarning::cast)
+        self.0.nodes(SyntaxKind::GOOGLE_WARNING).filter_map(GoogleWarning::cast)
     }
 
     /// Iterate over see-also item nodes.
@@ -128,9 +122,7 @@ impl<'a> GoogleSection<'a> {
 
     /// Iterate over method entry nodes.
     pub fn methods(&self) -> impl Iterator<Item = GoogleMethod<'a>> {
-        self.0
-            .nodes(SyntaxKind::GOOGLE_METHOD)
-            .filter_map(GoogleMethod::cast)
+        self.0.nodes(SyntaxKind::GOOGLE_METHOD).filter_map(GoogleMethod::cast)
     }
 
     /// Free-text body content, if this is a free-text section.

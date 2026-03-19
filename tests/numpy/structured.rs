@@ -6,17 +6,13 @@ use super::*;
 
 #[test]
 fn test_attributes_basic() {
-    let docstring =
-        "Summary.\n\nAttributes\n----------\nname : str\n    The name.\nage : int\n    The age.\n";
+    let docstring = "Summary.\n\nAttributes\n----------\nname : str\n    The name.\nage : int\n    The age.\n";
     let result = parse_numpy(docstring);
     let a = attributes(&result);
     assert_eq!(a.len(), 2);
     assert_eq!(a[0].name().text(result.source()), "name");
     assert_eq!(a[0].r#type().unwrap().text(result.source()), "str");
-    assert_eq!(
-        a[0].description().unwrap().text(result.source()),
-        "The name."
-    );
+    assert_eq!(a[0].description().unwrap().text(result.source()), "The name.");
     assert_eq!(a[1].name().text(result.source()), "age");
     assert_eq!(a[1].r#type().unwrap().text(result.source()), "int");
 }
@@ -29,10 +25,7 @@ fn test_attributes_no_type() {
     assert_eq!(a.len(), 1);
     assert_eq!(a[0].name().text(result.source()), "name");
     assert!(a[0].r#type().is_none());
-    assert_eq!(
-        a[0].description().unwrap().text(result.source()),
-        "The name."
-    );
+    assert_eq!(a[0].description().unwrap().text(result.source()), "The name.");
 }
 
 #[test]
@@ -51,10 +44,7 @@ fn test_attributes_section_body_variant() {
     let docstring = "Summary.\n\nAttributes\n----------\nx : int\n    Value.\n";
     let result = parse_numpy(docstring);
     let s = &all_sections(&result)[0];
-    assert_eq!(
-        s.section_kind(result.source()),
-        NumPySectionKind::Attributes
-    );
+    assert_eq!(s.section_kind(result.source()), NumPySectionKind::Attributes);
     let attrs: Vec<_> = s.attributes().collect();
     assert_eq!(attrs.len(), 1);
 }
@@ -76,15 +66,13 @@ fn test_attributes_section_kind() {
 
 #[test]
 fn test_methods_basic() {
-    let docstring = "Summary.\n\nMethods\n-------\nreset()\n    Reset the state.\nupdate(data)\n    Update with new data.\n";
+    let docstring =
+        "Summary.\n\nMethods\n-------\nreset()\n    Reset the state.\nupdate(data)\n    Update with new data.\n";
     let result = parse_numpy(docstring);
     let m = methods(&result);
     assert_eq!(m.len(), 2);
     assert_eq!(m[0].name().text(result.source()), "reset()");
-    assert_eq!(
-        m[0].description().unwrap().text(result.source()),
-        "Reset the state."
-    );
+    assert_eq!(m[0].description().unwrap().text(result.source()), "Reset the state.");
     assert_eq!(m[1].name().text(result.source()), "update(data)");
     assert_eq!(
         m[1].description().unwrap().text(result.source()),
@@ -151,10 +139,7 @@ fn test_unknown_section() {
     let result = parse_numpy(docstring);
     let s = all_sections(&result);
     assert_eq!(s.len(), 1);
-    assert_eq!(
-        s[0].section_kind(result.source()),
-        NumPySectionKind::Unknown
-    );
+    assert_eq!(s[0].section_kind(result.source()), NumPySectionKind::Unknown);
     assert_eq!(s[0].header().name().text(result.source()), "CustomSection");
 }
 
@@ -166,26 +151,15 @@ fn test_unknown_section_body_variant() {
     assert_eq!(s.section_kind(result.source()), NumPySectionKind::Unknown);
     let text = s.body_text();
     assert!(text.is_some());
-    assert!(
-        text.unwrap()
-            .text(result.source())
-            .contains("Some content.")
-    );
+    assert!(text.unwrap().text(result.source()).contains("Some content."));
 }
 
 #[test]
 fn test_unknown_section_with_known_sections() {
-    let docstring =
-        "Summary.\n\nParameters\n----------\nx : int\n    Value.\n\nCustom\n------\nExtra info.\n";
+    let docstring = "Summary.\n\nParameters\n----------\nx : int\n    Value.\n\nCustom\n------\nExtra info.\n";
     let result = parse_numpy(docstring);
     let s = all_sections(&result);
     assert_eq!(s.len(), 2);
-    assert_eq!(
-        s[0].section_kind(result.source()),
-        NumPySectionKind::Parameters
-    );
-    assert_eq!(
-        s[1].section_kind(result.source()),
-        NumPySectionKind::Unknown
-    );
+    assert_eq!(s[0].section_kind(result.source()), NumPySectionKind::Parameters);
+    assert_eq!(s[1].section_kind(result.source()), NumPySectionKind::Unknown);
 }

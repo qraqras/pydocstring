@@ -1,8 +1,7 @@
 //! Emit a [`Docstring`] as a Google-style docstring.
 
 use crate::model::{
-    Attribute, Docstring, ExceptionEntry, FreeSectionKind, Method, Parameter, Reference, Return,
-    Section, SeeAlsoEntry,
+    Attribute, Docstring, ExceptionEntry, FreeSectionKind, Method, Parameter, Reference, Return, Section, SeeAlsoEntry,
 };
 
 /// Emit a [`Docstring`] as a Google-style docstring string.

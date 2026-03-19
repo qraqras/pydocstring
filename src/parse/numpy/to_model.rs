@@ -1,8 +1,8 @@
 //! Convert a NumPy-style AST into the style-independent [`Docstring`] model.
 
 use crate::model::{
-    Attribute, Deprecation, Docstring, ExceptionEntry, FreeSectionKind, Method, Parameter,
-    Reference, Return, Section, SeeAlsoEntry,
+    Attribute, Deprecation, Docstring, ExceptionEntry, FreeSectionKind, Method, Parameter, Reference, Return, Section,
+    SeeAlsoEntry,
 };
 use crate::parse::numpy::kind::NumPySectionKind;
 use crate::parse::numpy::nodes::{NumPyDocstring, NumPySection};
@@ -23,10 +23,7 @@ pub fn to_model(parsed: &Parsed) -> Option<Docstring> {
         description: dep.description().map(|t| t.text(source).to_owned()),
     });
 
-    let sections = root
-        .sections()
-        .map(|s| convert_section(&s, source))
-        .collect();
+    let sections = root.sections().map(|s| convert_section(&s, source)).collect();
 
     Some(Docstring {
         summary,
@@ -41,22 +38,16 @@ fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
 
     match kind {
         NumPySectionKind::Parameters | NumPySectionKind::Receives => {
-            let entries = section
-                .parameters()
-                .map(|p| convert_parameter(&p, source))
-                .collect();
+            let entries = section.parameters().map(|p| convert_parameter(&p, source)).collect();
             match kind {
                 NumPySectionKind::Parameters => Section::Parameters(entries),
                 NumPySectionKind::Receives => Section::Receives(entries),
                 _ => unreachable!(),
             }
         }
-        NumPySectionKind::OtherParameters => Section::OtherParameters(
-            section
-                .parameters()
-                .map(|p| convert_parameter(&p, source))
-                .collect(),
-        ),
+        NumPySectionKind::OtherParameters => {
+            Section::OtherParameters(section.parameters().map(|p| convert_parameter(&p, source)).collect())
+        }
         NumPySectionKind::Returns | NumPySectionKind::Yields => {
             let entries: Vec<Return> = section
                 .returns()
@@ -138,23 +129,15 @@ fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
                 NumPySectionKind::Notes => FreeSectionKind::Notes,
                 NumPySectionKind::Examples => FreeSectionKind::Examples,
                 NumPySectionKind::Warnings => FreeSectionKind::Warnings,
-                NumPySectionKind::Unknown => {
-                    FreeSectionKind::Unknown(section.header().name().text(source).to_owned())
-                }
+                NumPySectionKind::Unknown => FreeSectionKind::Unknown(section.header().name().text(source).to_owned()),
                 _ => unreachable!(),
             };
-            Section::FreeText {
-                kind: free_kind,
-                body,
-            }
+            Section::FreeText { kind: free_kind, body }
         }
     }
 }
 
-fn convert_parameter(
-    param: &crate::parse::numpy::nodes::NumPyParameter<'_>,
-    source: &str,
-) -> Parameter {
+fn convert_parameter(param: &crate::parse::numpy::nodes::NumPyParameter<'_>, source: &str) -> Parameter {
     Parameter {
         names: param.names().map(|n| n.text(source).to_owned()).collect(),
         type_annotation: param.r#type().map(|t| t.text(source).to_owned()),

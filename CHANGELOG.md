@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-03-19
+
+### Added
+
+- Section name matching now accepts additional singular and alias forms for both
+  Google and NumPy styles:
+  - `"arg"`, `"param"`, `"keyword arg"`, `"keyword param"`, `"other arg"`,
+    `"other param"`, `"method"`, `"reference"` (Google)
+  - `"arguments"`, `"argument"`, `"args"`, `"arg"`, `"other arguments"`,
+    `"other argument"`, `"other args"`, `"other arg"`, `"attribute"`,
+    `"method"`, `"reference"` (NumPy)
+  - Common typos tolerated: `"argment"`, `"paramter"` (Google)
+
+### Fixed
+
+- Google parser: arg entries with no description (e.g. `b :`) inside a section
+  body were incorrectly classified as new section headers. Fixed by comparing
+  the indentation of each line against the current section header's indentation
+  and skipping header detection for more-indented lines.
+
+### Changed
+
+- Refactored Google entry header parsing to use a left-to-right confirmation
+  algorithm. Handles missing close brackets, missing colons, and text after
+  brackets without a colon more robustly. `close_bracket` in `TypeInfo` is now
+  `Option<TextRange>` to represent the missing-bracket case.
+- Added `rustfmt.toml` (`max_width = 120`) and reformatted all source files.
+
 ## [0.1.2] - 2026-03-16
 
 ### Added

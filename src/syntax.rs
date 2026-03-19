@@ -239,11 +239,7 @@ pub struct SyntaxNode {
 impl SyntaxNode {
     /// Creates a new node with the given kind, range, and children.
     pub fn new(kind: SyntaxKind, range: TextRange, children: Vec<SyntaxElement>) -> Self {
-        Self {
-            kind,
-            range,
-            children,
-        }
+        Self { kind, range, children }
     }
 
     /// The kind of this node.
@@ -276,10 +272,21 @@ impl SyntaxNode {
         self.range = TextRange::new(self.range.start(), end);
     }
 
-    /// Find the first token child with the given kind.
+    /// Find the first present (non-missing) token child with the given kind.
+    ///
+    /// Zero-length tokens are considered missing and are excluded.
+    /// Use [`find_missing`](Self::find_missing) to find missing tokens.
     pub fn find_token(&self, kind: SyntaxKind) -> Option<&SyntaxToken> {
         self.children.iter().find_map(|c| match c {
-            SyntaxElement::Token(t) if t.kind() == kind => Some(t),
+            SyntaxElement::Token(t) if t.kind() == kind && !t.is_missing() => Some(t),
+            _ => None,
+        })
+    }
+
+    /// Find the first missing (zero-length) token child with the given kind.
+    pub fn find_missing(&self, kind: SyntaxKind) -> Option<&SyntaxToken> {
+        self.children.iter().find_map(|c| match c {
+            SyntaxElement::Token(t) if t.kind() == kind && t.is_missing() => Some(t),
             _ => None,
         })
     }
@@ -363,6 +370,11 @@ impl SyntaxToken {
         &self.range
     }
 
+    /// Whether this token is missing from the source (zero-length placeholder).
+    pub fn is_missing(&self) -> bool {
+        self.range.is_empty()
+    }
+
     /// Extract the corresponding text slice from source.
     pub fn text<'a>(&self, source: &'a str) -> &'a str {
         self.range.source_text(source)
@@ -378,13 +390,7 @@ impl SyntaxToken {
         for _ in 0..indent {
             out.push_str("  ");
         }
-        let _ = writeln!(
-            out,
-            "{}: {:?}@{}",
-            self.kind.name(),
-            self.text(src),
-            self.range
-        );
+        let _ = writeln!(out, "{}: {:?}@{}", self.kind.name(), self.text(src), self.range);
     }
 }
 
@@ -520,10 +526,7 @@ mod tests {
     #[test]
     fn test_syntax_token_text() {
         let source = "hello world";
-        let token = SyntaxToken::new(
-            SyntaxKind::NAME,
-            TextRange::new(TextSize::new(0), TextSize::new(5)),
-        );
+        let token = SyntaxToken::new(SyntaxKind::NAME, TextRange::new(TextSize::new(0), TextSize::new(5)));
         assert_eq!(token.text(source), "hello");
     }
 
@@ -570,11 +573,7 @@ mod tests {
             vec![SyntaxElement::Node(child)],
         );
 
-        assert!(
-            parent
-                .find_node(SyntaxKind::GOOGLE_SECTION_HEADER)
-                .is_some()
-        );
+        assert!(parent.find_node(SyntaxKind::GOOGLE_SECTION_HEADER).is_some());
         assert!(parent.find_node(SyntaxKind::GOOGLE_ARG).is_none());
         assert_eq!(parent.nodes(SyntaxKind::GOOGLE_SECTION_HEADER).count(), 1);
     }
@@ -617,10 +616,7 @@ mod tests {
                             )),
                             SyntaxElement::Token(SyntaxToken::new(
                                 SyntaxKind::DESCRIPTION,
-                                TextRange::new(
-                                    TextSize::new(13),
-                                    TextSize::new(source.len() as u32),
-                                ),
+                                TextRange::new(TextSize::new(13), TextSize::new(source.len() as u32)),
                             )),
                         ],
                     )),
@@ -667,10 +663,7 @@ mod tests {
             }
         }
 
-        let mut counter = Counter {
-            nodes: 0,
-            tokens: 0,
-        };
+        let mut counter = Counter { nodes: 0, tokens: 0 };
         walk(&root, &mut counter);
         assert_eq!(counter.nodes, 1);
         assert_eq!(counter.tokens, 1);

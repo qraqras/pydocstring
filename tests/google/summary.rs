@@ -38,14 +38,10 @@ fn test_whitespace_only_docstring() {
 
 #[test]
 fn test_summary_with_description() {
-    let docstring =
-        "Brief summary.\n\nExtended description that provides\nmore details about the function.";
+    let docstring = "Brief summary.\n\nExtended description that provides\nmore details about the function.";
     let result = parse_google(docstring);
 
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "Brief summary."
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "Brief summary.");
     let desc = doc(&result).extended_summary().unwrap();
     assert_eq!(
         desc.text(result.source()),
@@ -61,10 +57,7 @@ First paragraph of description.
 
 Second paragraph of description."#;
     let result = parse_google(docstring);
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "Brief summary."
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "Brief summary.");
     let desc = doc(&result).extended_summary().unwrap();
     assert!(desc.text(result.source()).contains("First paragraph"));
     assert!(desc.text(result.source()).contains("Second paragraph"));
@@ -116,10 +109,7 @@ fn test_section_only_no_summary() {
 fn test_leading_blank_lines() {
     let docstring = "\n\n\nSummary.\n\nArgs:\n    x: Value.";
     let result = parse_google(docstring);
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "Summary."
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "Summary.");
     assert_eq!(args(&result).len(), 1);
 }
 
@@ -127,8 +117,5 @@ fn test_leading_blank_lines() {
 fn test_docstring_like_summary() {
     let docstring = "Summary.";
     let result = parse_google(docstring);
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "Summary."
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "Summary.");
 }

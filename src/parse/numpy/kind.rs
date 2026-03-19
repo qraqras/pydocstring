@@ -64,19 +64,21 @@ impl NumPySectionKind {
     pub fn from_name(name: &str) -> Self {
         match name {
             "parameters" | "parameter" | "params" | "param" => Self::Parameters,
+            "arguments" | "argument" | "args" | "arg" => Self::Parameters,
             "returns" | "return" => Self::Returns,
             "yields" | "yield" => Self::Yields,
             "receives" | "receive" => Self::Receives,
             "other parameters" | "other parameter" | "other params" | "other param" => Self::OtherParameters,
+            "other arguments" | "other argument" | "other args" | "other arg" => Self::OtherParameters,
             "raises" | "raise" => Self::Raises,
             "warns" | "warn" => Self::Warns,
             "warnings" | "warning" => Self::Warnings,
             "see also" => Self::SeeAlso,
             "notes" | "note" => Self::Notes,
-            "references" => Self::References,
+            "references" | "reference" => Self::References,
             "examples" | "example" => Self::Examples,
-            "attributes" => Self::Attributes,
-            "methods" => Self::Methods,
+            "attributes" | "attribute" => Self::Attributes,
+            "methods" | "method" => Self::Methods,
             _ => Self::Unknown,
         }
     }
@@ -106,10 +108,7 @@ impl NumPySectionKind {
 
     /// Whether this section kind has free-text body.
     pub fn is_freetext(&self) -> bool {
-        matches!(
-            self,
-            Self::Notes | Self::Examples | Self::Warnings | Self::Unknown
-        )
+        matches!(self, Self::Notes | Self::Examples | Self::Warnings | Self::Unknown)
     }
 }
 

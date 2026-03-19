@@ -18,14 +18,8 @@ TypeError
     let result = parse_numpy(docstring);
 
     assert_eq!(raises(&result).len(), 2);
-    assert_eq!(
-        raises(&result)[0].r#type().text(result.source()),
-        "ValueError"
-    );
-    assert_eq!(
-        raises(&result)[1].r#type().text(result.source()),
-        "TypeError"
-    );
+    assert_eq!(raises(&result)[0].r#type().text(result.source()), "ValueError");
+    assert_eq!(raises(&result)[1].r#type().text(result.source()), "TypeError");
 }
 
 #[test]
@@ -41,14 +35,8 @@ TypeError
 "#;
     let result = parse_numpy(docstring);
     assert_eq!(raises(&result).len(), 2);
-    assert_eq!(
-        raises(&result)[0].r#type().text(result.source()),
-        "ValueError"
-    );
-    assert_eq!(
-        raises(&result)[1].r#type().text(result.source()),
-        "TypeError"
-    );
+    assert_eq!(raises(&result)[0].r#type().text(result.source()), "ValueError");
+    assert_eq!(raises(&result)[1].r#type().text(result.source()), "TypeError");
 }
 
 // =============================================================================
@@ -58,7 +46,8 @@ TypeError
 /// Raises with colon separating type and description on the same line.
 #[test]
 fn test_raises_colon_split() {
-    let docstring = "Summary.\n\nRaises\n------\nValueError : If the input is invalid.\nTypeError : If the type is wrong.";
+    let docstring =
+        "Summary.\n\nRaises\n------\nValueError : If the input is invalid.\nTypeError : If the type is wrong.";
     let result = parse_numpy(docstring);
     let exc = raises(&result);
     assert_eq!(exc.len(), 2);
@@ -112,13 +101,7 @@ fn test_raise_alias() {
     let result = parse_numpy(docstring);
     let exc = raises(&result);
     assert_eq!(exc.len(), 1);
-    assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
-        "Raise"
-    );
+    assert_eq!(all_sections(&result)[0].header().name().text(result.source()), "Raise");
     assert_eq!(
         all_sections(&result)[0].section_kind(result.source()),
         NumPySectionKind::Raises
@@ -144,8 +127,7 @@ fn test_warns_basic() {
 
 #[test]
 fn test_warns_multiple() {
-    let docstring =
-        "Summary.\n\nWarns\n-----\nDeprecationWarning\n    Old API.\nUserWarning\n    Bad usage.\n";
+    let docstring = "Summary.\n\nWarns\n-----\nDeprecationWarning\n    Old API.\nUserWarning\n    Bad usage.\n";
     let result = parse_numpy(docstring);
     let w = warns(&result);
     assert_eq!(w.len(), 2);
@@ -175,13 +157,7 @@ fn test_warn_alias() {
     let result = parse_numpy(docstring);
     let w = warns(&result);
     assert_eq!(w.len(), 1);
-    assert_eq!(
-        all_sections(&result)[0]
-            .header()
-            .name()
-            .text(result.source()),
-        "Warn"
-    );
+    assert_eq!(all_sections(&result)[0].header().name().text(result.source()), "Warn");
     assert_eq!(
         all_sections(&result)[0].section_kind(result.source()),
         NumPySectionKind::Warns

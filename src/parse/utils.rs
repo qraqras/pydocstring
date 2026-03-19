@@ -117,10 +117,6 @@ pub(crate) fn strip_optional(type_content: &str) -> (&str, Option<usize>) {
 pub(crate) struct BracketEntry<'a> {
     /// Name text before the bracket (end-trimmed).
     pub name: &'a str,
-    /// Byte offset of the opening bracket.
-    pub open_bracket: usize,
-    /// Byte offset of the closing bracket.
-    pub close_bracket: usize,
     /// Clean type text (optional stripped) inside brackets.
     pub clean_type: &'a str,
     /// Byte offset of the type text start.
@@ -168,14 +164,9 @@ pub(crate) fn try_parse_bracket_entry(text: &str) -> Option<BracketEntry<'_>> {
 
     let name = text[..bracket_pos].trim_end();
 
-    let type_raw = &text[bracket_pos + 1..close_pos];
-    let type_trimmed = type_raw.trim();
-    let leading_ws = type_raw.len() - type_raw.trim_start().len();
-    let type_offset = bracket_pos + 1 + leading_ws;
-
-    let (clean_type, opt_rel) = strip_optional(type_trimmed);
-    let optional_offset = opt_rel.map(|r| type_offset + r);
-
+    // Determine colon, description, and description_offset first,
+    // since we need to know the colon position to compute the type range
+    // (when colon is inside brackets, the type ends at the colon).
     let (colon, description, description_offset) = if after_close.starts_with(':') {
         let colon_byte = text[close_pos + 1..].find(':').unwrap() + close_pos + 1;
         let after_colon = &text[colon_byte + 1..];
@@ -190,10 +181,24 @@ pub(crate) fn try_parse_bracket_entry(text: &str) -> Option<BracketEntry<'_>> {
         (None, None, None)
     };
 
+    // Determine where the type portion ends. Normally at close_pos,
+    // but if a colon is inside the brackets, it ends at the colon.
+    let type_end = if let Some(c) = colon {
+        if c > bracket_pos && c < close_pos { c } else { close_pos }
+    } else {
+        close_pos
+    };
+
+    let type_raw = &text[bracket_pos + 1..type_end];
+    let type_trimmed = type_raw.trim();
+    let leading_ws = type_raw.len() - type_raw.trim_start().len();
+    let type_offset = bracket_pos + 1 + leading_ws;
+
+    let (clean_type, opt_rel) = strip_optional(type_trimmed);
+    let optional_offset = opt_rel.map(|r| type_offset + r);
+
     Some(BracketEntry {
         name,
-        open_bracket: bracket_pos,
-        close_bracket: close_pos,
         clean_type,
         type_offset,
         optional_offset,
@@ -201,6 +206,48 @@ pub(crate) fn try_parse_bracket_entry(text: &str) -> Option<BracketEntry<'_>> {
         description,
         description_offset,
     })
+}
+
+/// Find the byte offset of the first `:` in `text[start..]` that is not inside
+/// `[]`, `{}`, or `<>` brackets.  Unlike [`find_entry_colon`] this does **not**
+/// track `()` depth, which is useful when parsing inside an unclosed `(`.
+///
+/// Returns an absolute byte offset into `text`.
+pub(crate) fn find_colon_ignoring_parens(text: &str, start: usize) -> Option<usize> {
+    let mut depth: u32 = 0;
+    for (i, b) in text[start..].bytes().enumerate() {
+        match b {
+            b'[' | b'{' | b'<' => depth += 1,
+            b']' | b'}' | b'>' => depth = depth.saturating_sub(1),
+            b':' if depth == 0 => return Some(start + i),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Try to find an opening bracket for a bracket-style entry.
+///
+/// Returns `Some(bracket_pos)` when there is a `(`, `[`, `{`, or `<` after at
+/// least one character, and that bracket appears before any top-level colon.
+/// Returns `None` otherwise.
+pub(crate) fn find_entry_open_bracket(text: &str) -> Option<usize> {
+    let bracket_pos = text.bytes().enumerate().find_map(|(i, b)| {
+        if i > 0 && matches!(b, b'(' | b'[' | b'{' | b'<') {
+            Some(i)
+        } else {
+            None
+        }
+    })?;
+
+    // The bracket must appear before any top-level colon.
+    if let Some(colon_pos) = find_entry_colon(text) {
+        if colon_pos < bracket_pos {
+            return None;
+        }
+    }
+
+    Some(bracket_pos)
 }
 
 #[cfg(test)]
@@ -284,10 +331,7 @@ mod tests {
     fn test_strip_optional_basic() {
         assert_eq!(strip_optional("int, optional"), ("int", Some(5)));
         assert_eq!(strip_optional("int"), ("int", None));
-        assert_eq!(
-            strip_optional("Dict[str, int], optional"),
-            ("Dict[str, int]", Some(16))
-        );
+        assert_eq!(strip_optional("Dict[str, int], optional"), ("Dict[str, int]", Some(16)));
         assert_eq!(strip_optional("optional"), ("", Some(0)));
         assert_eq!(strip_optional("int,optional"), ("int", Some(4)));
         assert_eq!(strip_optional("int,  optional"), ("int", Some(6)));
@@ -357,5 +401,53 @@ mod tests {
     fn test_bracket_entry_text_after_bracket() {
         // `name (int) not_colon` — non-colon text after bracket.
         assert!(try_parse_bracket_entry("name (int) not_colon").is_none());
+    }
+
+    // ---- find_colon_ignoring_parens ----
+
+    #[test]
+    fn test_find_colon_ignoring_parens_basic() {
+        assert_eq!(find_colon_ignoring_parens("int : desc", 0), Some(4));
+    }
+
+    #[test]
+    fn test_find_colon_ignoring_parens_inside_brackets() {
+        // `:` inside `[]` is skipped.
+        assert_eq!(find_colon_ignoring_parens("Dict[k: v] : desc", 0), Some(11));
+    }
+
+    #[test]
+    fn test_find_colon_ignoring_parens_inside_parens() {
+        // Parens are NOT tracked, so `:` inside `(` is found.
+        assert_eq!(find_colon_ignoring_parens("(int : desc", 1), Some(5));
+    }
+
+    #[test]
+    fn test_find_colon_ignoring_parens_none() {
+        assert_eq!(find_colon_ignoring_parens("int desc", 0), None);
+    }
+
+    // ---- find_entry_open_bracket ----
+
+    #[test]
+    fn test_find_entry_open_bracket_basic() {
+        assert_eq!(find_entry_open_bracket("name (int)"), Some(5));
+    }
+
+    #[test]
+    fn test_find_entry_open_bracket_colon_first() {
+        // Colon before bracket → None.
+        assert_eq!(find_entry_open_bracket("name : (int)"), None);
+    }
+
+    #[test]
+    fn test_find_entry_open_bracket_no_bracket() {
+        assert_eq!(find_entry_open_bracket("name : int"), None);
+    }
+
+    #[test]
+    fn test_find_entry_open_bracket_at_start() {
+        // Bracket at position 0 is not valid (no name before it).
+        assert_eq!(find_entry_open_bracket("(int)"), None);
     }
 }

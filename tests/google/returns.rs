@@ -10,10 +10,7 @@ fn test_returns_with_type() {
     let result = parse_google(docstring);
     let r = returns(&result).unwrap();
     assert_eq!(r.return_type().unwrap().text(result.source()), "int");
-    assert_eq!(
-        r.description().unwrap().text(result.source()),
-        "The result."
-    );
+    assert_eq!(r.description().unwrap().text(result.source()), "The result.");
 }
 
 #[test]
@@ -34,10 +31,7 @@ fn test_returns_without_type() {
     let result = parse_google(docstring);
     let r = returns(&result).unwrap();
     assert!(r.return_type().is_none());
-    assert_eq!(
-        r.description().unwrap().text(result.source()),
-        "The computed result."
-    );
+    assert_eq!(r.description().unwrap().text(result.source()), "The computed result.");
 }
 
 #[test]
@@ -45,11 +39,7 @@ fn test_returns_multiline_description() {
     let docstring = "Summary.\n\nReturns:\n    int: The result\n        of the computation.";
     let result = parse_google(docstring);
     assert_eq!(
-        returns(&result)
-            .unwrap()
-            .description()
-            .unwrap()
-            .text(result.source()),
+        returns(&result).unwrap().description().unwrap().text(result.source()),
         "The result\n        of the computation."
     );
 }
@@ -68,10 +58,7 @@ fn test_returns_no_space_after_colon() {
     let result = parse_google(docstring);
     let r = returns(&result).unwrap();
     assert_eq!(r.return_type().unwrap().text(result.source()), "int");
-    assert_eq!(
-        r.description().unwrap().text(result.source()),
-        "The result."
-    );
+    assert_eq!(r.description().unwrap().text(result.source()), "The result.");
 }
 
 /// Returns entry with extra spaces after colon.
@@ -81,10 +68,7 @@ fn test_returns_extra_spaces_after_colon() {
     let result = parse_google(docstring);
     let r = returns(&result).unwrap();
     assert_eq!(r.return_type().unwrap().text(result.source()), "int");
-    assert_eq!(
-        r.description().unwrap().text(result.source()),
-        "The result."
-    );
+    assert_eq!(r.description().unwrap().text(result.source()), "The result.");
 }
 
 #[test]
@@ -105,10 +89,7 @@ fn test_yields() {
     let result = parse_google(docstring);
     let y = yields(&result).unwrap();
     assert_eq!(y.return_type().unwrap().text(result.source()), "int");
-    assert_eq!(
-        y.description().unwrap().text(result.source()),
-        "The next value."
-    );
+    assert_eq!(y.description().unwrap().text(result.source()), "The next value.");
 }
 
 #[test]

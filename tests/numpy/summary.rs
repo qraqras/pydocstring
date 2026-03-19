@@ -25,14 +25,8 @@ fn test_parse_simple_span() {
         doc(&result).summary().unwrap().text(result.source()),
         "Brief description."
     );
-    assert_eq!(
-        doc(&result).summary().unwrap().range().start(),
-        TextSize::new(0)
-    );
-    assert_eq!(
-        doc(&result).summary().unwrap().range().end(),
-        TextSize::new(18)
-    );
+    assert_eq!(doc(&result).summary().unwrap().range().start(), TextSize::new(0));
+    assert_eq!(doc(&result).summary().unwrap().range().end(), TextSize::new(18));
     assert_eq!(
         doc(&result).summary().unwrap().text(result.source()),
         "Brief description."
@@ -48,10 +42,7 @@ more details about the function.
 "#;
     let result = parse_numpy(docstring);
 
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "Brief summary."
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "Brief summary.");
     assert!(doc(&result).extended_summary().is_some());
 }
 
@@ -95,10 +86,7 @@ fn test_docstring_span_covers_entire_input() {
     let docstring = "First line.\n\nSecond line.";
     let result = parse_numpy(docstring);
     assert_eq!(doc(&result).syntax().range().start(), TextSize::new(0));
-    assert_eq!(
-        doc(&result).syntax().range().end().raw() as usize,
-        docstring.len()
-    );
+    assert_eq!(doc(&result).syntax().range().end().raw() as usize, docstring.len());
 }
 
 // =============================================================================
@@ -119,10 +107,7 @@ b : int
     Second number.
 "#;
     let result = parse_numpy(docstring);
-    assert_eq!(
-        doc(&result).summary().unwrap().text(result.source()),
-        "add(a, b)"
-    );
+    assert_eq!(doc(&result).summary().unwrap().text(result.source()), "add(a, b)");
     assert_eq!(parameters(&result).len(), 2);
 }
 

@@ -9,7 +9,7 @@ pub mod to_model;
 
 pub use kind::NumPySectionKind;
 pub use nodes::{
-    NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod, NumPyParameter,
-    NumPyReference, NumPyReturns, NumPySection, NumPySectionHeader, NumPySeeAlsoItem, NumPyWarning,
+    NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod, NumPyParameter, NumPyReference,
+    NumPyReturns, NumPySection, NumPySectionHeader, NumPySeeAlsoItem, NumPyWarning,
 };
 pub use parser::parse_numpy;
