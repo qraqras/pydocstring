@@ -97,6 +97,12 @@ pub enum SyntaxKind {
     /// A single method entry.
     GOOGLE_METHOD,
 
+    // ── Plain node ─────────────────────────────────────────────────────
+    /// Root node for a plain docstring (summary/extended summary only,
+    /// no NumPy or Google style section markers).
+    /// Also used for unrecognised styles such as Sphinx.
+    PLAIN_DOCSTRING,
+
     // ── NumPy nodes ────────────────────────────────────────────────────
     /// Root node for a NumPy-style docstring.
     NUMPY_DOCSTRING,
@@ -129,7 +135,8 @@ impl SyntaxKind {
     pub const fn is_node(self) -> bool {
         matches!(
             self,
-            Self::GOOGLE_DOCSTRING
+            Self::PLAIN_DOCSTRING
+                | Self::GOOGLE_DOCSTRING
                 | Self::GOOGLE_SECTION
                 | Self::GOOGLE_SECTION_HEADER
                 | Self::GOOGLE_ARG
@@ -199,6 +206,8 @@ impl SyntaxKind {
             Self::GOOGLE_SEE_ALSO_ITEM => "GOOGLE_SEE_ALSO_ITEM",
             Self::GOOGLE_ATTRIBUTE => "GOOGLE_ATTRIBUTE",
             Self::GOOGLE_METHOD => "GOOGLE_METHOD",
+            // Plain node
+            Self::PLAIN_DOCSTRING => "PLAIN_DOCSTRING",
             // NumPy nodes
             Self::NUMPY_DOCSTRING => "NUMPY_DOCSTRING",
             Self::NUMPY_SECTION => "NUMPY_SECTION",
