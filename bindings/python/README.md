@@ -26,6 +26,37 @@ pip install pydocstring-rs
 
 ## Usage
 
+### Unified Parse (auto-detect)
+
+Use `parse()` when you don't know the style in advance.
+The returned object has a `.style` property so you can dispatch without `isinstance` checks:
+
+```python
+from pydocstring import parse, Style
+
+doc = parse(source)
+
+match doc.style:
+    case Style.GOOGLE:
+        for arg in doc.sections[0].args:
+            print(arg.name.text, arg.description.text)
+    case Style.NUMPY:
+        for param in doc.sections[0].parameters:
+            print([n.text for n in param.names], param.description.text)
+    case Style.PLAIN:
+        print(doc.summary.text)
+```
+
+When you only need the style-independent model, no dispatch is necessary:
+
+```python
+model = parse(source).to_model()  # works for all three styles
+```
+
+If you already know the style, prefer the explicit functions `parse_google()`,
+`parse_numpy()`, or `parse_plain()` — they return a concrete type and are
+slightly more efficient.
+
 ### Style Detection
 
 ```python
@@ -254,27 +285,28 @@ print(numpy_text)  # Contains "Parameters\n----------"
 
 ### Functions
 
-| Function             | Returns           | Description                                                   |
-|----------------------|-------------------|---------------------------------------------------------------|
-| `parse_google(text)` | `GoogleDocstring` | Parse a Google-style docstring                                |
-| `parse_numpy(text)`  | `NumPyDocstring`  | Parse a NumPy-style docstring                                 |
-| `parse_plain(text)`  | `PlainDocstring`  | Parse a plain docstring (no section markers)                  |
-| `detect_style(text)` | `Style`           | Detect style: `Style.GOOGLE`, `Style.NUMPY`, or `Style.PLAIN` |
-| `emit_google(doc)`   | `str`             | Emit a `Docstring` model as Google-style text                 |
-| `emit_numpy(doc)`    | `str`             | Emit a `Docstring` model as NumPy-style text                  |
+| Function             | Returns                                         | Description                                                   |
+|----------------------|-------------------------------------------------|---------------------------------------------------------------|
+| `parse(text)`        | `GoogleDocstring \| NumPyDocstring \| PlainDocstring` | Auto-detect style and parse                             |
+| `parse_google(text)` | `GoogleDocstring`                               | Parse a Google-style docstring                                |
+| `parse_numpy(text)`  | `NumPyDocstring`                                | Parse a NumPy-style docstring                                 |
+| `parse_plain(text)`  | `PlainDocstring`                                | Parse a plain docstring (no section markers)                  |
+| `detect_style(text)` | `Style`                                         | Detect style: `Style.GOOGLE`, `Style.NUMPY`, or `Style.PLAIN` |
+| `emit_google(doc)`   | `str`                                           | Emit a `Docstring` model as Google-style text                 |
+| `emit_numpy(doc)`    | `str`                                           | Emit a `Docstring` model as NumPy-style text                  |
 
 ### Objects
 
 | Class             | Key Properties                                                                                                   |
 |-------------------|------------------------------------------------------------------------------------------------------------------|
 | `Style`           | `GOOGLE`, `NUMPY`, `PLAIN` (enum)                                                                                |
-| `GoogleDocstring` | `summary`, `extended_summary`, `sections`, `node`, `source`, `pretty_print()`, `to_model()`                      |
+| `GoogleDocstring` | `style`, `summary`, `extended_summary`, `sections`, `node`, `source`, `pretty_print()`, `to_model()`             |
 | `GoogleSection`   | `kind`, `args`, `returns`, `exceptions`, `body_text`, `node`                                                     |
 | `GoogleArg`       | `name`, `type`, `description`, `optional`                                                                        |
 | `GoogleReturns`   | `return_type`, `description`                                                                                     |
 | `GoogleException` | `type`, `description`                                                                                            |
-| `PlainDocstring`  | `summary`, `extended_summary`, `node`, `source`, `pretty_print()`, `to_model()`                                  |
-| `NumPyDocstring`  | `summary`, `extended_summary`, `sections`, `node`, `source`, `pretty_print()`, `to_model()`                      |
+| `PlainDocstring`  | `style`, `summary`, `extended_summary`, `node`, `source`, `pretty_print()`, `to_model()`                         |
+| `NumPyDocstring`  | `style`, `summary`, `extended_summary`, `sections`, `node`, `source`, `pretty_print()`, `to_model()`             |
 | `NumPySection`    | `kind`, `parameters`, `returns`, `exceptions`, `body_text`, `node`                                               |
 | `NumPyParameter`  | `names`, `type`, `description`, `optional`, `default_value`                                                      |
 | `NumPyReturns`    | `name`, `return_type`, `description`                                                                             |

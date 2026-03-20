@@ -524,6 +524,10 @@ impl PyGoogleDocstring {
         let lc = byte_offset_to_line_col(&self.source, offset as usize)?;
         Py::new(py, lc)
     }
+    #[getter]
+    fn style(&self) -> PyStyle {
+        PyStyle::Google
+    }
     fn __repr__(&self) -> String {
         "GoogleDocstring(...)".to_string()
     }
@@ -700,6 +704,10 @@ impl PyNumPyDocstring {
         let lc = byte_offset_to_line_col(&self.source, offset as usize)?;
         Py::new(py, lc)
     }
+    #[getter]
+    fn style(&self) -> PyStyle {
+        PyStyle::NumPy
+    }
     fn __repr__(&self) -> String {
         "NumPyDocstring(...)".to_string()
     }
@@ -746,6 +754,10 @@ impl PyPlainDocstring {
     fn line_col(&self, py: Python<'_>, offset: u32) -> PyResult<Py<PyLineColumn>> {
         let lc = byte_offset_to_line_col(&self.source, offset as usize)?;
         Py::new(py, lc)
+    }
+    #[getter]
+    fn style(&self) -> PyStyle {
+        PyStyle::Plain
     }
     fn __repr__(&self) -> String {
         "PlainDocstring(...)".to_string()
@@ -1640,6 +1652,20 @@ fn parse_plain(py: Python<'_>, input: &str) -> PyResult<Py<PyPlainDocstring>> {
     build_plain_docstring(py, &parsed)
 }
 
+/// Auto-detect the docstring style and parse it, returning a GoogleDocstring,
+/// NumPyDocstring, or PlainDocstring. Use `.style` on the result to distinguish
+/// between them without `isinstance` checks.
+#[pyfunction]
+fn parse(py: Python<'_>, input: &str) -> PyResult<pyo3::PyObject> {
+    use pydocstring_core::syntax::SyntaxKind;
+    let parsed = pydocstring_core::parse::parse(input);
+    match parsed.root().kind() {
+        SyntaxKind::GOOGLE_DOCSTRING => Ok(build_google_docstring(py, &parsed)?.into_any()),
+        SyntaxKind::NUMPY_DOCSTRING => Ok(build_numpy_docstring(py, &parsed)?.into_any()),
+        _ => Ok(build_plain_docstring(py, &parsed)?.into_any()),
+    }
+}
+
 /// Docstring style enum.
 #[pyclass(eq, eq_int, frozen, name = "Style")]
 #[derive(Clone, PartialEq)]
@@ -1701,6 +1727,7 @@ fn py_emit_numpy(py: Python<'_>, doc: Py<PyModelDocstring>, base_indent: usize) 
 
 #[pymodule]
 fn pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(parse, m)?)?;
     m.add_function(wrap_pyfunction!(parse_google, m)?)?;
     m.add_function(wrap_pyfunction!(parse_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(parse_plain, m)?)?;
