@@ -18,7 +18,7 @@ Python bindings are also available as [`pydocstring-rs`](https://pypi.org/projec
 - **Byte-precise source locations** — every token carries its exact byte range for pinpoint diagnostics
 - **Zero dependencies** — pure Rust, no external crates, no regex
 - **Error-resilient** — never panics; malformed input still yields a best-effort tree
-- **Style auto-detection** — hand it a docstring, it tells you the convention
+- **Style auto-detection** — hand it a docstring, get back `Style::Google`, `Style::NumPy`, or `Style::Plain`
 
 ## Installation
 
@@ -60,6 +60,25 @@ use pydocstring::parse::{detect_style, Style};
 
 assert_eq!(detect_style("Summary.\n\nArgs:\n    x: Desc."), Style::Google);
 assert_eq!(detect_style("Summary.\n\nParameters\n----------\nx : int"), Style::NumPy);
+assert_eq!(detect_style("Just a summary."), Style::Plain);
+```
+
+`Style::Plain` covers docstrings with no recognised section markers: summary-only,
+summary + extended summary, and unrecognised styles such as Sphinx.
+
+### Unified Auto-Detecting Parser
+
+Use `parse()` to let the library detect the style and parse in one step:
+
+```rust
+use pydocstring::parse::parse;
+use pydocstring::syntax::SyntaxKind;
+
+let result = parse("Summary.\n\nArgs:\n    x: Desc.");
+assert_eq!(result.root().kind(), SyntaxKind::GOOGLE_DOCSTRING);
+
+let result = parse("Just a summary.");
+assert_eq!(result.root().kind(), SyntaxKind::PLAIN_DOCSTRING);
 ```
 
 ### Source Locations
@@ -215,13 +234,14 @@ Both styles support the following section categories. Typed accessor methods are
 | Methods                           | `methods()` → `GoogleMethod`             | `methods()` → `NumPyMethod`             |
 | Free text (Notes, Examples, etc.) | `body_text()`                            | `body_text()`                           |
 
-Root-level accessors: `summary()`, `extended_summary()` (NumPy also has `deprecation()`).
+Root-level accessors: `summary()`, `extended_summary()` (NumPy also has `deprecation()`). `PlainDocstring` exposes only `summary()` and `extended_summary()`.
 
 ## Development
 
 ```bash
 cargo build
 cargo test
+cargo run --example parse_auto
 cargo run --example parse_google
 cargo run --example parse_numpy
 ```
