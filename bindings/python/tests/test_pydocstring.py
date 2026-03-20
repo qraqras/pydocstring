@@ -13,16 +13,18 @@ class TestDetectStyle:
             == pydocstring.Style.NUMPY
         )
 
-    def test_fallback_to_google(self):
-        assert pydocstring.detect_style("Just a summary.") == pydocstring.Style.GOOGLE
+    def test_fallback_to_plain(self):
+        assert pydocstring.detect_style("Just a summary.") == pydocstring.Style.PLAIN
 
     def test_str(self):
         assert str(pydocstring.Style.GOOGLE) == "google"
         assert str(pydocstring.Style.NUMPY) == "numpy"
+        assert str(pydocstring.Style.PLAIN) == "plain"
 
     def test_repr(self):
         assert repr(pydocstring.Style.GOOGLE) == "Style.GOOGLE"
         assert repr(pydocstring.Style.NUMPY) == "Style.NUMPY"
+        assert repr(pydocstring.Style.PLAIN) == "Style.PLAIN"
 
 
 class TestParseGoogle:
@@ -348,6 +350,183 @@ class TestToModel:
         rets = model.sections[0].returns
         assert len(rets) == 1
         assert rets[0].type_annotation == "int"
+
+    def test_plain_to_model(self):
+        doc = pydocstring.parse_plain("Brief summary.\n\nMore details.")
+        model = doc.to_model()
+        assert model.summary == "Brief summary."
+        assert model.extended_summary == "More details."
+        assert model.sections == []
+
+    def test_plain_to_model_summary_only(self):
+        doc = pydocstring.parse_plain("Just a summary.")
+        model = doc.to_model()
+        assert model.summary == "Just a summary."
+        assert model.extended_summary is None
+
+
+class TestParsePlain:
+    def test_summary(self):
+        doc = pydocstring.parse_plain("Summary line.")
+        assert doc.summary is not None
+        assert doc.summary.text == "Summary line."
+        assert doc.extended_summary is None
+
+    def test_empty(self):
+        doc = pydocstring.parse_plain("")
+        assert doc.summary is None
+        assert doc.extended_summary is None
+
+    def test_extended_summary(self):
+        doc = pydocstring.parse_plain("Summary.\n\nMore details here.\nContinued.")
+        assert doc.summary is not None
+        assert doc.summary.text == "Summary."
+        assert doc.extended_summary is not None
+        assert "More details here." in doc.extended_summary.text
+
+    def test_no_sections(self):
+        # Plain docstrings never produce sections — Sphinx-like text stays plain
+        doc = pydocstring.parse_plain(
+            "Summary.\n\n:param x: A value.\n:returns: Something."
+        )
+        model = doc.to_model()
+        assert model.sections == []
+
+    def test_node_kind(self):
+        doc = pydocstring.parse_plain("Summary.")
+        assert doc.node.kind == pydocstring.SyntaxKind.PLAIN_DOCSTRING
+
+    def test_source(self):
+        text = "Summary.\n\nExtended."
+        doc = pydocstring.parse_plain(text)
+        assert doc.source == text
+
+    def test_pretty_print(self):
+        doc = pydocstring.parse_plain("Summary.\n\nExtended.")
+        output = doc.pretty_print()
+        assert "PLAIN_DOCSTRING" in output
+        assert "SUMMARY" in output
+        assert "EXTENDED_SUMMARY" in output
+
+    def test_summary_token_kind(self):
+        doc = pydocstring.parse_plain("Summary.")
+        assert doc.summary.kind == pydocstring.SyntaxKind.SUMMARY
+
+    def test_extended_summary_token_kind(self):
+        doc = pydocstring.parse_plain("Summary.\n\nExtended.")
+        assert doc.extended_summary.kind == pydocstring.SyntaxKind.EXTENDED_SUMMARY
+
+    def test_repr(self):
+        doc = pydocstring.parse_plain("Summary.")
+        assert repr(doc) == "PlainDocstring(...)"
+
+    def test_line_col_summary(self):
+        doc = pydocstring.parse_plain("Summary.")
+        lc = doc.line_col(doc.summary.range.start)
+        assert lc.lineno == 1
+        assert lc.col == 0
+
+    def test_line_col_extended_summary(self):
+        doc = pydocstring.parse_plain("Summary.\n\nExtended.")
+        lc = doc.line_col(doc.extended_summary.range.start)
+        assert lc.lineno == 3
+        assert lc.col == 0
+
+    def test_detect_style_dispatches_to_plain(self):
+        assert pydocstring.detect_style("Just a summary.") == pydocstring.Style.PLAIN
+        assert (
+            pydocstring.detect_style("Summary.\n\n:param x: value.")
+            == pydocstring.Style.PLAIN
+        )
+
+    def test_style_property(self):
+        doc = pydocstring.parse_plain("Summary.")
+        assert doc.style == pydocstring.Style.PLAIN
+
+
+class TestParse:
+    """Tests for the unified parse() entry point."""
+
+    def test_google_returns_google_docstring(self):
+        doc = pydocstring.parse("Summary.\n\nArgs:\n    x (int): Value.")
+        assert isinstance(doc, pydocstring.GoogleDocstring)
+        assert doc.style == pydocstring.Style.GOOGLE
+
+    def test_numpy_returns_numpy_docstring(self):
+        doc = pydocstring.parse(
+            "Summary.\n\nParameters\n----------\nx : int\n    Value."
+        )
+        assert isinstance(doc, pydocstring.NumPyDocstring)
+        assert doc.style == pydocstring.Style.NUMPY
+
+    def test_plain_returns_plain_docstring(self):
+        doc = pydocstring.parse("Just a summary.")
+        assert isinstance(doc, pydocstring.PlainDocstring)
+        assert doc.style == pydocstring.Style.PLAIN
+
+    def test_empty_returns_plain_docstring(self):
+        doc = pydocstring.parse("")
+        assert isinstance(doc, pydocstring.PlainDocstring)
+        assert doc.style == pydocstring.Style.PLAIN
+
+    def test_sphinx_returns_plain_docstring(self):
+        doc = pydocstring.parse("Summary.\n\n:param x: A value.\n:returns: Something.")
+        assert isinstance(doc, pydocstring.PlainDocstring)
+        assert doc.style == pydocstring.Style.PLAIN
+
+    def test_google_style_property(self):
+        doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x: Desc.")
+        assert doc.style == pydocstring.Style.GOOGLE
+
+    def test_numpy_style_property(self):
+        doc = pydocstring.parse_numpy(
+            "Summary.\n\nParameters\n----------\nx : int\n    Desc."
+        )
+        assert doc.style == pydocstring.Style.NUMPY
+
+    def test_parse_google_summary(self):
+        doc = pydocstring.parse("Summary.\n\nArgs:\n    x (int): Value.")
+        assert doc.summary.text == "Summary."
+
+    def test_parse_numpy_summary(self):
+        doc = pydocstring.parse(
+            "Summary.\n\nParameters\n----------\nx : int\n    Value."
+        )
+        assert doc.summary.text == "Summary."
+
+    def test_parse_plain_summary(self):
+        doc = pydocstring.parse("Plain summary.")
+        assert doc.summary.text == "Plain summary."
+
+    def test_parse_to_model_google(self):
+        doc = pydocstring.parse("Summary.\n\nArgs:\n    x (int): Value.")
+        model = doc.to_model()
+        assert model.summary == "Summary."
+        assert model.sections[0].kind == "parameters"
+
+    def test_parse_to_model_numpy(self):
+        doc = pydocstring.parse(
+            "Summary.\n\nParameters\n----------\nx : int\n    Value."
+        )
+        model = doc.to_model()
+        assert model.summary == "Summary."
+        assert model.sections[0].kind == "parameters"
+
+    def test_parse_to_model_plain(self):
+        doc = pydocstring.parse("Summary.\n\nExtended.")
+        model = doc.to_model()
+        assert model.summary == "Summary."
+        assert model.sections == []
+
+    def test_match_style(self):
+        # Verify match-statement style dispatch works
+        for src, expected_style in [
+            ("Summary.\n\nArgs:\n    x: Desc.", pydocstring.Style.GOOGLE),
+            ("Summary.\n\nParameters\n----------\nx : int\n    Desc.", pydocstring.Style.NUMPY),
+            ("Just a summary.", pydocstring.Style.PLAIN),
+        ]:
+            doc = pydocstring.parse(src)
+            assert doc.style == expected_style
 
 
 class TestEmit:

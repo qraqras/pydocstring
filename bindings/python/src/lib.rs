@@ -150,6 +150,8 @@ enum PySyntaxKind {
     NUMPY_REFERENCE,
     NUMPY_ATTRIBUTE,
     NUMPY_METHOD,
+    // Plain node
+    PLAIN_DOCSTRING,
 }
 
 #[pymethods]
@@ -211,6 +213,7 @@ impl PySyntaxKind {
             SyntaxKind::NUMPY_REFERENCE => Self::NUMPY_REFERENCE,
             SyntaxKind::NUMPY_ATTRIBUTE => Self::NUMPY_ATTRIBUTE,
             SyntaxKind::NUMPY_METHOD => Self::NUMPY_METHOD,
+            SyntaxKind::PLAIN_DOCSTRING => Self::PLAIN_DOCSTRING,
         }
     }
 
@@ -261,6 +264,7 @@ impl PySyntaxKind {
             Self::NUMPY_REFERENCE => SyntaxKind::NUMPY_REFERENCE,
             Self::NUMPY_ATTRIBUTE => SyntaxKind::NUMPY_ATTRIBUTE,
             Self::NUMPY_METHOD => SyntaxKind::NUMPY_METHOD,
+            Self::PLAIN_DOCSTRING => SyntaxKind::PLAIN_DOCSTRING,
         }
     }
 }
@@ -289,11 +293,7 @@ impl PyToken {
         self.range.clone_ref(py)
     }
     fn __repr__(&self) -> String {
-        format!(
-            "Token(SyntaxKind.{}, {:?})",
-            self.kind.to_core().name(),
-            self.text
-        )
+        format!("Token(SyntaxKind.{}, {:?})", self.kind.to_core().name(), self.text)
     }
 }
 
@@ -308,11 +308,7 @@ fn to_py_token(py: Python<'_>, token: &SyntaxToken, source: &str) -> PyResult<Py
     )
 }
 
-fn to_py_token_opt(
-    py: Python<'_>,
-    token: Option<&SyntaxToken>,
-    source: &str,
-) -> PyResult<Option<Py<PyToken>>> {
+fn to_py_token_opt(py: Python<'_>, token: Option<&SyntaxToken>, source: &str) -> PyResult<Option<Py<PyToken>>> {
     token.map(|t| to_py_token(py, t, source)).transpose()
 }
 
@@ -353,12 +349,8 @@ fn to_py_node(py: Python<'_>, node: &SyntaxNode, source: &str) -> PyResult<Py<Py
         .children()
         .iter()
         .map(|child| match child {
-            pydocstring_core::syntax::SyntaxElement::Node(n) => {
-                Ok(to_py_node(py, n, source)?.into_any())
-            }
-            pydocstring_core::syntax::SyntaxElement::Token(t) => {
-                Ok(to_py_token(py, t, source)?.into_any())
-            }
+            pydocstring_core::syntax::SyntaxElement::Node(n) => Ok(to_py_node(py, n, source)?.into_any()),
+            pydocstring_core::syntax::SyntaxElement::Token(t) => Ok(to_py_token(py, t, source)?.into_any()),
         })
         .collect::<PyResult<Vec<_>>>()?;
 
@@ -532,6 +524,10 @@ impl PyGoogleDocstring {
         let lc = byte_offset_to_line_col(&self.source, offset as usize)?;
         Py::new(py, lc)
     }
+    #[getter]
+    fn style(&self) -> PyStyle {
+        PyStyle::Google
+    }
     fn __repr__(&self) -> String {
         "GoogleDocstring(...)".to_string()
     }
@@ -571,11 +567,7 @@ impl PyNumPyParameter {
         self.default_value.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
-        let name_texts: Vec<String> = self
-            .names
-            .iter()
-            .map(|n| n.borrow(py).text.clone())
-            .collect();
+        let name_texts: Vec<String> = self.names.iter().map(|n| n.borrow(py).text.clone()).collect();
         format!("NumPyParameter({})", name_texts.join(", "))
     }
 }
@@ -712,8 +704,63 @@ impl PyNumPyDocstring {
         let lc = byte_offset_to_line_col(&self.source, offset as usize)?;
         Py::new(py, lc)
     }
+    #[getter]
+    fn style(&self) -> PyStyle {
+        PyStyle::NumPy
+    }
     fn __repr__(&self) -> String {
         "NumPyDocstring(...)".to_string()
+    }
+}
+
+// ─── Plain typed wrapper ────────────────────────────────────────────────────
+
+#[pyclass(name = "PlainDocstring", frozen)]
+struct PyPlainDocstring {
+    summary: Option<Py<PyToken>>,
+    extended_summary: Option<Py<PyToken>>,
+    node: Py<PyNode>,
+    source: String,
+}
+
+#[pymethods]
+impl PyPlainDocstring {
+    #[getter]
+    fn summary(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.summary.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn extended_summary(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.extended_summary.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn source(&self) -> &str {
+        &self.source
+    }
+    fn pretty_print(&self) -> String {
+        pydocstring_core::parse::plain::parse_plain(&self.source).pretty_print()
+    }
+    fn to_model(&self) -> PyResult<PyModelDocstring> {
+        let parsed = pydocstring_core::parse::plain::parse_plain(&self.source);
+        let doc = pydocstring_core::parse::plain::to_model::to_model(&parsed)
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("failed to convert to model"))?;
+        Ok(PyModelDocstring { inner: doc })
+    }
+    /// Convert a byte offset to a `LineColumn` with codepoint-based `col`.
+    fn line_col(&self, py: Python<'_>, offset: u32) -> PyResult<Py<PyLineColumn>> {
+        let lc = byte_offset_to_line_col(&self.source, offset as usize)?;
+        Py::new(py, lc)
+    }
+    #[getter]
+    fn style(&self) -> PyStyle {
+        PyStyle::Plain
+    }
+    fn __repr__(&self) -> String {
+        "PlainDocstring(...)".to_string()
     }
 }
 
@@ -721,9 +768,8 @@ impl PyNumPyDocstring {
 
 fn build_google_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyGoogleDocstring>> {
     let source = parsed.source();
-    let doc = gn::GoogleDocstring::cast(parsed.root()).ok_or_else(|| {
-        pyo3::exceptions::PyValueError::new_err("root node is not a GOOGLE_DOCSTRING")
-    })?;
+    let doc = gn::GoogleDocstring::cast(parsed.root())
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("root node is not a GOOGLE_DOCSTRING"))?;
 
     let summary = to_py_token_opt(py, doc.summary(), source)?;
     let extended_summary = to_py_token_opt(py, doc.extended_summary(), source)?;
@@ -802,9 +848,8 @@ fn build_google_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyGoog
 
 fn build_numpy_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyNumPyDocstring>> {
     let source = parsed.source();
-    let doc = nn::NumPyDocstring::cast(parsed.root()).ok_or_else(|| {
-        pyo3::exceptions::PyValueError::new_err("root node is not a NUMPY_DOCSTRING")
-    })?;
+    let doc = nn::NumPyDocstring::cast(parsed.root())
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("root node is not a NUMPY_DOCSTRING"))?;
 
     let summary = to_py_token_opt(py, doc.summary(), source)?;
     let extended_summary = to_py_token_opt(py, doc.extended_summary(), source)?;
@@ -887,6 +932,26 @@ fn build_numpy_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyNumPy
     )
 }
 
+fn build_plain_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyPlainDocstring>> {
+    let source = parsed.source();
+    let doc = pydocstring_core::parse::plain::nodes::PlainDocstring::cast(parsed.root())
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("root node is not a PLAIN_DOCSTRING"))?;
+
+    let summary = to_py_token_opt(py, doc.summary(), source)?;
+    let extended_summary = to_py_token_opt(py, doc.extended_summary(), source)?;
+    let node = to_py_node(py, parsed.root(), source)?;
+
+    Py::new(
+        py,
+        PyPlainDocstring {
+            summary,
+            extended_summary,
+            node,
+            source: source.to_string(),
+        },
+    )
+}
+
 // ─── Model IR types ─────────────────────────────────────────────────────────
 
 #[pyclass(name = "Deprecation")]
@@ -903,10 +968,7 @@ impl PyModelDeprecation {
     #[new]
     #[pyo3(signature = (version, *, description=None))]
     fn new(version: String, description: Option<String>) -> Self {
-        Self {
-            version,
-            description,
-        }
+        Self { version, description }
     }
     fn __repr__(&self) -> String {
         format!("Deprecation(version={:?})", self.version)
@@ -967,11 +1029,7 @@ struct PyModelReturn {
 impl PyModelReturn {
     #[new]
     #[pyo3(signature = (*, name=None, type_annotation=None, description=None))]
-    fn new(
-        name: Option<String>,
-        type_annotation: Option<String>,
-        description: Option<String>,
-    ) -> Self {
+    fn new(name: Option<String>, type_annotation: Option<String>, description: Option<String>) -> Self {
         Self {
             name,
             type_annotation,
@@ -1001,10 +1059,7 @@ impl PyModelExceptionEntry {
     #[new]
     #[pyo3(signature = (type_name, *, description=None))]
     fn new(type_name: String, description: Option<String>) -> Self {
-        Self {
-            type_name,
-            description,
-        }
+        Self { type_name, description }
     }
     fn __repr__(&self) -> String {
         format!("ExceptionEntry({})", self.type_name)
@@ -1177,10 +1232,7 @@ fn extract_returns(py: Python<'_>, entries: &[Py<PyModelReturn>]) -> Vec<model::
         .collect()
 }
 
-fn extract_exceptions(
-    py: Python<'_>,
-    entries: &[Py<PyModelExceptionEntry>],
-) -> Vec<model::ExceptionEntry> {
+fn extract_exceptions(py: Python<'_>, entries: &[Py<PyModelExceptionEntry>]) -> Vec<model::ExceptionEntry> {
     entries
         .iter()
         .map(|e| {
@@ -1221,10 +1273,7 @@ fn extract_methods(py: Python<'_>, entries: &[Py<PyModelMethod>]) -> Vec<model::
         .collect()
 }
 
-fn extract_see_also(
-    py: Python<'_>,
-    entries: &[Py<PyModelSeeAlsoEntry>],
-) -> Vec<model::SeeAlsoEntry> {
+fn extract_see_also(py: Python<'_>, entries: &[Py<PyModelSeeAlsoEntry>]) -> Vec<model::SeeAlsoEntry> {
     entries
         .iter()
         .map(|s| {
@@ -1274,38 +1323,22 @@ impl PyModelSection {
         body: Option<String>,
     ) -> PyResult<Self> {
         let inner = match kind {
-            "parameters" => {
-                model::Section::Parameters(extract_parameters(py, &parameters.unwrap_or_default()))
+            "parameters" => model::Section::Parameters(extract_parameters(py, &parameters.unwrap_or_default())),
+            "keyword_parameters" => {
+                model::Section::KeywordParameters(extract_parameters(py, &parameters.unwrap_or_default()))
             }
-            "keyword_parameters" => model::Section::KeywordParameters(extract_parameters(
-                py,
-                &parameters.unwrap_or_default(),
-            )),
-            "other_parameters" => model::Section::OtherParameters(extract_parameters(
-                py,
-                &parameters.unwrap_or_default(),
-            )),
-            "receives" => {
-                model::Section::Receives(extract_parameters(py, &parameters.unwrap_or_default()))
+            "other_parameters" => {
+                model::Section::OtherParameters(extract_parameters(py, &parameters.unwrap_or_default()))
             }
+            "receives" => model::Section::Receives(extract_parameters(py, &parameters.unwrap_or_default())),
             "returns" => model::Section::Returns(extract_returns(py, &returns.unwrap_or_default())),
             "yields" => model::Section::Yields(extract_returns(py, &returns.unwrap_or_default())),
-            "raises" => {
-                model::Section::Raises(extract_exceptions(py, &exceptions.unwrap_or_default()))
-            }
-            "warns" => {
-                model::Section::Warns(extract_exceptions(py, &exceptions.unwrap_or_default()))
-            }
-            "attributes" => {
-                model::Section::Attributes(extract_attributes(py, &attributes.unwrap_or_default()))
-            }
+            "raises" => model::Section::Raises(extract_exceptions(py, &exceptions.unwrap_or_default())),
+            "warns" => model::Section::Warns(extract_exceptions(py, &exceptions.unwrap_or_default())),
+            "attributes" => model::Section::Attributes(extract_attributes(py, &attributes.unwrap_or_default())),
             "methods" => model::Section::Methods(extract_methods(py, &methods.unwrap_or_default())),
-            "see_also" => {
-                model::Section::SeeAlso(extract_see_also(py, &see_also_entries.unwrap_or_default()))
-            }
-            "references" => {
-                model::Section::References(extract_references(py, &references.unwrap_or_default()))
-            }
+            "see_also" => model::Section::SeeAlso(extract_see_also(py, &see_also_entries.unwrap_or_default())),
+            "references" => model::Section::References(extract_references(py, &references.unwrap_or_default())),
             other => model::Section::FreeText {
                 kind: str_to_free_section_kind(other),
                 body: body.unwrap_or_default(),
@@ -1587,10 +1620,7 @@ impl PyModelDocstring {
     #[setter]
     fn set_sections(&mut self, sections: Vec<Py<PyModelSection>>) {
         Python::with_gil(|py| {
-            self.inner.sections = sections
-                .iter()
-                .map(|s| s.borrow(py).inner.clone())
-                .collect();
+            self.inner.sections = sections.iter().map(|s| s.borrow(py).inner.clone()).collect();
         });
     }
 
@@ -1615,6 +1645,27 @@ fn parse_numpy(py: Python<'_>, input: &str) -> PyResult<Py<PyNumPyDocstring>> {
     build_numpy_docstring(py, &parsed)
 }
 
+/// Parse a plain docstring (no NumPy or Google section markers) and return a PlainDocstring object.
+#[pyfunction]
+fn parse_plain(py: Python<'_>, input: &str) -> PyResult<Py<PyPlainDocstring>> {
+    let parsed = pydocstring_core::parse::plain::parse_plain(input);
+    build_plain_docstring(py, &parsed)
+}
+
+/// Auto-detect the docstring style and parse it, returning a GoogleDocstring,
+/// NumPyDocstring, or PlainDocstring. Use `.style` on the result to distinguish
+/// between them without `isinstance` checks.
+#[pyfunction]
+fn parse(py: Python<'_>, input: &str) -> PyResult<pyo3::PyObject> {
+    use pydocstring_core::syntax::SyntaxKind;
+    let parsed = pydocstring_core::parse::parse(input);
+    match parsed.root().kind() {
+        SyntaxKind::GOOGLE_DOCSTRING => Ok(build_google_docstring(py, &parsed)?.into_any()),
+        SyntaxKind::NUMPY_DOCSTRING => Ok(build_numpy_docstring(py, &parsed)?.into_any()),
+        _ => Ok(build_plain_docstring(py, &parsed)?.into_any()),
+    }
+}
+
 /// Docstring style enum.
 #[pyclass(eq, eq_int, frozen, name = "Style")]
 #[derive(Clone, PartialEq)]
@@ -1623,6 +1674,8 @@ enum PyStyle {
     Google,
     #[pyo3(name = "NUMPY")]
     NumPy,
+    #[pyo3(name = "PLAIN")]
+    Plain,
 }
 
 #[pymethods]
@@ -1631,6 +1684,7 @@ impl PyStyle {
         match self {
             PyStyle::Google => "Style.GOOGLE",
             PyStyle::NumPy => "Style.NUMPY",
+            PyStyle::Plain => "Style.PLAIN",
         }
     }
 
@@ -1638,6 +1692,7 @@ impl PyStyle {
         match self {
             PyStyle::Google => "google",
             PyStyle::NumPy => "numpy",
+            PyStyle::Plain => "plain",
         }
     }
 }
@@ -1648,6 +1703,7 @@ fn detect_style(input: &str) -> PyStyle {
     match pydocstring_core::parse::detect_style(input) {
         pydocstring_core::parse::Style::Google => PyStyle::Google,
         pydocstring_core::parse::Style::NumPy => PyStyle::NumPy,
+        pydocstring_core::parse::Style::Plain => PyStyle::Plain,
     }
 }
 
@@ -1671,8 +1727,10 @@ fn py_emit_numpy(py: Python<'_>, doc: Py<PyModelDocstring>, base_indent: usize) 
 
 #[pymodule]
 fn pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(parse, m)?)?;
     m.add_function(wrap_pyfunction!(parse_google, m)?)?;
     m.add_function(wrap_pyfunction!(parse_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_plain, m)?)?;
     m.add_function(wrap_pyfunction!(detect_style, m)?)?;
     m.add_function(wrap_pyfunction!(py_emit_google, m)?)?;
     m.add_function(wrap_pyfunction!(py_emit_numpy, m)?)?;
@@ -1692,6 +1750,7 @@ fn pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyNumPyParameter>()?;
     m.add_class::<PyNumPyReturns>()?;
     m.add_class::<PyNumPyException>()?;
+    m.add_class::<PyPlainDocstring>()?;
     m.add_class::<PyModelDocstring>()?;
     m.add_class::<PyModelSection>()?;
     m.add_class::<PyModelParameter>()?;

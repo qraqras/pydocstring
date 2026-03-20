@@ -279,6 +279,14 @@ fn build_arg_node(kind: SyntaxKind, header: &EntryHeader, range: TextRange) -> S
         )));
         if let Some(t) = ti.r#type {
             children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::TYPE, t)));
+        } else {
+            // Empty brackets `()`: emit a zero-length missing TYPE token right
+            // after the open bracket so callers can distinguish `a ()` from `a:`.
+            let missing_pos = ti.open_bracket.end();
+            children.push(SyntaxElement::Token(SyntaxToken::new(
+                SyntaxKind::TYPE,
+                TextRange::new(missing_pos, missing_pos),
+            )));
         }
         if let Some(cb) = ti.close_bracket {
             children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::CLOSE_BRACKET, cb)));
@@ -311,6 +319,13 @@ fn build_arg_node(kind: SyntaxKind, header: &EntryHeader, range: TextRange) -> S
     }
     if let Some(desc) = header.first_description {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, desc)));
+    } else if let Some(colon) = header.colon {
+        // Colon present but no description: zero-length placeholder so callers
+        // can distinguish `a (int):` from `a (int)` via find_missing(DESCRIPTION).
+        children.push(SyntaxElement::Token(SyntaxToken::new(
+            SyntaxKind::DESCRIPTION,
+            TextRange::new(colon.end(), colon.end()),
+        )));
     }
     // Ensure children are in source order (needed when colon/description
     // appear before the close bracket, e.g., `arg (int:desc.)`).
@@ -327,6 +342,11 @@ fn build_exception_node(header: &EntryHeader, range: TextRange) -> SyntaxNode {
     }
     if let Some(desc) = header.first_description {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, desc)));
+    } else if let Some(colon) = header.colon {
+        children.push(SyntaxElement::Token(SyntaxToken::new(
+            SyntaxKind::DESCRIPTION,
+            TextRange::new(colon.end(), colon.end()),
+        )));
     }
     SyntaxNode::new(SyntaxKind::GOOGLE_EXCEPTION, range, children)
 }
@@ -343,6 +363,11 @@ fn build_warning_node(header: &EntryHeader, range: TextRange) -> SyntaxNode {
     }
     if let Some(desc) = header.first_description {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, desc)));
+    } else if let Some(colon) = header.colon {
+        children.push(SyntaxElement::Token(SyntaxToken::new(
+            SyntaxKind::DESCRIPTION,
+            TextRange::new(colon.end(), colon.end()),
+        )));
     }
     SyntaxNode::new(SyntaxKind::GOOGLE_WARNING, range, children)
 }
@@ -370,6 +395,11 @@ fn build_see_also_node(header: &EntryHeader, range: TextRange, source: &str) -> 
     }
     if let Some(desc) = header.first_description {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, desc)));
+    } else if let Some(colon) = header.colon {
+        children.push(SyntaxElement::Token(SyntaxToken::new(
+            SyntaxKind::DESCRIPTION,
+            TextRange::new(colon.end(), colon.end()),
+        )));
     }
     SyntaxNode::new(SyntaxKind::GOOGLE_SEE_ALSO_ITEM, range, children)
 }
@@ -412,7 +442,13 @@ fn extend_last_node_description(nodes: &mut [SyntaxElement], cont: TextRange) {
         for child in node.children_mut() {
             if let SyntaxElement::Token(t) = child {
                 if t.kind() == SyntaxKind::DESCRIPTION {
-                    t.extend_range(cont);
+                    if t.is_missing() {
+                        // Zero-length placeholder: replace range entirely rather
+                        // than extending from the old (wrong) start position.
+                        *t = SyntaxToken::new(SyntaxKind::DESCRIPTION, cont);
+                    } else {
+                        t.extend_range(cont);
+                    }
                     found_desc = true;
                     break;
                 }

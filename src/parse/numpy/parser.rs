@@ -136,10 +136,13 @@ fn parse_name_and_type(text: &str, line_idx: usize, col_base: usize, cursor: &Li
     let after_trimmed = after_colon.trim();
 
     if after_trimmed.is_empty() {
+        // Colon present but no type text: emit a zero-length TYPE so callers
+        // can use `type_().is_missing()` to distinguish `a :` from `a`.
+        let missing_type = cursor.make_line_range(line_idx, colon_col + 1, 0);
         return ParamHeaderParts {
             names,
             colon: colon_span,
-            param_type: None,
+            param_type: Some(missing_type),
             optional: None,
             default_keyword: None,
             default_separator: None,
@@ -180,6 +183,10 @@ fn parse_name_and_type(text: &str, line_idx: usize, col_base: usize, cursor: &Li
                 if !val.is_empty() {
                     let val_abs = cursor.substr_offset(val);
                     default_value = Some(TextRange::from_offset_len(val_abs, val.len()));
+                } else {
+                    // Separator present but value absent: zero-length placeholder.
+                    let missing_pos = sep_abs + 1;
+                    default_value = Some(TextRange::from_offset_len(missing_pos, 0));
                 }
             } else if let Some(rest) = after_kw.strip_prefix(':') {
                 let sep_pos = seg.rfind(':').unwrap();
@@ -189,6 +196,10 @@ fn parse_name_and_type(text: &str, line_idx: usize, col_base: usize, cursor: &Li
                 if !val.is_empty() {
                     let val_abs = cursor.substr_offset(val);
                     default_value = Some(TextRange::from_offset_len(val_abs, val.len()));
+                } else {
+                    // Separator present but value absent: zero-length placeholder.
+                    let missing_pos = sep_abs + 1;
+                    default_value = Some(TextRange::from_offset_len(missing_pos, 0));
                 }
             } else {
                 let val = after_kw.trim_start();

@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-03-20
+
+### Added
+
+- `Style::Plain` — new style variant returned by `detect_style` for docstrings
+  that contain no NumPy section underlines or Google section headers (e.g.
+  summary-only docstrings, Sphinx-style docstrings).
+- `SyntaxKind::PLAIN_DOCSTRING` — root node kind for plain-style parse trees.
+- `parse_plain(input)` — lightweight parser that extracts only a `SUMMARY` and
+  an optional `EXTENDED_SUMMARY` token from the input, without attempting
+  section detection.
+- `parse(input)` — unified entry point that calls `detect_style` and dispatches
+  to `parse_google`, `parse_numpy`, or `parse_plain` automatically.
+- `PlainDocstring` typed wrapper with `summary()` and `extended_summary()`
+  accessors (mirrors the existing `GoogleDocstring` / `NumPyDocstring` API).
+- Python bindings: `Style.PLAIN`, `SyntaxKind.PLAIN_DOCSTRING`, `PlainDocstring`
+  class, and `parse_plain(input)` function.
+- Google parser: zero-length `DESCRIPTION` token emitted when a colon is
+  present but no description text follows (e.g. `a (int):`, `a:`), and
+  zero-length `TYPE` token emitted for empty brackets `()`.
+- NumPy parser: zero-length `TYPE` token emitted when a colon is present but
+  type text is absent (e.g. `a :`); zero-length `DEFAULT_VALUE` token emitted
+  when a default separator is present but no value follows (e.g. `default =`).
+  Callers can use `find_missing(KIND)` to detect these absent-but-declared
+  slots without inspecting surrounding tokens.
+- `examples/parse_auto.rs` — demonstrates the unified `parse()` entry point
+  with Google, NumPy, and plain-style inputs.
+
+### Changed
+
+- `detect_style` rewritten as a single O(n) pass; returns `Style::Plain` as the
+  fallback instead of `Style::Google`.
+
 ## [0.1.3] - 2026-03-19
 
 ### Added
@@ -94,6 +127,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero external crate dependencies
 - Python bindings via PyO3 (`pydocstring-rs`)
 
+[0.1.4]: https://github.com/qraqras/pydocstring/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/qraqras/pydocstring/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/qraqras/pydocstring/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/qraqras/pydocstring/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/qraqras/pydocstring/releases/tag/v0.1.0
