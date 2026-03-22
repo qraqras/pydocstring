@@ -4,7 +4,7 @@ pub use pydocstring::parse::numpy::{
     kind::NumPySectionKind,
     nodes::{
         NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod, NumPyParameter, NumPyReference,
-        NumPyReturns, NumPySection, NumPySeeAlsoItem, NumPyWarning,
+        NumPyReturns, NumPySection, NumPySeeAlsoItem, NumPyWarning, NumPyYields,
     },
     parse_numpy,
 };
@@ -50,11 +50,11 @@ pub fn returns<'a>(result: &'a Parsed) -> Vec<NumPyReturns<'a>> {
         .collect()
 }
 
-pub fn yields<'a>(result: &'a Parsed) -> Vec<NumPyReturns<'a>> {
+pub fn yields<'a>(result: &'a Parsed) -> Vec<NumPyYields<'a>> {
     doc(result)
         .sections()
         .filter(|s| matches!(s.section_kind(result.source()), NumPySectionKind::Yields))
-        .flat_map(|s| s.returns().collect::<Vec<_>>())
+        .flat_map(|s| s.yields().collect::<Vec<_>>())
         .collect()
 }
 

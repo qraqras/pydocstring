@@ -355,6 +355,25 @@ fn build_returns_node(
     SyntaxNode::new(SyntaxKind::NUMPY_RETURNS, range, children)
 }
 
+fn build_yields_node(
+    name: Option<TextRange>,
+    colon: Option<TextRange>,
+    return_type: Option<TextRange>,
+    range: TextRange,
+) -> SyntaxNode {
+    let mut children = Vec::new();
+    if let Some(n) = name {
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::NAME, n)));
+    }
+    if let Some(c) = colon {
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::COLON, c)));
+    }
+    if let Some(rt) = return_type {
+        children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::RETURN_TYPE, rt)));
+    }
+    SyntaxNode::new(SyntaxKind::NUMPY_YIELDS, range, children)
+}
+
 fn build_exception_node(
     exc_type: TextRange,
     colon: Option<TextRange>,
@@ -570,6 +589,50 @@ fn process_returns_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, ent
 
     let entry_range = cursor.current_trimmed_range();
     nodes.push(SyntaxElement::Node(build_returns_node(
+        name,
+        colon,
+        return_type,
+        entry_range,
+    )));
+}
+
+fn process_yields_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, entry_indent: &mut Option<usize>) {
+    let indent_cols = cursor.current_indent_columns();
+    if let Some(base) = *entry_indent {
+        if indent_cols > base {
+            extend_last_node_description(nodes, cursor.current_trimmed_range());
+            return;
+        }
+    }
+    if entry_indent.is_none() {
+        *entry_indent = Some(indent_cols);
+    }
+
+    let col = cursor.current_indent();
+    let trimmed = cursor.current_trimmed();
+
+    let (name, colon, return_type) = if let Some(colon_pos) = find_entry_colon(trimmed) {
+        let n = trimmed[..colon_pos].trim_end();
+        let after_colon = &trimmed[colon_pos + 1..];
+        let t = after_colon.trim();
+        let ws_after = after_colon.len() - after_colon.trim_start().len();
+        let type_col = col + colon_pos + 1 + ws_after;
+        (
+            Some(cursor.make_line_range(cursor.line, col, n.len())),
+            Some(cursor.make_line_range(cursor.line, col + colon_pos, 1)),
+            if t.is_empty() {
+                None
+            } else {
+                Some(cursor.make_line_range(cursor.line, type_col, t.len()))
+            },
+        )
+    } else {
+        // Unnamed: type only (stored as RETURN_TYPE)
+        (None, None, Some(cursor.current_trimmed_range()))
+    };
+
+    let entry_range = cursor.current_trimmed_range();
+    nodes.push(SyntaxElement::Node(build_yields_node(
         name,
         colon,
         return_type,
@@ -825,6 +888,7 @@ fn process_reference_line(cursor: &LineCursor, nodes: &mut Vec<SyntaxElement>, e
 enum SectionBody {
     Parameters(Vec<SyntaxElement>),
     Returns(Vec<SyntaxElement>),
+    Yields(Vec<SyntaxElement>),
     Raises(Vec<SyntaxElement>),
     Warns(Vec<SyntaxElement>),
     SeeAlso(Vec<SyntaxElement>),
@@ -841,7 +905,7 @@ impl SectionBody {
             NumPySectionKind::OtherParameters => Self::Parameters(Vec::new()),
             NumPySectionKind::Receives => Self::Parameters(Vec::new()),
             NumPySectionKind::Returns => Self::Returns(Vec::new()),
-            NumPySectionKind::Yields => Self::Returns(Vec::new()),
+            NumPySectionKind::Yields => Self::Yields(Vec::new()),
             NumPySectionKind::Raises => Self::Raises(Vec::new()),
             NumPySectionKind::Warns => Self::Warns(Vec::new()),
             NumPySectionKind::SeeAlso => Self::SeeAlso(Vec::new()),
@@ -856,6 +920,7 @@ impl SectionBody {
         match self {
             Self::Parameters(nodes) => process_parameter_line(cursor, nodes, entry_indent),
             Self::Returns(nodes) => process_returns_line(cursor, nodes, entry_indent),
+            Self::Yields(nodes) => process_yields_line(cursor, nodes, entry_indent),
             Self::Raises(nodes) => process_raises_line(cursor, nodes, entry_indent),
             Self::Warns(nodes) => process_warning_line(cursor, nodes, entry_indent),
             Self::SeeAlso(nodes) => process_see_also_line(cursor, nodes, entry_indent),
@@ -876,6 +941,7 @@ impl SectionBody {
         match self {
             Self::Parameters(nodes) => nodes,
             Self::Returns(nodes) => nodes,
+            Self::Yields(nodes) => nodes,
             Self::Raises(nodes) => nodes,
             Self::Warns(nodes) => nodes,
             Self::SeeAlso(nodes) => nodes,

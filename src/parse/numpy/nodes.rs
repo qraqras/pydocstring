@@ -100,6 +100,11 @@ impl<'a> NumPySection<'a> {
         self.0.nodes(SyntaxKind::NUMPY_RETURNS).filter_map(NumPyReturns::cast)
     }
 
+    /// Iterate over yields entry nodes.
+    pub fn yields(&self) -> impl Iterator<Item = NumPyYields<'a>> {
+        self.0.nodes(SyntaxKind::NUMPY_YIELDS).filter_map(NumPyYields::cast)
+    }
+
     /// Iterate over exception entry nodes.
     pub fn exceptions(&self) -> impl Iterator<Item = NumPyException<'a>> {
         self.0
@@ -261,6 +266,34 @@ impl<'a> NumPyReturns<'a> {
     }
 
     /// Return type annotation token, if present.
+    pub fn return_type(&self) -> Option<&'a SyntaxToken> {
+        self.0.find_token(SyntaxKind::RETURN_TYPE)
+    }
+
+    /// Description text token, if present.
+    pub fn description(&self) -> Option<&'a SyntaxToken> {
+        self.0.find_token(SyntaxKind::DESCRIPTION)
+    }
+}
+
+// =============================================================================
+// NumPyYields
+// =============================================================================
+
+define_node!(NumPyYields, NUMPY_YIELDS);
+
+impl<'a> NumPyYields<'a> {
+    /// Yield name token, if present.
+    pub fn name(&self) -> Option<&'a SyntaxToken> {
+        self.0.find_token(SyntaxKind::NAME)
+    }
+
+    /// Colon separator token, if present.
+    pub fn colon(&self) -> Option<&'a SyntaxToken> {
+        self.0.find_token(SyntaxKind::COLON)
+    }
+
+    /// Yield type annotation token, if present.
     pub fn return_type(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::RETURN_TYPE)
     }

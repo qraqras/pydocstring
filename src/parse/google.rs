@@ -10,6 +10,6 @@ pub mod to_model;
 pub use kind::GoogleSectionKind;
 pub use nodes::{
     GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturns, GoogleSection,
-    GoogleSectionHeader, GoogleSeeAlsoItem, GoogleWarning,
+    GoogleSectionHeader, GoogleSeeAlsoItem, GoogleWarning, GoogleYields,
 };
 pub use parser::parse_google;

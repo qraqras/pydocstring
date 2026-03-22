@@ -132,6 +132,7 @@ enum PySyntaxKind {
     GOOGLE_SECTION_HEADER,
     GOOGLE_ARG,
     GOOGLE_RETURNS,
+    GOOGLE_YIELDS,
     GOOGLE_EXCEPTION,
     GOOGLE_WARNING,
     GOOGLE_SEE_ALSO_ITEM,
@@ -144,6 +145,7 @@ enum PySyntaxKind {
     NUMPY_DEPRECATION,
     NUMPY_PARAMETER,
     NUMPY_RETURNS,
+    NUMPY_YIELDS,
     NUMPY_EXCEPTION,
     NUMPY_WARNING,
     NUMPY_SEE_ALSO_ITEM,
@@ -196,6 +198,7 @@ impl PySyntaxKind {
             SyntaxKind::GOOGLE_SECTION_HEADER => Self::GOOGLE_SECTION_HEADER,
             SyntaxKind::GOOGLE_ARG => Self::GOOGLE_ARG,
             SyntaxKind::GOOGLE_RETURNS => Self::GOOGLE_RETURNS,
+            SyntaxKind::GOOGLE_YIELDS => Self::GOOGLE_YIELDS,
             SyntaxKind::GOOGLE_EXCEPTION => Self::GOOGLE_EXCEPTION,
             SyntaxKind::GOOGLE_WARNING => Self::GOOGLE_WARNING,
             SyntaxKind::GOOGLE_SEE_ALSO_ITEM => Self::GOOGLE_SEE_ALSO_ITEM,
@@ -207,6 +210,7 @@ impl PySyntaxKind {
             SyntaxKind::NUMPY_DEPRECATION => Self::NUMPY_DEPRECATION,
             SyntaxKind::NUMPY_PARAMETER => Self::NUMPY_PARAMETER,
             SyntaxKind::NUMPY_RETURNS => Self::NUMPY_RETURNS,
+            SyntaxKind::NUMPY_YIELDS => Self::NUMPY_YIELDS,
             SyntaxKind::NUMPY_EXCEPTION => Self::NUMPY_EXCEPTION,
             SyntaxKind::NUMPY_WARNING => Self::NUMPY_WARNING,
             SyntaxKind::NUMPY_SEE_ALSO_ITEM => Self::NUMPY_SEE_ALSO_ITEM,
@@ -247,6 +251,7 @@ impl PySyntaxKind {
             Self::GOOGLE_SECTION_HEADER => SyntaxKind::GOOGLE_SECTION_HEADER,
             Self::GOOGLE_ARG => SyntaxKind::GOOGLE_ARG,
             Self::GOOGLE_RETURNS => SyntaxKind::GOOGLE_RETURNS,
+            Self::GOOGLE_YIELDS => SyntaxKind::GOOGLE_YIELDS,
             Self::GOOGLE_EXCEPTION => SyntaxKind::GOOGLE_EXCEPTION,
             Self::GOOGLE_WARNING => SyntaxKind::GOOGLE_WARNING,
             Self::GOOGLE_SEE_ALSO_ITEM => SyntaxKind::GOOGLE_SEE_ALSO_ITEM,
@@ -258,6 +263,7 @@ impl PySyntaxKind {
             Self::NUMPY_DEPRECATION => SyntaxKind::NUMPY_DEPRECATION,
             Self::NUMPY_PARAMETER => SyntaxKind::NUMPY_PARAMETER,
             Self::NUMPY_RETURNS => SyntaxKind::NUMPY_RETURNS,
+            Self::NUMPY_YIELDS => SyntaxKind::NUMPY_YIELDS,
             Self::NUMPY_EXCEPTION => SyntaxKind::NUMPY_EXCEPTION,
             Self::NUMPY_WARNING => SyntaxKind::NUMPY_WARNING,
             Self::NUMPY_SEE_ALSO_ITEM => SyntaxKind::NUMPY_SEE_ALSO_ITEM,
@@ -415,6 +421,24 @@ impl PyGoogleReturns {
     }
 }
 
+#[pyclass(name = "GoogleYields", frozen)]
+struct PyGoogleYields {
+    return_type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
+}
+
+#[pymethods]
+impl PyGoogleYields {
+    #[getter]
+    fn return_type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.return_type.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.description.as_ref().map(|t| t.clone_ref(py))
+    }
+}
+
 #[pyclass(name = "GoogleException", frozen)]
 struct PyGoogleException {
     r#type: Py<PyToken>,
@@ -438,6 +462,7 @@ struct PyGoogleSection {
     kind: String,
     args: Vec<Py<PyGoogleArg>>,
     returns: Option<Py<PyGoogleReturns>>,
+    yields: Option<Py<PyGoogleYields>>,
     exceptions: Vec<Py<PyGoogleException>>,
     body_text: Option<Py<PyToken>>,
     node: Py<PyNode>,
@@ -456,6 +481,10 @@ impl PyGoogleSection {
     #[getter]
     fn returns(&self, py: Python<'_>) -> Option<Py<PyGoogleReturns>> {
         self.returns.as_ref().map(|r| r.clone_ref(py))
+    }
+    #[getter]
+    fn yields(&self, py: Python<'_>) -> Option<Py<PyGoogleYields>> {
+        self.yields.as_ref().map(|r| r.clone_ref(py))
     }
     #[getter]
     fn exceptions(&self, py: Python<'_>) -> Vec<Py<PyGoogleException>> {
@@ -595,6 +624,29 @@ impl PyNumPyReturns {
     }
 }
 
+#[pyclass(name = "NumPyYields", frozen)]
+struct PyNumPyYields {
+    name: Option<Py<PyToken>>,
+    return_type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
+}
+
+#[pymethods]
+impl PyNumPyYields {
+    #[getter]
+    fn name(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.name.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn return_type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.return_type.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.description.as_ref().map(|t| t.clone_ref(py))
+    }
+}
+
 #[pyclass(name = "NumPyException", frozen)]
 struct PyNumPyException {
     r#type: Py<PyToken>,
@@ -618,6 +670,7 @@ struct PyNumPySection {
     kind: String,
     parameters: Vec<Py<PyNumPyParameter>>,
     returns: Vec<Py<PyNumPyReturns>>,
+    yields: Vec<Py<PyNumPyYields>>,
     exceptions: Vec<Py<PyNumPyException>>,
     body_text: Option<Py<PyToken>>,
     node: Py<PyNode>,
@@ -636,6 +689,10 @@ impl PyNumPySection {
     #[getter]
     fn returns(&self, py: Python<'_>) -> Vec<Py<PyNumPyReturns>> {
         self.returns.iter().map(|r| r.clone_ref(py)).collect()
+    }
+    #[getter]
+    fn yields(&self, py: Python<'_>) -> Vec<Py<PyNumPyYields>> {
+        self.yields.iter().map(|r| r.clone_ref(py)).collect()
     }
     #[getter]
     fn exceptions(&self, py: Python<'_>) -> Vec<Py<PyNumPyException>> {
@@ -804,6 +861,18 @@ fn build_google_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyGoog
                     )
                 })
                 .transpose()?;
+            let yields = sec
+                .yields()
+                .map(|r| {
+                    Py::new(
+                        py,
+                        PyGoogleYields {
+                            return_type: to_py_token_opt(py, r.return_type(), source)?,
+                            description: to_py_token_opt(py, r.description(), source)?,
+                        },
+                    )
+                })
+                .transpose()?;
             let exceptions: Vec<Py<PyGoogleException>> = sec
                 .exceptions()
                 .map(|e| {
@@ -824,6 +893,7 @@ fn build_google_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyGoog
                     kind,
                     args,
                     returns,
+                    yields,
                     exceptions,
                     body_text,
                     node,
@@ -890,6 +960,19 @@ fn build_numpy_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyNumPy
                     )
                 })
                 .collect::<PyResult<Vec<_>>>()?;
+            let yields: Vec<Py<PyNumPyYields>> = sec
+                .yields()
+                .map(|r| {
+                    Py::new(
+                        py,
+                        PyNumPyYields {
+                            name: to_py_token_opt(py, r.name(), source)?,
+                            return_type: to_py_token_opt(py, r.return_type(), source)?,
+                            description: to_py_token_opt(py, r.description(), source)?,
+                        },
+                    )
+                })
+                .collect::<PyResult<Vec<_>>>()?;
             let exceptions: Vec<Py<PyNumPyException>> = sec
                 .exceptions()
                 .map(|e| {
@@ -910,6 +993,7 @@ fn build_numpy_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyNumPy
                     kind,
                     parameters,
                     returns,
+                    yields,
                     exceptions,
                     body_text,
                     node,
@@ -1744,11 +1828,13 @@ fn pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyGoogleSection>()?;
     m.add_class::<PyGoogleArg>()?;
     m.add_class::<PyGoogleReturns>()?;
+    m.add_class::<PyGoogleYields>()?;
     m.add_class::<PyGoogleException>()?;
     m.add_class::<PyNumPyDocstring>()?;
     m.add_class::<PyNumPySection>()?;
     m.add_class::<PyNumPyParameter>()?;
     m.add_class::<PyNumPyReturns>()?;
+    m.add_class::<PyNumPyYields>()?;
     m.add_class::<PyNumPyException>()?;
     m.add_class::<PyPlainDocstring>()?;
     m.add_class::<PyModelDocstring>()?;

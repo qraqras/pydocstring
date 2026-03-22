@@ -86,6 +86,8 @@ pub enum SyntaxKind {
     GOOGLE_ARG,
     /// A single return value entry.
     GOOGLE_RETURNS,
+    /// A single yield value entry.
+    GOOGLE_YIELDS,
     /// A single exception entry.
     GOOGLE_EXCEPTION,
     /// A single warning entry.
@@ -116,6 +118,8 @@ pub enum SyntaxKind {
     NUMPY_PARAMETER,
     /// A single return value entry.
     NUMPY_RETURNS,
+    /// A single yield value entry.
+    NUMPY_YIELDS,
     /// A single exception entry.
     NUMPY_EXCEPTION,
     /// A single warning entry.
@@ -141,6 +145,7 @@ impl SyntaxKind {
                 | Self::GOOGLE_SECTION_HEADER
                 | Self::GOOGLE_ARG
                 | Self::GOOGLE_RETURNS
+                | Self::GOOGLE_YIELDS
                 | Self::GOOGLE_EXCEPTION
                 | Self::GOOGLE_WARNING
                 | Self::GOOGLE_SEE_ALSO_ITEM
@@ -152,6 +157,7 @@ impl SyntaxKind {
                 | Self::NUMPY_DEPRECATION
                 | Self::NUMPY_PARAMETER
                 | Self::NUMPY_RETURNS
+                | Self::NUMPY_YIELDS
                 | Self::NUMPY_EXCEPTION
                 | Self::NUMPY_WARNING
                 | Self::NUMPY_SEE_ALSO_ITEM
@@ -201,6 +207,7 @@ impl SyntaxKind {
             Self::GOOGLE_SECTION_HEADER => "GOOGLE_SECTION_HEADER",
             Self::GOOGLE_ARG => "GOOGLE_ARG",
             Self::GOOGLE_RETURNS => "GOOGLE_RETURNS",
+            Self::GOOGLE_YIELDS => "GOOGLE_YIELDS",
             Self::GOOGLE_EXCEPTION => "GOOGLE_EXCEPTION",
             Self::GOOGLE_WARNING => "GOOGLE_WARNING",
             Self::GOOGLE_SEE_ALSO_ITEM => "GOOGLE_SEE_ALSO_ITEM",
@@ -215,6 +222,7 @@ impl SyntaxKind {
             Self::NUMPY_DEPRECATION => "NUMPY_DEPRECATION",
             Self::NUMPY_PARAMETER => "NUMPY_PARAMETER",
             Self::NUMPY_RETURNS => "NUMPY_RETURNS",
+            Self::NUMPY_YIELDS => "NUMPY_YIELDS",
             Self::NUMPY_EXCEPTION => "NUMPY_EXCEPTION",
             Self::NUMPY_WARNING => "NUMPY_WARNING",
             Self::NUMPY_SEE_ALSO_ITEM => "NUMPY_SEE_ALSO_ITEM",

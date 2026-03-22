@@ -94,6 +94,11 @@ impl<'a> GoogleSection<'a> {
             .and_then(GoogleReturns::cast)
     }
 
+    /// Yields entry node in this section, if present.
+    pub fn yields(&self) -> Option<GoogleYields<'a>> {
+        self.0.find_node(SyntaxKind::GOOGLE_YIELDS).and_then(GoogleYields::cast)
+    }
+
     /// Iterate over exception entry nodes.
     pub fn exceptions(&self) -> impl Iterator<Item = GoogleException<'a>> {
         self.0
@@ -200,6 +205,29 @@ define_node!(GoogleReturns, GOOGLE_RETURNS);
 
 impl<'a> GoogleReturns<'a> {
     /// Return type annotation token, if present.
+    pub fn return_type(&self) -> Option<&'a SyntaxToken> {
+        self.0.find_token(SyntaxKind::RETURN_TYPE)
+    }
+
+    /// Colon separator token, if present.
+    pub fn colon(&self) -> Option<&'a SyntaxToken> {
+        self.0.find_token(SyntaxKind::COLON)
+    }
+
+    /// Description text token, if present.
+    pub fn description(&self) -> Option<&'a SyntaxToken> {
+        self.0.find_token(SyntaxKind::DESCRIPTION)
+    }
+}
+
+// =============================================================================
+// GoogleYields
+// =============================================================================
+
+define_node!(GoogleYields, GOOGLE_YIELDS);
+
+impl<'a> GoogleYields<'a> {
+    /// Yield type annotation token, if present.
     pub fn return_type(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::RETURN_TYPE)
     }

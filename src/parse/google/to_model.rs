@@ -45,7 +45,7 @@ fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
         GoogleSectionKind::OtherParameters => {
             Section::OtherParameters(section.args().map(|a| convert_arg(&a, source)).collect())
         }
-        GoogleSectionKind::Returns | GoogleSectionKind::Yields => {
+        GoogleSectionKind::Returns => {
             let entries: Vec<Return> = section
                 .returns()
                 .into_iter()
@@ -55,11 +55,19 @@ fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
                     description: r.description().map(|t| t.text(source).to_owned()),
                 })
                 .collect();
-            match kind {
-                GoogleSectionKind::Returns => Section::Returns(entries),
-                GoogleSectionKind::Yields => Section::Yields(entries),
-                _ => unreachable!(),
-            }
+            Section::Returns(entries)
+        }
+        GoogleSectionKind::Yields => {
+            let entries: Vec<Return> = section
+                .yields()
+                .into_iter()
+                .map(|r| Return {
+                    name: None,
+                    type_annotation: r.return_type().map(|t| t.text(source).to_owned()),
+                    description: r.description().map(|t| t.text(source).to_owned()),
+                })
+                .collect();
+            Section::Yields(entries)
         }
         GoogleSectionKind::Raises => {
             Section::Raises(section.exceptions().map(|e| convert_exception(&e, source)).collect())

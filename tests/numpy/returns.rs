@@ -132,6 +132,6 @@ fn test_yields_section_body_variant() {
     let result = parse_numpy(docstring);
     let s = &all_sections(&result)[0];
     assert_eq!(s.section_kind(result.source()), NumPySectionKind::Yields);
-    let items: Vec<_> = s.returns().collect();
+    let items: Vec<_> = s.yields().collect();
     assert_eq!(items.len(), 1);
 }
