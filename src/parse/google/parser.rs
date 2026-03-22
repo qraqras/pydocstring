@@ -629,7 +629,7 @@ impl SectionBody {
             GoogleSectionKind::Attributes => Self::Args(SyntaxKind::GOOGLE_ATTRIBUTE, Vec::new()),
             GoogleSectionKind::Methods => Self::Args(SyntaxKind::GOOGLE_METHOD, Vec::new()),
             GoogleSectionKind::Returns => Self::Returns(SyntaxKind::GOOGLE_RETURNS, ReturnsState::new()),
-            GoogleSectionKind::Yields => Self::Returns(SyntaxKind::GOOGLE_RETURNS, ReturnsState::new()),
+            GoogleSectionKind::Yields => Self::Returns(SyntaxKind::GOOGLE_YIELDS, ReturnsState::new()),
             GoogleSectionKind::Raises => Self::Raises(Vec::new()),
             GoogleSectionKind::Warns => Self::Warns(Vec::new()),
             GoogleSectionKind::SeeAlso => Self::SeeAlso(Vec::new()),

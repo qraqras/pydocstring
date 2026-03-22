@@ -48,7 +48,7 @@ fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
         NumPySectionKind::OtherParameters => {
             Section::OtherParameters(section.parameters().map(|p| convert_parameter(&p, source)).collect())
         }
-        NumPySectionKind::Returns | NumPySectionKind::Yields => {
+        NumPySectionKind::Returns => {
             let entries: Vec<Return> = section
                 .returns()
                 .map(|r| Return {
@@ -57,11 +57,18 @@ fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
                     description: r.description().map(|t| t.text(source).to_owned()),
                 })
                 .collect();
-            match kind {
-                NumPySectionKind::Returns => Section::Returns(entries),
-                NumPySectionKind::Yields => Section::Yields(entries),
-                _ => unreachable!(),
-            }
+            Section::Returns(entries)
+        }
+        NumPySectionKind::Yields => {
+            let entries: Vec<Return> = section
+                .yields()
+                .map(|r| Return {
+                    name: r.name().map(|t| t.text(source).to_owned()),
+                    type_annotation: r.return_type().map(|t| t.text(source).to_owned()),
+                    description: r.description().map(|t| t.text(source).to_owned()),
+                })
+                .collect();
+            Section::Yields(entries)
         }
         NumPySectionKind::Raises => Section::Raises(
             section

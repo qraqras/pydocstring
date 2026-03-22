@@ -24,7 +24,7 @@ Python bindings are also available as [`pydocstring-rs`](https://pypi.org/projec
 
 ```toml
 [dependencies]
-pydocstring = "0.1.4"
+pydocstring = "0.1.5"
 ```
 
 ## Usage
@@ -226,7 +226,8 @@ Both styles support the following section categories. Typed accessor methods are
 | Category                          | Google                                   | NumPy                                   |
 |-----------------------------------|------------------------------------------|-----------------------------------------|
 | Parameters                        | `args()` → `GoogleArg`                   | `parameters()` → `NumPyParameter`       |
-| Returns / Yields                  | `returns()` → `GoogleReturns`            | `returns()` → `NumPyReturns`            |
+| Returns                           | `returns()` → `GoogleReturns`            | `returns()` → `NumPyReturns`            |
+| Yields                            | `yields()` → `GoogleYields`              | `yields()` → `NumPyYields`              |
 | Raises                            | `exceptions()` → `GoogleException`       | `exceptions()` → `NumPyException`       |
 | Warns                             | `warnings()` → `GoogleWarning`           | `warnings()` → `NumPyWarning`           |
 | See Also                          | `see_also_items()` → `GoogleSeeAlsoItem` | `see_also_items()` → `NumPySeeAlsoItem` |

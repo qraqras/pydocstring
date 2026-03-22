@@ -10,6 +10,6 @@ pub mod to_model;
 pub use kind::NumPySectionKind;
 pub use nodes::{
     NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod, NumPyParameter, NumPyReference,
-    NumPyReturns, NumPySection, NumPySectionHeader, NumPySeeAlsoItem, NumPyWarning,
+    NumPyReturns, NumPySection, NumPySectionHeader, NumPySeeAlsoItem, NumPyWarning, NumPyYields,
 };
 pub use parser::parse_numpy;

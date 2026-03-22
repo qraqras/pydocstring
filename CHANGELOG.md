@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-03-22
+
+### Added
+
+- `SyntaxKind::GOOGLE_YIELDS` — dedicated node kind for entries inside a Google
+  `Yields:` section. Previously these were emitted as `GOOGLE_RETURNS`.
+- `SyntaxKind::NUMPY_YIELDS` — dedicated node kind for entries inside a NumPy
+  `Yields` section. Previously these were emitted as `NUMPY_RETURNS`.
+- `GoogleYields` typed wrapper with `return_type()`, `colon()`, and
+  `description()` accessors (analogous to `GoogleReturns`).
+- `NumPyYields` typed wrapper with `name()`, `colon()`, `return_type()`, and
+  `description()` accessors (analogous to `NumPyReturns`).
+- `GoogleSection::yields()` — accessor returning the `GoogleYields` node for
+  a Yields section, distinct from `returns()`.
+- `NumPySection::yields()` — accessor returning an iterator of `NumPyYields`
+  nodes for a Yields section, distinct from `returns()`.
+- Python bindings: `SyntaxKind.GOOGLE_YIELDS`, `SyntaxKind.NUMPY_YIELDS`,
+  `GoogleYields` class, `NumPyYields` class, `GoogleSection.yields` property,
+  and `NumPySection.yields` property.
+
+### Changed
+
+- Google parser: `Yields:` sections now produce `GOOGLE_YIELDS` child nodes
+  instead of `GOOGLE_RETURNS`.
+- NumPy parser: `Yields` sections now produce `NUMPY_YIELDS` child nodes
+  instead of `NUMPY_RETURNS`.
+- `to_model` (Google & NumPy): `Yields` sections now use the `yields()`
+  accessor on the typed section wrapper rather than sharing the `returns()`
+  code path.
+
 ## [0.1.4] - 2026-03-20
 
 ### Added

@@ -2,7 +2,7 @@
 
 pub use pydocstring::parse::google::{
     GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturns, GoogleSection,
-    GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning, parse_google,
+    GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning, GoogleYields, parse_google,
 };
 pub use pydocstring::syntax::{Parsed, SyntaxKind, SyntaxToken};
 pub use pydocstring::text::TextSize;
@@ -44,11 +44,11 @@ pub fn returns<'a>(result: &'a Parsed) -> Option<GoogleReturns<'a>> {
         .find_map(|s| s.returns())
 }
 
-pub fn yields<'a>(result: &'a Parsed) -> Option<GoogleReturns<'a>> {
+pub fn yields<'a>(result: &'a Parsed) -> Option<GoogleYields<'a>> {
     doc(result)
         .sections()
         .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Yields))
-        .find_map(|s| s.returns())
+        .find_map(|s| s.yields())
 }
 
 pub fn raises<'a>(result: &'a Parsed) -> Vec<GoogleException<'a>> {
