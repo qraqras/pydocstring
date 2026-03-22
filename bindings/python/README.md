@@ -301,15 +301,17 @@ print(numpy_text)  # Contains "Parameters\n----------"
 |-------------------|------------------------------------------------------------------------------------------------------------------|
 | `Style`           | `GOOGLE`, `NUMPY`, `PLAIN` (enum)                                                                                |
 | `GoogleDocstring` | `style`, `summary`, `extended_summary`, `sections`, `node`, `source`, `pretty_print()`, `to_model()`             |
-| `GoogleSection`   | `kind`, `args`, `returns`, `exceptions`, `body_text`, `node`                                                     |
+| `GoogleSection`   | `kind`, `args`, `returns`, `yields`, `exceptions`, `body_text`, `node`                                           |
 | `GoogleArg`       | `name`, `type`, `description`, `optional`                                                                        |
 | `GoogleReturns`   | `return_type`, `description`                                                                                     |
+| `GoogleYields`    | `return_type`, `description`                                                                                     |
 | `GoogleException` | `type`, `description`                                                                                            |
 | `PlainDocstring`  | `style`, `summary`, `extended_summary`, `node`, `source`, `pretty_print()`, `to_model()`                         |
 | `NumPyDocstring`  | `style`, `summary`, `extended_summary`, `sections`, `node`, `source`, `pretty_print()`, `to_model()`             |
-| `NumPySection`    | `kind`, `parameters`, `returns`, `exceptions`, `body_text`, `node`                                               |
+| `NumPySection`    | `kind`, `parameters`, `returns`, `yields`, `exceptions`, `body_text`, `node`                                     |
 | `NumPyParameter`  | `names`, `type`, `description`, `optional`, `default_value`                                                      |
 | `NumPyReturns`    | `name`, `return_type`, `description`                                                                             |
+| `NumPyYields`     | `name`, `return_type`, `description`                                                                             |
 | `NumPyException`  | `type`, `description`                                                                                            |
 | `Token`           | `kind`, `text`, `range`                                                                                          |
 | `Node`            | `kind`, `range`, `children`                                                                                      |
