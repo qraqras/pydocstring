@@ -2,7 +2,9 @@ use pyo3::prelude::*;
 
 use pydocstring_core::model;
 use pydocstring_core::parse::google;
+use pydocstring_core::parse::google::kind::GoogleSectionKind;
 use pydocstring_core::parse::google::nodes as gn;
+use pydocstring_core::parse::numpy::kind::NumPySectionKind;
 use pydocstring_core::parse::numpy::nodes as nn;
 use pydocstring_core::syntax::{Parsed, SyntaxKind, SyntaxNode, SyntaxToken};
 use pydocstring_core::text::TextRange;
@@ -279,17 +281,13 @@ impl PySyntaxKind {
 
 #[pyclass(name = "Token", frozen)]
 struct PyToken {
-    kind: PySyntaxKind,
     text: String,
     range: Py<PyTextRange>,
+    kind: PySyntaxKind,
 }
 
 #[pymethods]
 impl PyToken {
-    #[getter]
-    fn kind(&self) -> PySyntaxKind {
-        self.kind
-    }
     #[getter]
     fn text(&self) -> &str {
         &self.text
@@ -297,6 +295,10 @@ impl PyToken {
     #[getter]
     fn range(&self, py: Python<'_>) -> Py<PyTextRange> {
         self.range.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self) -> PySyntaxKind {
+        self.kind
     }
     fn __repr__(&self) -> String {
         format!("Token(SyntaxKind.{}, {:?})", self.kind.to_core().name(), self.text)
@@ -370,10 +372,35 @@ fn to_py_node(py: Python<'_>, node: &SyntaxNode, source: &str) -> PyResult<Py<Py
     )
 }
 
+// ─── Walker ─────────────────────────────────────────────────────────────────
+
+#[pyclass(name = "DocstringWalker")]
+struct PyDocstringWalker {
+    items: Vec<PyObject>,
+    index: usize,
+}
+
+#[pymethods]
+impl PyDocstringWalker {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<PyObject> {
+        if slf.index < slf.items.len() {
+            let item = slf.items[slf.index].clone_ref(slf.py());
+            slf.index += 1;
+            Some(item)
+        } else {
+            None
+        }
+    }
+}
+
 // ─── Google typed wrappers ──────────────────────────────────────────────────
 
 #[pyclass(name = "GoogleArg", frozen)]
 struct PyGoogleArg {
+    node: Py<PyNode>,
     name: Py<PyToken>,
     r#type: Option<Py<PyToken>>,
     description: Option<Py<PyToken>>,
@@ -398,13 +425,48 @@ impl PyGoogleArg {
     fn optional(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.optional.as_ref().map(|t| t.clone_ref(py))
     }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("GoogleArg({})", self.name.borrow(py).text)
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyGoogleArg>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::GOOGLE_ARG {
+            return Ok(None);
+        }
+        let name = match token_child(py, &node_ref, PySyntaxKind::NAME) {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+        let r#type = token_child(py, &node_ref, PySyntaxKind::TYPE);
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        let optional = token_child(py, &node_ref, PySyntaxKind::OPTIONAL);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyGoogleArg {
+                node,
+                name,
+                r#type,
+                description,
+                optional,
+            },
+        )
+        .map(Some)
     }
 }
 
 #[pyclass(name = "GoogleReturns", frozen)]
 struct PyGoogleReturns {
+    node: Py<PyNode>,
     return_type: Option<Py<PyToken>>,
     description: Option<Py<PyToken>>,
 }
@@ -419,10 +481,38 @@ impl PyGoogleReturns {
     fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyGoogleReturns>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::GOOGLE_RETURNS {
+            return Ok(None);
+        }
+        let return_type = token_child(py, &node_ref, PySyntaxKind::RETURN_TYPE);
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyGoogleReturns {
+                node,
+                return_type,
+                description,
+            },
+        )
+        .map(Some)
+    }
 }
 
 #[pyclass(name = "GoogleYields", frozen)]
 struct PyGoogleYields {
+    node: Py<PyNode>,
     return_type: Option<Py<PyToken>>,
     description: Option<Py<PyToken>>,
 }
@@ -437,10 +527,38 @@ impl PyGoogleYields {
     fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyGoogleYields>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::GOOGLE_YIELDS {
+            return Ok(None);
+        }
+        let return_type = token_child(py, &node_ref, PySyntaxKind::RETURN_TYPE);
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyGoogleYields {
+                node,
+                return_type,
+                description,
+            },
+        )
+        .map(Some)
+    }
 }
 
 #[pyclass(name = "GoogleException", frozen)]
 struct PyGoogleException {
+    node: Py<PyNode>,
     r#type: Py<PyToken>,
     description: Option<Py<PyToken>>,
 }
@@ -455,60 +573,437 @@ impl PyGoogleException {
     fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyGoogleException>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::GOOGLE_EXCEPTION {
+            return Ok(None);
+        }
+        let r#type = match token_child(py, &node_ref, PySyntaxKind::TYPE) {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyGoogleException {
+                node,
+                r#type,
+                description,
+            },
+        )
+        .map(Some)
+    }
 }
 
-#[pyclass(name = "GoogleSection", frozen)]
-struct PyGoogleSection {
-    kind: String,
-    args: Vec<Py<PyGoogleArg>>,
-    returns: Option<Py<PyGoogleReturns>>,
-    yields: Option<Py<PyGoogleYields>>,
-    exceptions: Vec<Py<PyGoogleException>>,
-    body_text: Option<Py<PyToken>>,
+#[pyclass(name = "GoogleWarning", frozen)]
+struct PyGoogleWarning {
     node: Py<PyNode>,
+    warning_type: Py<PyToken>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
-impl PyGoogleSection {
+impl PyGoogleWarning {
     #[getter]
-    fn kind(&self) -> &str {
-        &self.kind
+    fn warning_type(&self, py: Python<'_>) -> Py<PyToken> {
+        self.warning_type.clone_ref(py)
     }
     #[getter]
-    fn args(&self, py: Python<'_>) -> Vec<Py<PyGoogleArg>> {
-        self.args.iter().map(|a| a.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn returns(&self, py: Python<'_>) -> Option<Py<PyGoogleReturns>> {
-        self.returns.as_ref().map(|r| r.clone_ref(py))
-    }
-    #[getter]
-    fn yields(&self, py: Python<'_>) -> Option<Py<PyGoogleYields>> {
-        self.yields.as_ref().map(|r| r.clone_ref(py))
-    }
-    #[getter]
-    fn exceptions(&self, py: Python<'_>) -> Vec<Py<PyGoogleException>> {
-        self.exceptions.iter().map(|e| e.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn body_text(&self, py: Python<'_>) -> Option<Py<PyToken>> {
-        self.body_text.as_ref().map(|t| t.clone_ref(py))
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.description.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
     fn node(&self, py: Python<'_>) -> Py<PyNode> {
         self.node.clone_ref(py)
     }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyGoogleWarning>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::GOOGLE_WARNING {
+            return Ok(None);
+        }
+        let warning_type = match token_child(py, &node_ref, PySyntaxKind::WARNING_TYPE) {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyGoogleWarning {
+                node,
+                warning_type,
+                description,
+            },
+        )
+        .map(Some)
+    }
+}
+
+#[pyclass(name = "GoogleSeeAlsoItem", frozen)]
+struct PyGoogleSeeAlsoItem {
+    node: Py<PyNode>,
+    names: Vec<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
+}
+
+#[pymethods]
+impl PyGoogleSeeAlsoItem {
+    #[getter]
+    fn names(&self, py: Python<'_>) -> Vec<Py<PyToken>> {
+        self.names.iter().map(|n| n.clone_ref(py)).collect()
+    }
+    #[getter]
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.description.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyGoogleSeeAlsoItem>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::GOOGLE_SEE_ALSO_ITEM {
+            return Ok(None);
+        }
+        let names = token_children(py, &node_ref, PySyntaxKind::NAME);
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyGoogleSeeAlsoItem {
+                node,
+                names,
+                description,
+            },
+        )
+        .map(Some)
+    }
+}
+
+#[pyclass(name = "GoogleAttribute", frozen)]
+struct PyGoogleAttribute {
+    node: Py<PyNode>,
+    name: Py<PyToken>,
+    r#type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
+}
+
+#[pymethods]
+impl PyGoogleAttribute {
+    #[getter]
+    fn name(&self, py: Python<'_>) -> Py<PyToken> {
+        self.name.clone_ref(py)
+    }
+    #[getter]
+    fn r#type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.r#type.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.description.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    fn __repr__(&self, py: Python<'_>) -> String {
+        format!("GoogleAttribute({})", self.name.borrow(py).text)
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyGoogleAttribute>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::GOOGLE_ATTRIBUTE {
+            return Ok(None);
+        }
+        let name = match token_child(py, &node_ref, PySyntaxKind::NAME) {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+        let r#type = token_child(py, &node_ref, PySyntaxKind::TYPE);
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyGoogleAttribute {
+                node,
+                name,
+                r#type,
+                description,
+            },
+        )
+        .map(Some)
+    }
+}
+
+#[pyclass(name = "GoogleMethod", frozen)]
+struct PyGoogleMethod {
+    node: Py<PyNode>,
+    name: Py<PyToken>,
+    r#type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
+}
+
+#[pymethods]
+impl PyGoogleMethod {
+    #[getter]
+    fn name(&self, py: Python<'_>) -> Py<PyToken> {
+        self.name.clone_ref(py)
+    }
+    #[getter]
+    fn r#type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.r#type.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.description.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    fn __repr__(&self, py: Python<'_>) -> String {
+        format!("GoogleMethod({})", self.name.borrow(py).text)
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyGoogleMethod>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::GOOGLE_METHOD {
+            return Ok(None);
+        }
+        let name = match token_child(py, &node_ref, PySyntaxKind::NAME) {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+        let r#type = token_child(py, &node_ref, PySyntaxKind::TYPE);
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyGoogleMethod {
+                node,
+                name,
+                r#type,
+                description,
+            },
+        )
+        .map(Some)
+    }
+}
+
+// ─── Google section kind enum ──────────────────────────────────────────────
+
+#[pyclass(eq, eq_int, frozen, hash, name = "GoogleSectionKind")]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum PyGoogleSectionKind {
+    #[pyo3(name = "ARGS")]
+    Args,
+    #[pyo3(name = "KEYWORD_ARGS")]
+    KeywordArgs,
+    #[pyo3(name = "OTHER_PARAMETERS")]
+    OtherParameters,
+    #[pyo3(name = "RECEIVES")]
+    Receives,
+    #[pyo3(name = "RETURNS")]
+    Returns,
+    #[pyo3(name = "YIELDS")]
+    Yields,
+    #[pyo3(name = "RAISES")]
+    Raises,
+    #[pyo3(name = "WARNS")]
+    Warns,
+    #[pyo3(name = "ATTRIBUTES")]
+    Attributes,
+    #[pyo3(name = "METHODS")]
+    Methods,
+    #[pyo3(name = "SEE_ALSO")]
+    SeeAlso,
+    #[pyo3(name = "NOTES")]
+    Notes,
+    #[pyo3(name = "EXAMPLES")]
+    Examples,
+    #[pyo3(name = "TODO")]
+    Todo,
+    #[pyo3(name = "REFERENCES")]
+    References,
+    #[pyo3(name = "WARNINGS")]
+    Warnings,
+    #[pyo3(name = "ATTENTION")]
+    Attention,
+    #[pyo3(name = "CAUTION")]
+    Caution,
+    #[pyo3(name = "DANGER")]
+    Danger,
+    #[pyo3(name = "ERROR")]
+    Error,
+    #[pyo3(name = "HINT")]
+    Hint,
+    #[pyo3(name = "IMPORTANT")]
+    Important,
+    #[pyo3(name = "TIP")]
+    Tip,
+    #[pyo3(name = "UNKNOWN")]
+    Unknown,
+}
+
+#[pymethods]
+impl PyGoogleSectionKind {
     fn __repr__(&self) -> String {
-        format!("GoogleSection({})", self.kind)
+        format!(
+            "GoogleSectionKind.{}",
+            match self {
+                Self::Args => "ARGS",
+                Self::KeywordArgs => "KEYWORD_ARGS",
+                Self::OtherParameters => "OTHER_PARAMETERS",
+                Self::Receives => "RECEIVES",
+                Self::Returns => "RETURNS",
+                Self::Yields => "YIELDS",
+                Self::Raises => "RAISES",
+                Self::Warns => "WARNS",
+                Self::Attributes => "ATTRIBUTES",
+                Self::Methods => "METHODS",
+                Self::SeeAlso => "SEE_ALSO",
+                Self::Notes => "NOTES",
+                Self::Examples => "EXAMPLES",
+                Self::Todo => "TODO",
+                Self::References => "REFERENCES",
+                Self::Warnings => "WARNINGS",
+                Self::Attention => "ATTENTION",
+                Self::Caution => "CAUTION",
+                Self::Danger => "DANGER",
+                Self::Error => "ERROR",
+                Self::Hint => "HINT",
+                Self::Important => "IMPORTANT",
+                Self::Tip => "TIP",
+                Self::Unknown => "UNKNOWN",
+            }
+        )
+    }
+}
+
+fn google_section_kind_to_py(kind: GoogleSectionKind) -> PyGoogleSectionKind {
+    match kind {
+        GoogleSectionKind::Args => PyGoogleSectionKind::Args,
+        GoogleSectionKind::KeywordArgs => PyGoogleSectionKind::KeywordArgs,
+        GoogleSectionKind::OtherParameters => PyGoogleSectionKind::OtherParameters,
+        GoogleSectionKind::Receives => PyGoogleSectionKind::Receives,
+        GoogleSectionKind::Returns => PyGoogleSectionKind::Returns,
+        GoogleSectionKind::Yields => PyGoogleSectionKind::Yields,
+        GoogleSectionKind::Raises => PyGoogleSectionKind::Raises,
+        GoogleSectionKind::Warns => PyGoogleSectionKind::Warns,
+        GoogleSectionKind::Attributes => PyGoogleSectionKind::Attributes,
+        GoogleSectionKind::Methods => PyGoogleSectionKind::Methods,
+        GoogleSectionKind::SeeAlso => PyGoogleSectionKind::SeeAlso,
+        GoogleSectionKind::Notes => PyGoogleSectionKind::Notes,
+        GoogleSectionKind::Examples => PyGoogleSectionKind::Examples,
+        GoogleSectionKind::Todo => PyGoogleSectionKind::Todo,
+        GoogleSectionKind::References => PyGoogleSectionKind::References,
+        GoogleSectionKind::Warnings => PyGoogleSectionKind::Warnings,
+        GoogleSectionKind::Attention => PyGoogleSectionKind::Attention,
+        GoogleSectionKind::Caution => PyGoogleSectionKind::Caution,
+        GoogleSectionKind::Danger => PyGoogleSectionKind::Danger,
+        GoogleSectionKind::Error => PyGoogleSectionKind::Error,
+        GoogleSectionKind::Hint => PyGoogleSectionKind::Hint,
+        GoogleSectionKind::Important => PyGoogleSectionKind::Important,
+        GoogleSectionKind::Tip => PyGoogleSectionKind::Tip,
+        GoogleSectionKind::Unknown => PyGoogleSectionKind::Unknown,
+    }
+}
+
+// ─── Google typed sections ──────────────────────────────────────────────────
+
+#[pyclass(name = "GoogleSection", frozen)]
+struct PyGoogleSection {
+    node: Py<PyNode>,
+    section_kind: PyGoogleSectionKind,
+    header_name: Option<Py<PyToken>>,
+}
+
+#[pymethods]
+impl PyGoogleSection {
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[getter]
+    fn section_kind(&self) -> PyGoogleSectionKind {
+        self.section_kind
+    }
+    #[getter]
+    fn header_name(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.header_name.as_ref().map(|t| t.clone_ref(py))
+    }
+    fn args(&self, py: Python<'_>) -> PyResult<Vec<Py<PyGoogleArg>>> {
+        collect_google_args(py, &*self.node.borrow(py))
+    }
+    fn returns(&self, py: Python<'_>) -> PyResult<Vec<Py<PyGoogleReturns>>> {
+        collect_google_returns_entries(py, &*self.node.borrow(py))
+    }
+    fn yields(&self, py: Python<'_>) -> PyResult<Vec<Py<PyGoogleYields>>> {
+        collect_google_yields_entries(py, &*self.node.borrow(py))
+    }
+    fn exceptions(&self, py: Python<'_>) -> PyResult<Vec<Py<PyGoogleException>>> {
+        collect_google_exceptions(py, &*self.node.borrow(py))
+    }
+    fn warnings(&self, py: Python<'_>) -> PyResult<Vec<Py<PyGoogleWarning>>> {
+        collect_google_warnings(py, &*self.node.borrow(py))
+    }
+    fn see_also_items(&self, py: Python<'_>) -> PyResult<Vec<Py<PyGoogleSeeAlsoItem>>> {
+        collect_google_see_also_items(py, &*self.node.borrow(py))
+    }
+    fn attributes(&self, py: Python<'_>) -> PyResult<Vec<Py<PyGoogleAttribute>>> {
+        collect_google_attributes(py, &*self.node.borrow(py))
+    }
+    fn methods(&self, py: Python<'_>) -> PyResult<Vec<Py<PyGoogleMethod>>> {
+        collect_google_methods(py, &*self.node.borrow(py))
+    }
+    fn body_text(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        token_child(py, &*self.node.borrow(py), PySyntaxKind::BODY_TEXT)
+    }
+    fn __repr__(&self, py: Python<'_>) -> String {
+        match &self.header_name {
+            Some(t) => format!("GoogleSection({})", t.borrow(py).text),
+            None => "GoogleSection(?)".to_string(),
+        }
     }
 }
 
 #[pyclass(name = "GoogleDocstring", frozen)]
 struct PyGoogleDocstring {
+    node: Py<PyNode>,
     summary: Option<Py<PyToken>>,
     extended_summary: Option<Py<PyToken>>,
-    sections: Vec<Py<PyGoogleSection>>,
-    node: Py<PyNode>,
     source: String,
 }
 
@@ -523,16 +1018,36 @@ impl PyGoogleDocstring {
         self.extended_summary.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn sections(&self, py: Python<'_>) -> Vec<Py<PyGoogleSection>> {
-        self.sections.iter().map(|s| s.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn node(&self, py: Python<'_>) -> Py<PyNode> {
-        self.node.clone_ref(py)
-    }
-    #[getter]
     fn source(&self) -> &str {
         &self.source
+    }
+    fn sections(&self, py: Python<'_>) -> PyResult<Vec<Py<PyGoogleSection>>> {
+        let section_nodes = node_children(py, &*self.node.borrow(py), PySyntaxKind::GOOGLE_SECTION);
+        let mut result = Vec::with_capacity(section_nodes.len());
+        for section_py in section_nodes {
+            let section_kind = {
+                let section_ref = section_py.borrow(py);
+                get_google_section_kind(py, &*section_ref)
+                    .map(google_section_kind_to_py)
+                    .unwrap_or(PyGoogleSectionKind::Unknown)
+            };
+            let header_name = {
+                let section_ref = section_py.borrow(py);
+                node_child(py, &*section_ref, PySyntaxKind::GOOGLE_SECTION_HEADER).and_then(|header_py| {
+                    let header_ref = header_py.borrow(py);
+                    token_child(py, &*header_ref, PySyntaxKind::NAME)
+                })
+            };
+            result.push(Py::new(
+                py,
+                PyGoogleSection {
+                    node: section_py,
+                    section_kind,
+                    header_name,
+                },
+            )?);
+        }
+        Ok(result)
     }
     fn pretty_print(&self) -> String {
         let parsed = google::parse_google(&self.source);
@@ -545,10 +1060,6 @@ impl PyGoogleDocstring {
         Ok(PyModelDocstring { inner: doc })
     }
     /// Convert a byte offset to a `LineColumn` with codepoint-based `col`.
-    ///
-    /// The offset is typically obtained from `Token.range.start` or
-    /// `Token.range.end`.  `lineno` is 1-based; `col` is 0-based and counted
-    /// in Unicode codepoints, matching Python's `ast` module convention.
     fn line_col(&self, py: Python<'_>, offset: u32) -> PyResult<Py<PyLineColumn>> {
         let lc = byte_offset_to_line_col(&self.source, offset as usize)?;
         Py::new(py, lc)
@@ -556,6 +1067,19 @@ impl PyGoogleDocstring {
     #[getter]
     fn style(&self) -> PyStyle {
         PyStyle::Google
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    fn walk(&self, py: Python<'_>) -> PyResult<Py<PyDocstringWalker>> {
+        let mut items: Vec<PyObject> = Vec::new();
+        collect_walk_items(py, self.node.clone_ref(py).into_any(), &mut items);
+        Py::new(py, PyDocstringWalker { items, index: 0 })
     }
     fn __repr__(&self) -> String {
         "GoogleDocstring(...)".to_string()
@@ -566,6 +1090,7 @@ impl PyGoogleDocstring {
 
 #[pyclass(name = "NumPyParameter", frozen)]
 struct PyNumPyParameter {
+    node: Py<PyNode>,
     names: Vec<Py<PyToken>>,
     r#type: Option<Py<PyToken>>,
     description: Option<Py<PyToken>>,
@@ -595,14 +1120,51 @@ impl PyNumPyParameter {
     fn default_value(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.default_value.as_ref().map(|t| t.clone_ref(py))
     }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
     fn __repr__(&self, py: Python<'_>) -> String {
         let name_texts: Vec<String> = self.names.iter().map(|n| n.borrow(py).text.clone()).collect();
         format!("NumPyParameter({})", name_texts.join(", "))
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyNumPyParameter>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::NUMPY_PARAMETER {
+            return Ok(None);
+        }
+        let names = token_children(py, &node_ref, PySyntaxKind::NAME);
+        if names.is_empty() {
+            return Ok(None);
+        }
+        let r#type = token_child(py, &node_ref, PySyntaxKind::TYPE);
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        let optional = token_child(py, &node_ref, PySyntaxKind::OPTIONAL);
+        let default_value = token_child(py, &node_ref, PySyntaxKind::DEFAULT_VALUE);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyNumPyParameter {
+                node,
+                names,
+                r#type,
+                description,
+                optional,
+                default_value,
+            },
+        )
+        .map(Some)
     }
 }
 
 #[pyclass(name = "NumPyReturns", frozen)]
 struct PyNumPyReturns {
+    node: Py<PyNode>,
     name: Option<Py<PyToken>>,
     return_type: Option<Py<PyToken>>,
     description: Option<Py<PyToken>>,
@@ -622,10 +1184,40 @@ impl PyNumPyReturns {
     fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyNumPyReturns>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::NUMPY_RETURNS {
+            return Ok(None);
+        }
+        let name = token_child(py, &node_ref, PySyntaxKind::NAME);
+        let return_type = token_child(py, &node_ref, PySyntaxKind::RETURN_TYPE);
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyNumPyReturns {
+                node,
+                name,
+                return_type,
+                description,
+            },
+        )
+        .map(Some)
+    }
 }
 
 #[pyclass(name = "NumPyYields", frozen)]
 struct PyNumPyYields {
+    node: Py<PyNode>,
     name: Option<Py<PyToken>>,
     return_type: Option<Py<PyToken>>,
     description: Option<Py<PyToken>>,
@@ -645,10 +1237,40 @@ impl PyNumPyYields {
     fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyNumPyYields>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::NUMPY_YIELDS {
+            return Ok(None);
+        }
+        let name = token_child(py, &node_ref, PySyntaxKind::NAME);
+        let return_type = token_child(py, &node_ref, PySyntaxKind::RETURN_TYPE);
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyNumPyYields {
+                node,
+                name,
+                return_type,
+                description,
+            },
+        )
+        .map(Some)
+    }
 }
 
 #[pyclass(name = "NumPyException", frozen)]
 struct PyNumPyException {
+    node: Py<PyNode>,
     r#type: Py<PyToken>,
     description: Option<Py<PyToken>>,
 }
@@ -663,60 +1285,484 @@ impl PyNumPyException {
     fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyNumPyException>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::NUMPY_EXCEPTION {
+            return Ok(None);
+        }
+        let r#type = match token_child(py, &node_ref, PySyntaxKind::TYPE) {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyNumPyException {
+                node,
+                r#type,
+                description,
+            },
+        )
+        .map(Some)
+    }
 }
 
-#[pyclass(name = "NumPySection", frozen)]
-struct PyNumPySection {
-    kind: String,
-    parameters: Vec<Py<PyNumPyParameter>>,
-    returns: Vec<Py<PyNumPyReturns>>,
-    yields: Vec<Py<PyNumPyYields>>,
-    exceptions: Vec<Py<PyNumPyException>>,
-    body_text: Option<Py<PyToken>>,
+#[pyclass(name = "NumPyDeprecation", frozen)]
+struct PyNumPyDeprecation {
     node: Py<PyNode>,
+    version: Py<PyToken>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
-impl PyNumPySection {
+impl PyNumPyDeprecation {
     #[getter]
-    fn kind(&self) -> &str {
-        &self.kind
+    fn version(&self, py: Python<'_>) -> Py<PyToken> {
+        self.version.clone_ref(py)
     }
     #[getter]
-    fn parameters(&self, py: Python<'_>) -> Vec<Py<PyNumPyParameter>> {
-        self.parameters.iter().map(|p| p.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn returns(&self, py: Python<'_>) -> Vec<Py<PyNumPyReturns>> {
-        self.returns.iter().map(|r| r.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn yields(&self, py: Python<'_>) -> Vec<Py<PyNumPyYields>> {
-        self.yields.iter().map(|r| r.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn exceptions(&self, py: Python<'_>) -> Vec<Py<PyNumPyException>> {
-        self.exceptions.iter().map(|e| e.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn body_text(&self, py: Python<'_>) -> Option<Py<PyToken>> {
-        self.body_text.as_ref().map(|t| t.clone_ref(py))
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.description.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
     fn node(&self, py: Python<'_>) -> Py<PyNode> {
         self.node.clone_ref(py)
     }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyNumPyDeprecation>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::NUMPY_DEPRECATION {
+            return Ok(None);
+        }
+        let version = match token_child(py, &node_ref, PySyntaxKind::VERSION) {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyNumPyDeprecation {
+                node,
+                version,
+                description,
+            },
+        )
+        .map(Some)
+    }
+}
+
+#[pyclass(name = "NumPyWarning", frozen)]
+struct PyNumPyWarning {
+    node: Py<PyNode>,
+    r#type: Py<PyToken>,
+    description: Option<Py<PyToken>>,
+}
+
+#[pymethods]
+impl PyNumPyWarning {
+    #[getter]
+    fn r#type(&self, py: Python<'_>) -> Py<PyToken> {
+        self.r#type.clone_ref(py)
+    }
+    #[getter]
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.description.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyNumPyWarning>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::NUMPY_WARNING {
+            return Ok(None);
+        }
+        let r#type = match token_child(py, &node_ref, PySyntaxKind::TYPE) {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyNumPyWarning {
+                node,
+                r#type,
+                description,
+            },
+        )
+        .map(Some)
+    }
+}
+
+#[pyclass(name = "NumPySeeAlsoItem", frozen)]
+struct PyNumPySeeAlsoItem {
+    node: Py<PyNode>,
+    names: Vec<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
+}
+
+#[pymethods]
+impl PyNumPySeeAlsoItem {
+    #[getter]
+    fn names(&self, py: Python<'_>) -> Vec<Py<PyToken>> {
+        self.names.iter().map(|n| n.clone_ref(py)).collect()
+    }
+    #[getter]
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.description.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyNumPySeeAlsoItem>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::NUMPY_SEE_ALSO_ITEM {
+            return Ok(None);
+        }
+        let names = token_children(py, &node_ref, PySyntaxKind::NAME);
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyNumPySeeAlsoItem {
+                node,
+                names,
+                description,
+            },
+        )
+        .map(Some)
+    }
+}
+
+#[pyclass(name = "NumPyReference", frozen)]
+struct PyNumPyReference {
+    node: Py<PyNode>,
+    number: Option<Py<PyToken>>,
+    content: Option<Py<PyToken>>,
+}
+
+#[pymethods]
+impl PyNumPyReference {
+    #[getter]
+    fn number(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.number.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn content(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.content.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyNumPyReference>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::NUMPY_REFERENCE {
+            return Ok(None);
+        }
+        let number = token_child(py, &node_ref, PySyntaxKind::NUMBER);
+        let content = token_child(py, &node_ref, PySyntaxKind::CONTENT);
+        drop(node_ref);
+        Py::new(py, PyNumPyReference { node, number, content }).map(Some)
+    }
+}
+
+#[pyclass(name = "NumPyAttribute", frozen)]
+struct PyNumPyAttribute {
+    node: Py<PyNode>,
+    name: Py<PyToken>,
+    r#type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
+}
+
+#[pymethods]
+impl PyNumPyAttribute {
+    #[getter]
+    fn name(&self, py: Python<'_>) -> Py<PyToken> {
+        self.name.clone_ref(py)
+    }
+    #[getter]
+    fn r#type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.r#type.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.description.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    fn __repr__(&self, py: Python<'_>) -> String {
+        format!("NumPyAttribute({})", self.name.borrow(py).text)
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyNumPyAttribute>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::NUMPY_ATTRIBUTE {
+            return Ok(None);
+        }
+        let name = match token_child(py, &node_ref, PySyntaxKind::NAME) {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+        let r#type = token_child(py, &node_ref, PySyntaxKind::TYPE);
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyNumPyAttribute {
+                node,
+                name,
+                r#type,
+                description,
+            },
+        )
+        .map(Some)
+    }
+}
+
+#[pyclass(name = "NumPyMethod", frozen)]
+struct PyNumPyMethod {
+    node: Py<PyNode>,
+    name: Py<PyToken>,
+    description: Option<Py<PyToken>>,
+}
+
+#[pymethods]
+impl PyNumPyMethod {
+    #[getter]
+    fn name(&self, py: Python<'_>) -> Py<PyToken> {
+        self.name.clone_ref(py)
+    }
+    #[getter]
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.description.as_ref().map(|t| t.clone_ref(py))
+    }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    fn __repr__(&self, py: Python<'_>) -> String {
+        format!("NumPyMethod({})", self.name.borrow(py).text)
+    }
+    #[staticmethod]
+    fn cast(py: Python<'_>, node: Py<PyNode>) -> PyResult<Option<Py<PyNumPyMethod>>> {
+        let node_ref = node.borrow(py);
+        if node_ref.kind != PySyntaxKind::NUMPY_METHOD {
+            return Ok(None);
+        }
+        let name = match token_child(py, &node_ref, PySyntaxKind::NAME) {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+        let description = token_child(py, &node_ref, PySyntaxKind::DESCRIPTION);
+        drop(node_ref);
+        Py::new(
+            py,
+            PyNumPyMethod {
+                node,
+                name,
+                description,
+            },
+        )
+        .map(Some)
+    }
+}
+
+// ─── NumPy section kind enum ───────────────────────────────────────────────
+
+#[pyclass(eq, eq_int, frozen, hash, name = "NumPySectionKind")]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum PyNumPySectionKind {
+    #[pyo3(name = "PARAMETERS")]
+    Parameters,
+    #[pyo3(name = "RETURNS")]
+    Returns,
+    #[pyo3(name = "YIELDS")]
+    Yields,
+    #[pyo3(name = "RECEIVES")]
+    Receives,
+    #[pyo3(name = "OTHER_PARAMETERS")]
+    OtherParameters,
+    #[pyo3(name = "RAISES")]
+    Raises,
+    #[pyo3(name = "WARNS")]
+    Warns,
+    #[pyo3(name = "WARNINGS")]
+    Warnings,
+    #[pyo3(name = "SEE_ALSO")]
+    SeeAlso,
+    #[pyo3(name = "NOTES")]
+    Notes,
+    #[pyo3(name = "REFERENCES")]
+    References,
+    #[pyo3(name = "EXAMPLES")]
+    Examples,
+    #[pyo3(name = "ATTRIBUTES")]
+    Attributes,
+    #[pyo3(name = "METHODS")]
+    Methods,
+    #[pyo3(name = "UNKNOWN")]
+    Unknown,
+}
+
+#[pymethods]
+impl PyNumPySectionKind {
     fn __repr__(&self) -> String {
-        format!("NumPySection({})", self.kind)
+        format!(
+            "NumPySectionKind.{}",
+            match self {
+                Self::Parameters => "PARAMETERS",
+                Self::Returns => "RETURNS",
+                Self::Yields => "YIELDS",
+                Self::Receives => "RECEIVES",
+                Self::OtherParameters => "OTHER_PARAMETERS",
+                Self::Raises => "RAISES",
+                Self::Warns => "WARNS",
+                Self::Warnings => "WARNINGS",
+                Self::SeeAlso => "SEE_ALSO",
+                Self::Notes => "NOTES",
+                Self::References => "REFERENCES",
+                Self::Examples => "EXAMPLES",
+                Self::Attributes => "ATTRIBUTES",
+                Self::Methods => "METHODS",
+                Self::Unknown => "UNKNOWN",
+            }
+        )
+    }
+}
+
+fn numpy_section_kind_to_py(kind: NumPySectionKind) -> PyNumPySectionKind {
+    match kind {
+        NumPySectionKind::Parameters => PyNumPySectionKind::Parameters,
+        NumPySectionKind::Returns => PyNumPySectionKind::Returns,
+        NumPySectionKind::Yields => PyNumPySectionKind::Yields,
+        NumPySectionKind::Receives => PyNumPySectionKind::Receives,
+        NumPySectionKind::OtherParameters => PyNumPySectionKind::OtherParameters,
+        NumPySectionKind::Raises => PyNumPySectionKind::Raises,
+        NumPySectionKind::Warns => PyNumPySectionKind::Warns,
+        NumPySectionKind::Warnings => PyNumPySectionKind::Warnings,
+        NumPySectionKind::SeeAlso => PyNumPySectionKind::SeeAlso,
+        NumPySectionKind::Notes => PyNumPySectionKind::Notes,
+        NumPySectionKind::References => PyNumPySectionKind::References,
+        NumPySectionKind::Examples => PyNumPySectionKind::Examples,
+        NumPySectionKind::Attributes => PyNumPySectionKind::Attributes,
+        NumPySectionKind::Methods => PyNumPySectionKind::Methods,
+        NumPySectionKind::Unknown => PyNumPySectionKind::Unknown,
+    }
+}
+
+// ─── NumPy typed sections ───────────────────────────────────────────────────
+
+#[pyclass(name = "NumPySection", frozen)]
+struct PyNumPySection {
+    node: Py<PyNode>,
+    section_kind: PyNumPySectionKind,
+    header_name: Option<Py<PyToken>>,
+}
+
+#[pymethods]
+impl PyNumPySection {
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    #[getter]
+    fn section_kind(&self) -> PyNumPySectionKind {
+        self.section_kind
+    }
+    #[getter]
+    fn header_name(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        self.header_name.as_ref().map(|t| t.clone_ref(py))
+    }
+    fn parameters(&self, py: Python<'_>) -> PyResult<Vec<Py<PyNumPyParameter>>> {
+        collect_numpy_parameters(py, &*self.node.borrow(py))
+    }
+    fn returns(&self, py: Python<'_>) -> PyResult<Vec<Py<PyNumPyReturns>>> {
+        collect_numpy_returns_entries(py, &*self.node.borrow(py))
+    }
+    fn yields(&self, py: Python<'_>) -> PyResult<Vec<Py<PyNumPyYields>>> {
+        collect_numpy_yields_entries(py, &*self.node.borrow(py))
+    }
+    fn exceptions(&self, py: Python<'_>) -> PyResult<Vec<Py<PyNumPyException>>> {
+        collect_numpy_exceptions(py, &*self.node.borrow(py))
+    }
+    fn warnings(&self, py: Python<'_>) -> PyResult<Vec<Py<PyNumPyWarning>>> {
+        collect_numpy_warnings(py, &*self.node.borrow(py))
+    }
+    fn see_also_items(&self, py: Python<'_>) -> PyResult<Vec<Py<PyNumPySeeAlsoItem>>> {
+        collect_numpy_see_also_items(py, &*self.node.borrow(py))
+    }
+    fn references(&self, py: Python<'_>) -> PyResult<Vec<Py<PyNumPyReference>>> {
+        collect_numpy_references(py, &*self.node.borrow(py))
+    }
+    fn attributes(&self, py: Python<'_>) -> PyResult<Vec<Py<PyNumPyAttribute>>> {
+        collect_numpy_attributes(py, &*self.node.borrow(py))
+    }
+    fn methods(&self, py: Python<'_>) -> PyResult<Vec<Py<PyNumPyMethod>>> {
+        collect_numpy_methods(py, &*self.node.borrow(py))
+    }
+    fn body_text(&self, py: Python<'_>) -> Option<Py<PyToken>> {
+        token_child(py, &*self.node.borrow(py), PySyntaxKind::BODY_TEXT)
+    }
+    fn __repr__(&self, py: Python<'_>) -> String {
+        match &self.header_name {
+            Some(t) => format!("NumPySection({})", t.borrow(py).text),
+            None => "NumPySection(?)".to_string(),
+        }
     }
 }
 
 #[pyclass(name = "NumPyDocstring", frozen)]
 struct PyNumPyDocstring {
+    node: Py<PyNode>,
     summary: Option<Py<PyToken>>,
     extended_summary: Option<Py<PyToken>>,
-    sections: Vec<Py<PyNumPySection>>,
-    node: Py<PyNode>,
     source: String,
 }
 
@@ -731,16 +1777,60 @@ impl PyNumPyDocstring {
         self.extended_summary.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn sections(&self, py: Python<'_>) -> Vec<Py<PyNumPySection>> {
-        self.sections.iter().map(|s| s.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn node(&self, py: Python<'_>) -> Py<PyNode> {
-        self.node.clone_ref(py)
-    }
-    #[getter]
     fn source(&self) -> &str {
         &self.source
+    }
+    fn sections(&self, py: Python<'_>) -> PyResult<Vec<Py<PyNumPySection>>> {
+        let section_nodes = node_children(py, &*self.node.borrow(py), PySyntaxKind::NUMPY_SECTION);
+        let mut result = Vec::with_capacity(section_nodes.len());
+        for section_py in section_nodes {
+            let section_kind = {
+                let section_ref = section_py.borrow(py);
+                get_numpy_section_kind(py, &*section_ref)
+                    .map(numpy_section_kind_to_py)
+                    .unwrap_or(PyNumPySectionKind::Unknown)
+            };
+            let header_name = {
+                let section_ref = section_py.borrow(py);
+                node_child(py, &*section_ref, PySyntaxKind::NUMPY_SECTION_HEADER).and_then(|header_py| {
+                    let header_ref = header_py.borrow(py);
+                    token_child(py, &*header_ref, PySyntaxKind::NAME)
+                })
+            };
+            result.push(Py::new(
+                py,
+                PyNumPySection {
+                    node: section_py,
+                    section_kind,
+                    header_name,
+                },
+            )?);
+        }
+        Ok(result)
+    }
+    fn deprecation(&self, py: Python<'_>) -> PyResult<Option<Py<PyNumPyDeprecation>>> {
+        let node_ref = self.node.borrow(py);
+        match node_child(py, &*node_ref, PySyntaxKind::NUMPY_DEPRECATION) {
+            None => Ok(None),
+            Some(dep_py) => {
+                let dep_ref = dep_py.borrow(py);
+                let version = match token_child(py, &*dep_ref, PySyntaxKind::VERSION) {
+                    Some(t) => t,
+                    None => return Ok(None),
+                };
+                let description = token_child(py, &*dep_ref, PySyntaxKind::DESCRIPTION);
+                drop(dep_ref);
+                Py::new(
+                    py,
+                    PyNumPyDeprecation {
+                        node: dep_py,
+                        version,
+                        description,
+                    },
+                )
+                .map(Some)
+            }
+        }
     }
     fn pretty_print(&self) -> String {
         let parsed = pydocstring_core::parse::numpy::parse_numpy(&self.source);
@@ -753,10 +1843,6 @@ impl PyNumPyDocstring {
         Ok(PyModelDocstring { inner: doc })
     }
     /// Convert a byte offset to a `LineColumn` with codepoint-based `col`.
-    ///
-    /// The offset is typically obtained from `Token.range.start` or
-    /// `Token.range.end`.  `lineno` is 1-based; `col` is 0-based and counted
-    /// in Unicode codepoints, matching Python's `ast` module convention.
     fn line_col(&self, py: Python<'_>, offset: u32) -> PyResult<Py<PyLineColumn>> {
         let lc = byte_offset_to_line_col(&self.source, offset as usize)?;
         Py::new(py, lc)
@@ -764,6 +1850,19 @@ impl PyNumPyDocstring {
     #[getter]
     fn style(&self) -> PyStyle {
         PyStyle::NumPy
+    }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    fn walk(&self, py: Python<'_>) -> PyResult<Py<PyDocstringWalker>> {
+        let mut items: Vec<PyObject> = Vec::new();
+        collect_walk_items(py, self.node.clone_ref(py).into_any(), &mut items);
+        Py::new(py, PyDocstringWalker { items, index: 0 })
     }
     fn __repr__(&self) -> String {
         "NumPyDocstring(...)".to_string()
@@ -774,9 +1873,9 @@ impl PyNumPyDocstring {
 
 #[pyclass(name = "PlainDocstring", frozen)]
 struct PyPlainDocstring {
+    node: Py<PyNode>,
     summary: Option<Py<PyToken>>,
     extended_summary: Option<Py<PyToken>>,
-    node: Py<PyNode>,
     source: String,
 }
 
@@ -789,10 +1888,6 @@ impl PyPlainDocstring {
     #[getter]
     fn extended_summary(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.extended_summary.as_ref().map(|t| t.clone_ref(py))
-    }
-    #[getter]
-    fn node(&self, py: Python<'_>) -> Py<PyNode> {
-        self.node.clone_ref(py)
     }
     #[getter]
     fn source(&self) -> &str {
@@ -816,9 +1911,520 @@ impl PyPlainDocstring {
     fn style(&self) -> PyStyle {
         PyStyle::Plain
     }
+    #[getter]
+    fn node(&self, py: Python<'_>) -> Py<PyNode> {
+        self.node.clone_ref(py)
+    }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PySyntaxKind {
+        self.node.borrow(py).kind
+    }
+    fn walk(&self, py: Python<'_>) -> PyResult<Py<PyDocstringWalker>> {
+        let mut items: Vec<PyObject> = Vec::new();
+        collect_walk_items(py, self.node.clone_ref(py).into_any(), &mut items);
+        Py::new(py, PyDocstringWalker { items, index: 0 })
+    }
     fn __repr__(&self) -> String {
         "PlainDocstring(...)".to_string()
     }
+}
+
+// ─── Walk / cast helpers ────────────────────────────────────────────────────
+
+/// Walk the `PyNode` tree depth-first, collecting every Node and Token item.
+fn collect_walk_items(py: Python<'_>, obj: PyObject, items: &mut Vec<PyObject>) {
+    // Extract children before consuming obj (bind borrows obj).
+    let children: Option<Vec<PyObject>> = {
+        let bound = obj.bind(py);
+        bound.downcast::<PyNode>().ok().map(|n| {
+            let nr = n.borrow();
+            nr.children.iter().map(|c| c.clone_ref(py)).collect()
+        })
+    }; // bound dropped here — obj borrow released
+    items.push(obj);
+    if let Some(childs) = children {
+        for child in childs {
+            collect_walk_items(py, child, items);
+        }
+    }
+}
+
+/// Find the first direct token child of `node` with the given kind.
+fn token_child(py: Python<'_>, node: &PyNode, kind: PySyntaxKind) -> Option<Py<PyToken>> {
+    for child in &node.children {
+        let bound = child.bind(py);
+        if let Ok(tok) = bound.downcast::<PyToken>() {
+            let tok_kind = tok.borrow().kind;
+            if tok_kind == kind {
+                return Some(tok.as_unbound().clone_ref(py));
+            }
+        }
+    }
+    None
+}
+
+/// Collect all direct token children of `node` with the given kind.
+fn token_children(py: Python<'_>, node: &PyNode, kind: PySyntaxKind) -> Vec<Py<PyToken>> {
+    node.children
+        .iter()
+        .filter_map(|child| {
+            let bound = child.bind(py);
+            if let Ok(tok) = bound.downcast::<PyToken>() {
+                let tok_kind = tok.borrow().kind;
+                if tok_kind == kind {
+                    return Some(tok.as_unbound().clone_ref(py));
+                }
+            }
+            None
+        })
+        .collect()
+}
+
+/// Find the first direct node child of `node` with the given kind.
+fn node_child(py: Python<'_>, node: &PyNode, kind: PySyntaxKind) -> Option<Py<PyNode>> {
+    for child in &node.children {
+        let bound = child.bind(py);
+        if let Ok(n) = bound.downcast::<PyNode>() {
+            let n_kind = n.borrow().kind;
+            if n_kind == kind {
+                return Some(n.as_unbound().clone_ref(py));
+            }
+        }
+    }
+    None
+}
+
+/// Collect all direct node children of `node` with the given kind.
+fn node_children(py: Python<'_>, node: &PyNode, kind: PySyntaxKind) -> Vec<Py<PyNode>> {
+    node.children
+        .iter()
+        .filter_map(|child| {
+            let bound = child.bind(py);
+            if let Ok(n) = bound.downcast::<PyNode>() {
+                let n_kind = n.borrow().kind;
+                if n_kind == kind {
+                    return Some(n.as_unbound().clone_ref(py));
+                }
+            }
+            None
+        })
+        .collect()
+}
+
+/// Extract the `GoogleSectionKind` from a `GOOGLE_SECTION` `PyNode`.
+fn get_google_section_kind(py: Python<'_>, section_node: &PyNode) -> Option<GoogleSectionKind> {
+    let header_py = node_child(py, section_node, PySyntaxKind::GOOGLE_SECTION_HEADER)?;
+    let header_ref = header_py.borrow(py);
+    let name_tok = token_child(py, &*header_ref, PySyntaxKind::NAME)?;
+    let kind = {
+        let name_ref = name_tok.borrow(py);
+        GoogleSectionKind::from_name(&name_ref.text.to_lowercase())
+    };
+    Some(kind)
+}
+
+/// Extract the `NumPySectionKind` from a `NUMPY_SECTION` `PyNode`.
+fn get_numpy_section_kind(py: Python<'_>, section_node: &PyNode) -> Option<NumPySectionKind> {
+    let header_py = node_child(py, section_node, PySyntaxKind::NUMPY_SECTION_HEADER)?;
+    let header_ref = header_py.borrow(py);
+    let name_tok = token_child(py, &*header_ref, PySyntaxKind::NAME)?;
+    let kind = {
+        let name_ref = name_tok.borrow(py);
+        NumPySectionKind::from_name(&name_ref.text.to_lowercase())
+    };
+    Some(kind)
+}
+
+// ─── Entry collectors ────────────────────────────────────────────────────────
+
+fn collect_google_args(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyGoogleArg>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::GOOGLE_ARG);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let name = match token_child(py, &*child_ref, PySyntaxKind::NAME) {
+            Some(t) => t,
+            None => continue,
+        };
+        let r#type = token_child(py, &*child_ref, PySyntaxKind::TYPE);
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        let optional = token_child(py, &*child_ref, PySyntaxKind::OPTIONAL);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyGoogleArg {
+                node: child_py,
+                name,
+                r#type,
+                description,
+                optional,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_google_returns_entries(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyGoogleReturns>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::GOOGLE_RETURNS);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let return_type = token_child(py, &*child_ref, PySyntaxKind::RETURN_TYPE);
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyGoogleReturns {
+                node: child_py,
+                return_type,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_google_yields_entries(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyGoogleYields>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::GOOGLE_YIELDS);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let return_type = token_child(py, &*child_ref, PySyntaxKind::RETURN_TYPE);
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyGoogleYields {
+                node: child_py,
+                return_type,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_google_exceptions(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyGoogleException>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::GOOGLE_EXCEPTION);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let r#type = match token_child(py, &*child_ref, PySyntaxKind::TYPE) {
+            Some(t) => t,
+            None => continue,
+        };
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyGoogleException {
+                node: child_py,
+                r#type,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_google_warnings(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyGoogleWarning>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::GOOGLE_WARNING);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let warning_type = match token_child(py, &*child_ref, PySyntaxKind::WARNING_TYPE) {
+            Some(t) => t,
+            None => continue,
+        };
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyGoogleWarning {
+                node: child_py,
+                warning_type,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_google_see_also_items(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyGoogleSeeAlsoItem>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::GOOGLE_SEE_ALSO_ITEM);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let names = token_children(py, &*child_ref, PySyntaxKind::NAME);
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyGoogleSeeAlsoItem {
+                node: child_py,
+                names,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_google_attributes(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyGoogleAttribute>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::GOOGLE_ATTRIBUTE);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let name = match token_child(py, &*child_ref, PySyntaxKind::NAME) {
+            Some(t) => t,
+            None => continue,
+        };
+        let r#type = token_child(py, &*child_ref, PySyntaxKind::TYPE);
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyGoogleAttribute {
+                node: child_py,
+                name,
+                r#type,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_google_methods(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyGoogleMethod>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::GOOGLE_METHOD);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let name = match token_child(py, &*child_ref, PySyntaxKind::NAME) {
+            Some(t) => t,
+            None => continue,
+        };
+        let r#type = token_child(py, &*child_ref, PySyntaxKind::TYPE);
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyGoogleMethod {
+                node: child_py,
+                name,
+                r#type,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_numpy_parameters(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyNumPyParameter>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::NUMPY_PARAMETER);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let names = token_children(py, &*child_ref, PySyntaxKind::NAME);
+        if names.is_empty() {
+            continue;
+        }
+        let r#type = token_child(py, &*child_ref, PySyntaxKind::TYPE);
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        let optional = token_child(py, &*child_ref, PySyntaxKind::OPTIONAL);
+        let default_value = token_child(py, &*child_ref, PySyntaxKind::DEFAULT_VALUE);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyNumPyParameter {
+                node: child_py,
+                names,
+                r#type,
+                description,
+                optional,
+                default_value,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_numpy_returns_entries(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyNumPyReturns>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::NUMPY_RETURNS);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let name = token_child(py, &*child_ref, PySyntaxKind::NAME);
+        let return_type = token_child(py, &*child_ref, PySyntaxKind::RETURN_TYPE);
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyNumPyReturns {
+                node: child_py,
+                name,
+                return_type,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_numpy_yields_entries(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyNumPyYields>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::NUMPY_YIELDS);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let name = token_child(py, &*child_ref, PySyntaxKind::NAME);
+        let return_type = token_child(py, &*child_ref, PySyntaxKind::RETURN_TYPE);
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyNumPyYields {
+                node: child_py,
+                name,
+                return_type,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_numpy_exceptions(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyNumPyException>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::NUMPY_EXCEPTION);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let r#type = match token_child(py, &*child_ref, PySyntaxKind::TYPE) {
+            Some(t) => t,
+            None => continue,
+        };
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyNumPyException {
+                node: child_py,
+                r#type,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_numpy_warnings(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyNumPyWarning>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::NUMPY_WARNING);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let r#type = match token_child(py, &*child_ref, PySyntaxKind::TYPE) {
+            Some(t) => t,
+            None => continue,
+        };
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyNumPyWarning {
+                node: child_py,
+                r#type,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_numpy_see_also_items(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyNumPySeeAlsoItem>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::NUMPY_SEE_ALSO_ITEM);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let names = token_children(py, &*child_ref, PySyntaxKind::NAME);
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyNumPySeeAlsoItem {
+                node: child_py,
+                names,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_numpy_references(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyNumPyReference>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::NUMPY_REFERENCE);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let number = token_child(py, &*child_ref, PySyntaxKind::NUMBER);
+        let content = token_child(py, &*child_ref, PySyntaxKind::CONTENT);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyNumPyReference {
+                node: child_py,
+                number,
+                content,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_numpy_attributes(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyNumPyAttribute>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::NUMPY_ATTRIBUTE);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let name = match token_child(py, &*child_ref, PySyntaxKind::NAME) {
+            Some(t) => t,
+            None => continue,
+        };
+        let r#type = token_child(py, &*child_ref, PySyntaxKind::TYPE);
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyNumPyAttribute {
+                node: child_py,
+                name,
+                r#type,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
+}
+
+fn collect_numpy_methods(py: Python<'_>, section: &PyNode) -> PyResult<Vec<Py<PyNumPyMethod>>> {
+    let child_nodes = node_children(py, section, PySyntaxKind::NUMPY_METHOD);
+    let mut result = Vec::with_capacity(child_nodes.len());
+    for child_py in child_nodes {
+        let child_ref = child_py.borrow(py);
+        let name = match token_child(py, &*child_ref, PySyntaxKind::NAME) {
+            Some(t) => t,
+            None => continue,
+        };
+        let description = token_child(py, &*child_ref, PySyntaxKind::DESCRIPTION);
+        drop(child_ref);
+        result.push(Py::new(
+            py,
+            PyNumPyMethod {
+                node: child_py,
+                name,
+                description,
+            },
+        )?);
+    }
+    Ok(result)
 }
 
 // ─── Conversion helpers ─────────────────────────────────────────────────────
@@ -827,89 +2433,14 @@ fn build_google_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyGoog
     let source = parsed.source();
     let doc = gn::GoogleDocstring::cast(parsed.root())
         .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("root node is not a GOOGLE_DOCSTRING"))?;
-
     let summary = to_py_token_opt(py, doc.summary(), source)?;
     let extended_summary = to_py_token_opt(py, doc.extended_summary(), source)?;
-
-    let sections: Vec<Py<PyGoogleSection>> = doc
-        .sections()
-        .map(|sec| {
-            let kind = format!("{}", sec.section_kind(source));
-            let args: Vec<Py<PyGoogleArg>> = sec
-                .args()
-                .map(|a| {
-                    Py::new(
-                        py,
-                        PyGoogleArg {
-                            name: to_py_token(py, a.name(), source)?,
-                            r#type: to_py_token_opt(py, a.r#type(), source)?,
-                            description: to_py_token_opt(py, a.description(), source)?,
-                            optional: to_py_token_opt(py, a.optional(), source)?,
-                        },
-                    )
-                })
-                .collect::<PyResult<Vec<_>>>()?;
-            let returns = sec
-                .returns()
-                .map(|r| {
-                    Py::new(
-                        py,
-                        PyGoogleReturns {
-                            return_type: to_py_token_opt(py, r.return_type(), source)?,
-                            description: to_py_token_opt(py, r.description(), source)?,
-                        },
-                    )
-                })
-                .transpose()?;
-            let yields = sec
-                .yields()
-                .map(|r| {
-                    Py::new(
-                        py,
-                        PyGoogleYields {
-                            return_type: to_py_token_opt(py, r.return_type(), source)?,
-                            description: to_py_token_opt(py, r.description(), source)?,
-                        },
-                    )
-                })
-                .transpose()?;
-            let exceptions: Vec<Py<PyGoogleException>> = sec
-                .exceptions()
-                .map(|e| {
-                    Py::new(
-                        py,
-                        PyGoogleException {
-                            r#type: to_py_token(py, e.r#type(), source)?,
-                            description: to_py_token_opt(py, e.description(), source)?,
-                        },
-                    )
-                })
-                .collect::<PyResult<Vec<_>>>()?;
-            let body_text = to_py_token_opt(py, sec.body_text(), source)?;
-            let node = to_py_node(py, sec.syntax(), source)?;
-            Py::new(
-                py,
-                PyGoogleSection {
-                    kind,
-                    args,
-                    returns,
-                    yields,
-                    exceptions,
-                    body_text,
-                    node,
-                },
-            )
-        })
-        .collect::<PyResult<Vec<_>>>()?;
-
     let node = to_py_node(py, parsed.root(), source)?;
-
     Py::new(
         py,
         PyGoogleDocstring {
             summary,
             extended_summary,
-            sections,
             node,
             source: source.to_string(),
         },
@@ -920,96 +2451,14 @@ fn build_numpy_docstring(py: Python<'_>, parsed: &Parsed) -> PyResult<Py<PyNumPy
     let source = parsed.source();
     let doc = nn::NumPyDocstring::cast(parsed.root())
         .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("root node is not a NUMPY_DOCSTRING"))?;
-
     let summary = to_py_token_opt(py, doc.summary(), source)?;
     let extended_summary = to_py_token_opt(py, doc.extended_summary(), source)?;
-
-    let sections: Vec<Py<PyNumPySection>> = doc
-        .sections()
-        .map(|sec| {
-            let kind = format!("{}", sec.section_kind(source));
-            let parameters: Vec<Py<PyNumPyParameter>> = sec
-                .parameters()
-                .map(|p| {
-                    let names: Vec<Py<PyToken>> = p
-                        .names()
-                        .map(|n| to_py_token(py, n, source))
-                        .collect::<PyResult<Vec<_>>>()?;
-                    Py::new(
-                        py,
-                        PyNumPyParameter {
-                            names,
-                            r#type: to_py_token_opt(py, p.r#type(), source)?,
-                            description: to_py_token_opt(py, p.description(), source)?,
-                            optional: to_py_token_opt(py, p.optional(), source)?,
-                            default_value: to_py_token_opt(py, p.default_value(), source)?,
-                        },
-                    )
-                })
-                .collect::<PyResult<Vec<_>>>()?;
-            let returns: Vec<Py<PyNumPyReturns>> = sec
-                .returns()
-                .map(|r| {
-                    Py::new(
-                        py,
-                        PyNumPyReturns {
-                            name: to_py_token_opt(py, r.name(), source)?,
-                            return_type: to_py_token_opt(py, r.return_type(), source)?,
-                            description: to_py_token_opt(py, r.description(), source)?,
-                        },
-                    )
-                })
-                .collect::<PyResult<Vec<_>>>()?;
-            let yields: Vec<Py<PyNumPyYields>> = sec
-                .yields()
-                .map(|r| {
-                    Py::new(
-                        py,
-                        PyNumPyYields {
-                            name: to_py_token_opt(py, r.name(), source)?,
-                            return_type: to_py_token_opt(py, r.return_type(), source)?,
-                            description: to_py_token_opt(py, r.description(), source)?,
-                        },
-                    )
-                })
-                .collect::<PyResult<Vec<_>>>()?;
-            let exceptions: Vec<Py<PyNumPyException>> = sec
-                .exceptions()
-                .map(|e| {
-                    Py::new(
-                        py,
-                        PyNumPyException {
-                            r#type: to_py_token(py, e.r#type(), source)?,
-                            description: to_py_token_opt(py, e.description(), source)?,
-                        },
-                    )
-                })
-                .collect::<PyResult<Vec<_>>>()?;
-            let body_text = to_py_token_opt(py, sec.body_text(), source)?;
-            let node = to_py_node(py, sec.syntax(), source)?;
-            Py::new(
-                py,
-                PyNumPySection {
-                    kind,
-                    parameters,
-                    returns,
-                    yields,
-                    exceptions,
-                    body_text,
-                    node,
-                },
-            )
-        })
-        .collect::<PyResult<Vec<_>>>()?;
-
     let node = to_py_node(py, parsed.root(), source)?;
-
     Py::new(
         py,
         PyNumPyDocstring {
             summary,
             extended_summary,
-            sections,
             node,
             source: source.to_string(),
         },
@@ -1820,22 +3269,35 @@ fn pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_emit_numpy, m)?)?;
     m.add_class::<PyStyle>()?;
     m.add_class::<PySyntaxKind>()?;
+    m.add_class::<PyGoogleSectionKind>()?;
+    m.add_class::<PyNumPySectionKind>()?;
     m.add_class::<PyTextRange>()?;
     m.add_class::<PyLineColumn>()?;
     m.add_class::<PyToken>()?;
     m.add_class::<PyNode>()?;
+    m.add_class::<PyDocstringWalker>()?;
     m.add_class::<PyGoogleDocstring>()?;
     m.add_class::<PyGoogleSection>()?;
     m.add_class::<PyGoogleArg>()?;
     m.add_class::<PyGoogleReturns>()?;
     m.add_class::<PyGoogleYields>()?;
     m.add_class::<PyGoogleException>()?;
+    m.add_class::<PyGoogleWarning>()?;
+    m.add_class::<PyGoogleSeeAlsoItem>()?;
+    m.add_class::<PyGoogleAttribute>()?;
+    m.add_class::<PyGoogleMethod>()?;
     m.add_class::<PyNumPyDocstring>()?;
     m.add_class::<PyNumPySection>()?;
     m.add_class::<PyNumPyParameter>()?;
     m.add_class::<PyNumPyReturns>()?;
     m.add_class::<PyNumPyYields>()?;
     m.add_class::<PyNumPyException>()?;
+    m.add_class::<PyNumPyDeprecation>()?;
+    m.add_class::<PyNumPyWarning>()?;
+    m.add_class::<PyNumPySeeAlsoItem>()?;
+    m.add_class::<PyNumPyReference>()?;
+    m.add_class::<PyNumPyAttribute>()?;
+    m.add_class::<PyNumPyMethod>()?;
     m.add_class::<PyPlainDocstring>()?;
     m.add_class::<PyModelDocstring>()?;
     m.add_class::<PyModelSection>()?;

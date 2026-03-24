@@ -37,10 +37,10 @@ class TestParseGoogle:
         doc = pydocstring.parse_google(
             "Summary.\n\nArgs:\n    x (int): The value.\n    y (str): Another."
         )
-        sections = doc.sections
+        sections = doc.sections()
         assert len(sections) == 1
-        assert sections[0].kind == "Args"
-        args = sections[0].args
+        assert sections[0].section_kind == pydocstring.GoogleSectionKind.ARGS
+        args = sections[0].args()
         assert len(args) == 2
         assert args[0].name.text == "x"
         assert args[0].type.text == "int"
@@ -52,21 +52,23 @@ class TestParseGoogle:
         doc = pydocstring.parse_google(
             "Summary.\n\nReturns:\n    bool: True if successful."
         )
-        section = doc.sections[0]
-        assert section.kind == "Returns"
-        assert section.returns is not None
-        assert section.returns.return_type.text == "bool"
-        assert section.returns.description.text == "True if successful."
+        section = doc.sections()[0]
+        assert section.section_kind == pydocstring.GoogleSectionKind.RETURNS
+        returns = section.returns()
+        assert len(returns) == 1
+        assert returns[0].return_type.text == "bool"
+        assert returns[0].description.text == "True if successful."
 
     def test_raises(self):
         doc = pydocstring.parse_google(
             "Summary.\n\nRaises:\n    ValueError: If x is negative."
         )
-        section = doc.sections[0]
-        assert section.kind == "Raises"
-        assert len(section.exceptions) == 1
-        assert section.exceptions[0].type.text == "ValueError"
-        assert section.exceptions[0].description.text == "If x is negative."
+        section = doc.sections()[0]
+        assert section.section_kind == pydocstring.GoogleSectionKind.RAISES
+        excepts = section.exceptions()
+        assert len(excepts) == 1
+        assert excepts[0].type.text == "ValueError"
+        assert excepts[0].description.text == "If x is negative."
 
     def test_extended_summary(self):
         doc = pydocstring.parse_google("Summary.\n\nExtended description here.")
@@ -75,9 +77,9 @@ class TestParseGoogle:
 
     def test_body_text_section(self):
         doc = pydocstring.parse_google("Summary.\n\nNotes:\n    Some free text.")
-        section = doc.sections[0]
-        assert section.kind == "Notes"
-        assert section.body_text is not None
+        section = doc.sections()[0]
+        assert section.section_kind == pydocstring.GoogleSectionKind.NOTES
+        assert section.body_text() is not None
 
     def test_pretty_print(self):
         doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x: Desc.")
@@ -105,10 +107,10 @@ class TestParseNumPy:
         doc = pydocstring.parse_numpy(
             "Summary.\n\nParameters\n----------\nx : int\n    The first.\ny : str\n    The second."
         )
-        sections = doc.sections
+        sections = doc.sections()
         assert len(sections) == 1
-        assert sections[0].kind == "Parameters"
-        params = sections[0].parameters
+        assert sections[0].section_kind == pydocstring.NumPySectionKind.PARAMETERS
+        params = sections[0].parameters()
         assert len(params) == 2
         assert [n.text for n in params[0].names] == ["x"]
         assert params[0].type.text == "int"
@@ -119,20 +121,22 @@ class TestParseNumPy:
         doc = pydocstring.parse_numpy(
             "Summary.\n\nReturns\n-------\nbool\n    True if successful."
         )
-        section = doc.sections[0]
-        assert section.kind == "Returns"
-        assert len(section.returns) == 1
-        assert section.returns[0].return_type.text == "bool"
-        assert section.returns[0].description.text == "True if successful."
+        section = doc.sections()[0]
+        assert section.section_kind == pydocstring.NumPySectionKind.RETURNS
+        returns = section.returns()
+        assert len(returns) == 1
+        assert returns[0].return_type.text == "bool"
+        assert returns[0].description.text == "True if successful."
 
     def test_raises(self):
         doc = pydocstring.parse_numpy(
             "Summary.\n\nRaises\n------\nValueError\n    If x is negative."
         )
-        section = doc.sections[0]
-        assert section.kind == "Raises"
-        assert len(section.exceptions) == 1
-        assert section.exceptions[0].type.text == "ValueError"
+        section = doc.sections()[0]
+        assert section.section_kind == pydocstring.NumPySectionKind.RAISES
+        excepts = section.exceptions()
+        assert len(excepts) == 1
+        assert excepts[0].type.text == "ValueError"
 
     def test_pretty_print(self):
         doc = pydocstring.parse_numpy(
@@ -613,7 +617,7 @@ class TestLineCol:
     def test_google_arg_name_lineno(self):
         src = "Summary.\n\nArgs:\n    x (int): Value."
         doc = pydocstring.parse_google(src)
-        arg = doc.sections[0].args[0]
+        arg = doc.sections()[0].args()[0]
         lc = doc.line_col(arg.name.range.start)
         assert lc.lineno == 4   # "    x (int): Value." is on line 4
         assert lc.col == 4      # 4 spaces of indentation
@@ -629,7 +633,7 @@ class TestLineCol:
         # byte of "x" in line4 = 5+1+6+4 = 16
         src = "α.\n\nArgs:\n    x: V."
         doc = pydocstring.parse_google(src)
-        arg = doc.sections[0].args[0]
+        arg = doc.sections()[0].args()[0]
         lc = doc.line_col(arg.name.range.start)
         assert lc.lineno == 4
         assert lc.col == 4  # 4 spaces → 4 codepoints (bytes == codepoints here)
@@ -650,7 +654,7 @@ class TestLineCol:
     def test_google_multiline_lineno(self):
         src = "Summary.\n\nExtended.\n\nArgs:\n    x: V."
         doc = pydocstring.parse_google(src)
-        arg = doc.sections[0].args[0]
+        arg = doc.sections()[0].args()[0]
         lc = doc.line_col(arg.name.range.start)
         assert lc.lineno == 6
 
@@ -675,7 +679,7 @@ class TestLineCol:
     def test_numpy_param_name_lineno(self):
         src = "Summary.\n\nParameters\n----------\nx : int\n    Desc."
         doc = pydocstring.parse_numpy(src)
-        param = doc.sections[0].parameters[0]
+        param = doc.sections()[0].parameters()[0]
         lc = doc.line_col(param.names[0].range.start)
         assert lc.lineno == 5   # "x : int" is on line 5
         assert lc.col == 0
