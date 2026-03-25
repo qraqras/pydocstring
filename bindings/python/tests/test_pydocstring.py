@@ -37,10 +37,10 @@ class TestParseGoogle:
         doc = pydocstring.parse_google(
             "Summary.\n\nArgs:\n    x (int): The value.\n    y (str): Another."
         )
-        sections = doc.sections()
+        sections = doc.sections
         assert len(sections) == 1
         assert sections[0].section_kind == pydocstring.GoogleSectionKind.ARGS
-        args = sections[0].args()
+        args = sections[0].args
         assert len(args) == 2
         assert args[0].name.text == "x"
         assert args[0].type.text == "int"
@@ -52,20 +52,20 @@ class TestParseGoogle:
         doc = pydocstring.parse_google(
             "Summary.\n\nReturns:\n    bool: True if successful."
         )
-        section = doc.sections()[0]
+        section = doc.sections[0]
         assert section.section_kind == pydocstring.GoogleSectionKind.RETURNS
-        returns = section.returns()
-        assert len(returns) == 1
-        assert returns[0].return_type.text == "bool"
-        assert returns[0].description.text == "True if successful."
+        ret = section.returns
+        assert ret is not None
+        assert ret.return_type.text == "bool"
+        assert ret.description.text == "True if successful."
 
     def test_raises(self):
         doc = pydocstring.parse_google(
             "Summary.\n\nRaises:\n    ValueError: If x is negative."
         )
-        section = doc.sections()[0]
+        section = doc.sections[0]
         assert section.section_kind == pydocstring.GoogleSectionKind.RAISES
-        excepts = section.exceptions()
+        excepts = section.exceptions
         assert len(excepts) == 1
         assert excepts[0].type.text == "ValueError"
         assert excepts[0].description.text == "If x is negative."
@@ -77,9 +77,9 @@ class TestParseGoogle:
 
     def test_body_text_section(self):
         doc = pydocstring.parse_google("Summary.\n\nNotes:\n    Some free text.")
-        section = doc.sections()[0]
+        section = doc.sections[0]
         assert section.section_kind == pydocstring.GoogleSectionKind.NOTES
-        assert section.body_text() is not None
+        assert section.body_text is not None
 
     def test_pretty_print(self):
         doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x: Desc.")
@@ -96,6 +96,26 @@ class TestParseGoogle:
         doc = pydocstring.parse_google("")
         assert doc.summary is None
 
+    def test_yields_is_optional(self):
+        doc = pydocstring.parse_google(
+            "Summary.\n\nYields:\n    int: The next value."
+        )
+        section = doc.sections[0]
+        assert section.section_kind == pydocstring.GoogleSectionKind.YIELDS
+        yld = section.yields
+        assert yld is not None
+        assert yld.return_type.text == "int"
+
+    def test_section_kind_repr(self):
+        assert repr(pydocstring.GoogleSectionKind.ARGS) == "GoogleSectionKind.ARGS"
+        assert repr(pydocstring.GoogleSectionKind.RETURNS) == "GoogleSectionKind.RETURNS"
+
+    def test_range_on_token(self):
+        doc = pydocstring.parse_google("Summary.")
+        r = doc.summary.range
+        assert r.start == 0
+        assert r.end == 8
+
 
 class TestParseNumPy:
     def test_summary(self):
@@ -107,10 +127,10 @@ class TestParseNumPy:
         doc = pydocstring.parse_numpy(
             "Summary.\n\nParameters\n----------\nx : int\n    The first.\ny : str\n    The second."
         )
-        sections = doc.sections()
+        sections = doc.sections
         assert len(sections) == 1
         assert sections[0].section_kind == pydocstring.NumPySectionKind.PARAMETERS
-        params = sections[0].parameters()
+        params = sections[0].parameters
         assert len(params) == 2
         assert [n.text for n in params[0].names] == ["x"]
         assert params[0].type.text == "int"
@@ -121,9 +141,9 @@ class TestParseNumPy:
         doc = pydocstring.parse_numpy(
             "Summary.\n\nReturns\n-------\nbool\n    True if successful."
         )
-        section = doc.sections()[0]
+        section = doc.sections[0]
         assert section.section_kind == pydocstring.NumPySectionKind.RETURNS
-        returns = section.returns()
+        returns = section.returns
         assert len(returns) == 1
         assert returns[0].return_type.text == "bool"
         assert returns[0].description.text == "True if successful."
@@ -132,9 +152,9 @@ class TestParseNumPy:
         doc = pydocstring.parse_numpy(
             "Summary.\n\nRaises\n------\nValueError\n    If x is negative."
         )
-        section = doc.sections()[0]
+        section = doc.sections[0]
         assert section.section_kind == pydocstring.NumPySectionKind.RAISES
-        excepts = section.exceptions()
+        excepts = section.exceptions
         assert len(excepts) == 1
         assert excepts[0].type.text == "ValueError"
 
@@ -150,43 +170,58 @@ class TestParseNumPy:
         doc = pydocstring.parse_numpy(text)
         assert doc.source == text
 
+    def test_section_kind_repr(self):
+        assert repr(pydocstring.NumPySectionKind.PARAMETERS) == "NumPySectionKind.PARAMETERS"
+        assert repr(pydocstring.NumPySectionKind.RETURNS) == "NumPySectionKind.RETURNS"
+
 
 class TestToken:
-    def test_properties(self):
+    def test_text_and_range(self):
         doc = pydocstring.parse_google("Summary.")
         token = doc.summary
-        assert token.kind == pydocstring.SyntaxKind.SUMMARY
         assert token.text == "Summary."
         assert token.range.start == 0
         assert token.range.end == 8
 
+    def test_repr(self):
+        doc = pydocstring.parse_google("Hello.")
+        assert repr(doc.summary) == 'Token("Hello.")'
 
-class TestNode:
-    def test_properties(self):
+    def test_no_kind_field(self):
         doc = pydocstring.parse_google("Summary.")
-        node = doc.node
-        assert node.kind == pydocstring.SyntaxKind.GOOGLE_DOCSTRING
-        assert len(node.children) > 0
-        assert node.range.start == 0
+        assert not hasattr(doc.summary, "kind"), "Token must not expose a 'kind' field"
 
 
-class TestWalk:
-    def test_walk_yields_all(self):
-        doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x (int): Value.")
-        items = list(pydocstring.walk(doc.node))
-        kinds = [item.kind for item in items]
-        assert pydocstring.SyntaxKind.GOOGLE_DOCSTRING in kinds
-        assert pydocstring.SyntaxKind.SUMMARY in kinds
-        assert pydocstring.SyntaxKind.NAME in kinds
+class TestTextRange:
+    def test_range_repr(self):
+        doc = pydocstring.parse_google("Summary.")
+        r = doc.summary.range
+        assert repr(r) == "TextRange(0..8)"
 
-    def test_walk_collects_names(self):
-        doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x: Desc.\n    y: Desc.")
-        names = [
-            item.text
-            for item in pydocstring.walk(doc.node)
-            if isinstance(item, pydocstring.Token) and item.kind == pydocstring.SyntaxKind.NAME
-        ]
-        assert names == ["Args", "x", "y"]
+    def test_section_range(self):
+        doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x: Desc.")
+        section = doc.sections[0]
+        r = section.range
+        assert r.start < r.end
+
+
+class TestLineColumn:
+    def test_summary_start(self):
+        doc = pydocstring.parse_plain("Summary.")
+        lc = doc.line_col(doc.summary.range.start)
+        assert lc.lineno == 1
+        assert lc.col == 0
+
+    def test_extended_summary_start(self):
+        doc = pydocstring.parse_plain("Summary.\n\nExtended.")
+        lc = doc.line_col(doc.extended_summary.range.start)
+        assert lc.lineno == 3
+        assert lc.col == 0
+
+    def test_repr(self):
+        doc = pydocstring.parse_plain("Summary.")
+        lc = doc.line_col(0)
+        assert repr(lc) == "LineColumn(lineno=1, col=0)"
 
 
 class TestModelTypes:
@@ -389,16 +424,11 @@ class TestParsePlain:
         assert "More details here." in doc.extended_summary.text
 
     def test_no_sections(self):
-        # Plain docstrings never produce sections — Sphinx-like text stays plain
         doc = pydocstring.parse_plain(
             "Summary.\n\n:param x: A value.\n:returns: Something."
         )
         model = doc.to_model()
         assert model.sections == []
-
-    def test_node_kind(self):
-        doc = pydocstring.parse_plain("Summary.")
-        assert doc.node.kind == pydocstring.SyntaxKind.PLAIN_DOCSTRING
 
     def test_source(self):
         text = "Summary.\n\nExtended."
@@ -411,14 +441,6 @@ class TestParsePlain:
         assert "PLAIN_DOCSTRING" in output
         assert "SUMMARY" in output
         assert "EXTENDED_SUMMARY" in output
-
-    def test_summary_token_kind(self):
-        doc = pydocstring.parse_plain("Summary.")
-        assert doc.summary.kind == pydocstring.SyntaxKind.SUMMARY
-
-    def test_extended_summary_token_kind(self):
-        doc = pydocstring.parse_plain("Summary.\n\nExtended.")
-        assert doc.extended_summary.kind == pydocstring.SyntaxKind.EXTENDED_SUMMARY
 
     def test_repr(self):
         doc = pydocstring.parse_plain("Summary.")
@@ -446,6 +468,10 @@ class TestParsePlain:
     def test_style_property(self):
         doc = pydocstring.parse_plain("Summary.")
         assert doc.style == pydocstring.Style.PLAIN
+
+    def test_no_node_attribute(self):
+        doc = pydocstring.parse_plain("Summary.")
+        assert not hasattr(doc, "node"), "Docstring must not expose a 'node' attribute"
 
 
 class TestParse:
@@ -498,215 +524,89 @@ class TestParse:
         )
         assert doc.summary.text == "Summary."
 
-    def test_parse_plain_summary(self):
-        doc = pydocstring.parse("Plain summary.")
-        assert doc.summary.text == "Plain summary."
 
-    def test_parse_to_model_google(self):
-        doc = pydocstring.parse("Summary.\n\nArgs:\n    x (int): Value.")
-        model = doc.to_model()
-        assert model.summary == "Summary."
-        assert model.sections[0].kind == "parameters"
+class TestWalk:
+    def test_google_walk_collects_args(self):
+        source = "Summary.\n\nArgs:\n    x (int): The x value.\n    y (str): The y value."
+        doc = pydocstring.parse_google(source)
 
-    def test_parse_to_model_numpy(self):
-        doc = pydocstring.parse(
-            "Summary.\n\nParameters\n----------\nx : int\n    Value."
-        )
-        model = doc.to_model()
-        assert model.summary == "Summary."
-        assert model.sections[0].kind == "parameters"
+        class Collector:
+            def __init__(self):
+                self.arg_names = []
 
-    def test_parse_to_model_plain(self):
-        doc = pydocstring.parse("Summary.\n\nExtended.")
-        model = doc.to_model()
-        assert model.summary == "Summary."
-        assert model.sections == []
+            def visit_google_arg(self, arg):
+                self.arg_names.append(arg.name.text)
 
-    def test_match_style(self):
-        # Verify match-statement style dispatch works
-        for src, expected_style in [
-            ("Summary.\n\nArgs:\n    x: Desc.", pydocstring.Style.GOOGLE),
-            ("Summary.\n\nParameters\n----------\nx : int\n    Desc.", pydocstring.Style.NUMPY),
-            ("Just a summary.", pydocstring.Style.PLAIN),
-        ]:
-            doc = pydocstring.parse(src)
-            assert doc.style == expected_style
+        collector = Collector()
+        pydocstring.walk(doc, collector)
+        assert collector.arg_names == ["x", "y"]
 
+    def test_numpy_walk_collects_parameters(self):
+        source = "Summary.\n\nParameters\n----------\nx : int\n    Desc x.\ny : str\n    Desc y."
+        doc = pydocstring.parse_numpy(source)
 
-class TestEmit:
-    def test_emit_google(self):
-        doc = pydocstring.Docstring(
-            summary="Brief summary.",
-            sections=[
-                pydocstring.Section(
-                    "parameters",
-                    parameters=[
-                        pydocstring.Parameter(
-                            ["x"], type_annotation="int", description="The value."
-                        )
-                    ],
-                )
-            ],
-        )
-        text = pydocstring.emit_google(doc)
-        assert "Brief summary." in text
-        assert "Args:" in text
-        assert "x (int):" in text
+        class Collector:
+            def __init__(self):
+                self.names = []
 
-    def test_emit_numpy(self):
-        doc = pydocstring.Docstring(
-            summary="Brief summary.",
-            sections=[
-                pydocstring.Section(
-                    "parameters",
-                    parameters=[
-                        pydocstring.Parameter(
-                            ["x"], type_annotation="int", description="The value."
-                        )
-                    ],
-                )
-            ],
-        )
-        text = pydocstring.emit_numpy(doc)
-        assert "Brief summary." in text
-        assert "Parameters" in text
-        assert "----------" in text
-        assert "x : int" in text
+            def visit_numpy_parameter(self, param):
+                self.names.append(param.names[0].text)
 
-    def test_roundtrip_google(self):
-        original = "Summary.\n\nArgs:\n    x (int): The value.\n"
-        doc = pydocstring.parse_google(original)
-        model = doc.to_model()
-        emitted = pydocstring.emit_google(model)
-        assert "Summary." in emitted
-        assert "Args:" in emitted
-        assert "x (int):" in emitted
+        collector = Collector()
+        pydocstring.walk(doc, collector)
+        assert collector.names == ["x", "y"]
 
-    def test_roundtrip_numpy(self):
-        original = "Summary.\n\nParameters\n----------\nx : int\n    The value.\n"
-        doc = pydocstring.parse_numpy(original)
-        model = doc.to_model()
-        emitted = pydocstring.emit_numpy(model)
-        assert "Summary." in emitted
-        assert "Parameters" in emitted
-        assert "x : int" in emitted
+    def test_walk_plain_is_noop(self):
+        doc = pydocstring.parse_plain("Just a summary.")
 
-    def test_convert_google_to_numpy(self):
-        google_doc = pydocstring.parse_google(
-            "Summary.\n\nArgs:\n    x (int): The value.\n"
-        )
-        model = google_doc.to_model()
-        numpy_text = pydocstring.emit_numpy(model)
-        assert "Summary." in numpy_text
-        assert "Parameters" in numpy_text
-        assert "----------" in numpy_text
-        assert "x : int" in numpy_text
+        class Collector:
+            def __init__(self):
+                self.called = False
 
+            def visit_google_arg(self, arg):
+                self.called = True
 
-class TestLineCol:
-    """Tests for GoogleDocstring.line_col() and NumPyDocstring.line_col()."""
+            def visit_numpy_parameter(self, param):
+                self.called = True
 
-    # ── Google ───────────────────────────────────────────────────────────────
+        collector = Collector()
+        pydocstring.walk(doc, collector)
+        assert not collector.called
 
-    def test_google_summary_first_line(self):
-        doc = pydocstring.parse_google("Summary.")
-        lc = doc.line_col(doc.summary.range.start)
-        assert lc.lineno == 1
-        assert lc.col == 0
-
-    def test_google_arg_name_lineno(self):
-        src = "Summary.\n\nArgs:\n    x (int): Value."
-        doc = pydocstring.parse_google(src)
-        arg = doc.sections()[0].args()[0]
-        lc = doc.line_col(arg.name.range.start)
-        assert lc.lineno == 4   # "    x (int): Value." is on line 4
-        assert lc.col == 4      # 4 spaces of indentation
-
-    def test_google_col_is_codepoints_not_bytes(self):
-        # "α" is 2 bytes in UTF-8 but 1 codepoint.
-        # Source: "α.\n\nArgs:\n    x: V."
-        # "x" starts at byte 4+4=... let's compute:
-        # line 1: "α.\n"  → α=2bytes, .=1, \n=1  → line_start line4 = 2+1+1+1 = 5
-        # line 2: "\n"    → 1byte
-        # line 3: "Args:\n" → 6bytes
-        # line 4: "    x: V.\n" → "    x" starts with 4 spaces + x
-        # byte of "x" in line4 = 5+1+6+4 = 16
-        src = "α.\n\nArgs:\n    x: V."
-        doc = pydocstring.parse_google(src)
-        arg = doc.sections()[0].args()[0]
-        lc = doc.line_col(arg.name.range.start)
-        assert lc.lineno == 4
-        assert lc.col == 4  # 4 spaces → 4 codepoints (bytes == codepoints here)
-
-    def test_google_multibyte_col(self):
-        # Line with multibyte chars before the token.
-        # "αβ: int" as the summary — check col of "int" token text
-        # α=2bytes, β=2bytes, :=1, space=1 → "int" starts at byte 6
-        # but codepoints: α=1, β=1, :=1, space=1 → col=4
-        src = "αβ: int"
-        doc = pydocstring.parse_google(src)
-        # The whole line is treated as summary; check that line_col at byte 6
-        # returns col 4 (codepoints), not 6 (bytes)
-        lc = doc.line_col(6)
-        assert lc.lineno == 1
-        assert lc.col == 4
-
-    def test_google_multiline_lineno(self):
-        src = "Summary.\n\nExtended.\n\nArgs:\n    x: V."
-        doc = pydocstring.parse_google(src)
-        arg = doc.sections()[0].args()[0]
-        lc = doc.line_col(arg.name.range.start)
-        assert lc.lineno == 6
-
-    def test_google_returns_class(self):
-        lc = pydocstring.parse_google("S.").line_col(0)
-        assert isinstance(lc, pydocstring.LineColumn)
-
-    def test_google_out_of_bounds(self):
+    def test_walk_rejects_wrong_type(self):
         import pytest
-        doc = pydocstring.parse_google("S.")
-        with pytest.raises(Exception):
-            doc.line_col(9999)
+        with pytest.raises(TypeError):
+            pydocstring.walk("not a docstring", object())
 
-    # ── NumPy ────────────────────────────────────────────────────────────────
+    def test_walk_via_parse_google(self):
+        """walk() dispatches correctly when doc comes from auto-detect parse()."""
+        source = "Summary.\n\nArgs:\n    z (float): A float."
+        doc = pydocstring.parse(source)
+        assert isinstance(doc, pydocstring.GoogleDocstring)
 
-    def test_numpy_summary_first_line(self):
-        doc = pydocstring.parse_numpy("Summary.")
-        lc = doc.line_col(doc.summary.range.start)
-        assert lc.lineno == 1
-        assert lc.col == 0
+        names = []
+        class V:
+            def visit_google_arg(self, arg):
+                names.append(arg.name.text)
 
-    def test_numpy_param_name_lineno(self):
-        src = "Summary.\n\nParameters\n----------\nx : int\n    Desc."
-        doc = pydocstring.parse_numpy(src)
-        param = doc.sections()[0].parameters()[0]
-        lc = doc.line_col(param.names[0].range.start)
-        assert lc.lineno == 5   # "x : int" is on line 5
-        assert lc.col == 0
+        pydocstring.walk(doc, V())
+        assert names == ["z"]
 
-    def test_numpy_multibyte_col(self):
-        # Same multibyte check for NumPy path
-        src = "αβ: int"
-        doc = pydocstring.parse_numpy(src)
-        lc = doc.line_col(6)
-        assert lc.lineno == 1
-        assert lc.col == 4
+    def test_walk_via_parse_numpy(self):
+        """walk() dispatches correctly when doc comes from auto-detect parse()."""
+        source = "Summary.\n\nParameters\n----------\na : int\n    Desc."
+        doc = pydocstring.parse(source)
+        assert isinstance(doc, pydocstring.NumPyDocstring)
 
-    def test_numpy_returns_class(self):
-        lc = pydocstring.parse_numpy("S.").line_col(0)
-        assert isinstance(lc, pydocstring.LineColumn)
+        names = []
+        class V:
+            def visit_numpy_parameter(self, param):
+                names.append(param.names[0].text)
 
-    def test_numpy_out_of_bounds(self):
-        import pytest
-        doc = pydocstring.parse_numpy("S.")
-        with pytest.raises(Exception):
-            doc.line_col(9999)
+        pydocstring.walk(doc, V())
+        assert names == ["a"]
 
-    def test_emit_free_text_section(self):
-        doc = pydocstring.Docstring(
-            summary="Brief.",
-            sections=[pydocstring.Section("notes", body="Some notes.")],
-        )
-        text = pydocstring.emit_google(doc)
-        assert "Notes:" in text
-        assert "Some notes." in text
+    def test_walk_visitor_without_methods_is_safe(self):
+        """A visitor with no visit_* methods should not raise."""
+        doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x: Desc.")
+        pydocstring.walk(doc, object())

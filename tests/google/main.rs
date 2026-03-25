@@ -1,8 +1,8 @@
 //! Integration tests for Google-style docstring parser.
 
 pub use pydocstring::parse::google::{
-    GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturns, GoogleSection,
-    GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning, GoogleYields, parse_google,
+    GoogleArg, GoogleAttribute, GoogleDocstring, GoogleException, GoogleMethod, GoogleReturn, GoogleSection,
+    GoogleSectionKind, GoogleSeeAlsoItem, GoogleWarning, GoogleYield, parse_google,
 };
 pub use pydocstring::syntax::{Parsed, SyntaxKind, SyntaxToken};
 pub use pydocstring::text::TextSize;
@@ -37,14 +37,14 @@ pub fn args<'a>(result: &'a Parsed) -> Vec<GoogleArg<'a>> {
         .collect()
 }
 
-pub fn returns<'a>(result: &'a Parsed) -> Option<GoogleReturns<'a>> {
+pub fn returns<'a>(result: &'a Parsed) -> Option<GoogleReturn<'a>> {
     doc(result)
         .sections()
         .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Returns))
         .find_map(|s| s.returns())
 }
 
-pub fn yields<'a>(result: &'a Parsed) -> Option<GoogleYields<'a>> {
+pub fn yields<'a>(result: &'a Parsed) -> Option<GoogleYield<'a>> {
     doc(result)
         .sections()
         .filter(|s| matches!(s.section_kind(result.source()), GoogleSectionKind::Yields))

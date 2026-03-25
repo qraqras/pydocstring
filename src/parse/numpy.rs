@@ -7,6 +7,7 @@ pub mod nodes;
 pub mod parser;
 pub mod to_model;
 
+pub use crate::parse::visitor::{DocstringVisitor, walk_node};
 pub use kind::NumPySectionKind;
 pub use nodes::{
     NumPyAttribute, NumPyDeprecation, NumPyDocstring, NumPyException, NumPyMethod, NumPyParameter, NumPyReference,

@@ -88,15 +88,15 @@ impl<'a> GoogleSection<'a> {
     }
 
     /// Returns entry node in this section, if present.
-    pub fn returns(&self) -> Option<GoogleReturns<'a>> {
+    pub fn returns(&self) -> Option<GoogleReturn<'a>> {
         self.0
             .find_node(SyntaxKind::GOOGLE_RETURNS)
-            .and_then(GoogleReturns::cast)
+            .and_then(GoogleReturn::cast)
     }
 
     /// Yields entry node in this section, if present.
-    pub fn yields(&self) -> Option<GoogleYields<'a>> {
-        self.0.find_node(SyntaxKind::GOOGLE_YIELDS).and_then(GoogleYields::cast)
+    pub fn yields(&self) -> Option<GoogleYield<'a>> {
+        self.0.find_node(SyntaxKind::GOOGLE_YIELDS).and_then(GoogleYield::cast)
     }
 
     /// Iterate over exception entry nodes.
@@ -198,12 +198,12 @@ impl<'a> GoogleArg<'a> {
 }
 
 // =============================================================================
-// GoogleReturns
+// GoogleReturn
 // =============================================================================
 
-define_node!(GoogleReturns, GOOGLE_RETURNS);
+define_node!(GoogleReturn, GOOGLE_RETURNS);
 
-impl<'a> GoogleReturns<'a> {
+impl<'a> GoogleReturn<'a> {
     /// Return type annotation token, if present.
     pub fn return_type(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::RETURN_TYPE)
@@ -221,12 +221,12 @@ impl<'a> GoogleReturns<'a> {
 }
 
 // =============================================================================
-// GoogleYields
+// GoogleYield
 // =============================================================================
 
-define_node!(GoogleYields, GOOGLE_YIELDS);
+define_node!(GoogleYield, GOOGLE_YIELDS);
 
-impl<'a> GoogleYields<'a> {
+impl<'a> GoogleYield<'a> {
     /// Yield type annotation token, if present.
     pub fn return_type(&self) -> Option<&'a SyntaxToken> {
         self.0.find_token(SyntaxKind::RETURN_TYPE)
