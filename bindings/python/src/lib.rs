@@ -89,13 +89,13 @@ fn byte_offset_to_line_col(source: &str, byte_offset: usize) -> PyResult<PyLineC
 /// The field name on the parent object (e.g. `.name`, `.description`) implies
 /// the semantic kind; no redundant `kind` field is exposed.
 #[pyclass(frozen, name = "Token")]
-struct PyTypedToken {
+struct PyToken {
     text: String,
     range: TextRange,
 }
 
 #[pymethods]
-impl PyTypedToken {
+impl PyToken {
     #[getter]
     fn text(&self) -> &str {
         &self.text
@@ -111,17 +111,17 @@ impl PyTypedToken {
 
 // ─── Token helpers ───────────────────────────────────────────────────────────
 
-fn mk_token(py: Python<'_>, token: &SyntaxToken, source: &str) -> PyResult<Py<PyTypedToken>> {
+fn mk_token(py: Python<'_>, token: &SyntaxToken, source: &str) -> PyResult<Py<PyToken>> {
     Py::new(
         py,
-        PyTypedToken {
+        PyToken {
             text: token.text(source).to_string(),
             range: *token.range(),
         },
     )
 }
 
-fn mk_token_opt(py: Python<'_>, token: Option<&SyntaxToken>, source: &str) -> PyResult<Option<Py<PyTypedToken>>> {
+fn mk_token_opt(py: Python<'_>, token: Option<&SyntaxToken>, source: &str) -> PyResult<Option<Py<PyToken>>> {
     token.map(|t| mk_token(py, t, source)).transpose()
 }
 
@@ -129,7 +129,7 @@ fn mk_tokens<'a>(
     py: Python<'_>,
     tokens: impl Iterator<Item = &'a SyntaxToken>,
     source: &str,
-) -> PyResult<Vec<Py<PyTypedToken>>> {
+) -> PyResult<Vec<Py<PyToken>>> {
     tokens.map(|t| mk_token(py, t, source)).collect()
 }
 
@@ -375,10 +375,10 @@ fn numpy_section_kind_to_py(kind: NumPySectionKind) -> PyNumPySectionKind {
 #[pyclass(frozen, name = "GoogleArg")]
 struct PyGoogleArg {
     range: TextRange,
-    name: Py<PyTypedToken>,
-    r#type: Option<Py<PyTypedToken>>,
-    description: Option<Py<PyTypedToken>>,
-    optional: Option<Py<PyTypedToken>>,
+    name: Py<PyToken>,
+    r#type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
+    optional: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -388,19 +388,19 @@ impl PyGoogleArg {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn name(&self, py: Python<'_>) -> Py<PyTypedToken> {
+    fn name(&self, py: Python<'_>) -> Py<PyToken> {
         self.name.clone_ref(py)
     }
     #[getter]
-    fn r#type(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn r#type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.r#type.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn optional(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn optional(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.optional.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -426,8 +426,8 @@ fn build_google_arg(py: Python<'_>, arg: &gn::GoogleArg<'_>, source: &str) -> Py
 #[pyclass(frozen, name = "GoogleReturn")]
 struct PyGoogleReturn {
     range: TextRange,
-    return_type: Option<Py<PyTypedToken>>,
-    description: Option<Py<PyTypedToken>>,
+    return_type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -437,11 +437,11 @@ impl PyGoogleReturn {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn return_type(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn return_type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.return_type.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self) -> &'static str {
@@ -465,8 +465,8 @@ fn build_google_return(py: Python<'_>, rtn: &gn::GoogleReturn<'_>, source: &str)
 #[pyclass(frozen, name = "GoogleYield")]
 struct PyGoogleYield {
     range: TextRange,
-    return_type: Option<Py<PyTypedToken>>,
-    description: Option<Py<PyTypedToken>>,
+    return_type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -476,11 +476,11 @@ impl PyGoogleYield {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn return_type(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn return_type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.return_type.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self) -> &'static str {
@@ -504,8 +504,8 @@ fn build_google_yield(py: Python<'_>, yld: &gn::GoogleYield<'_>, source: &str) -
 #[pyclass(frozen, name = "GoogleException")]
 struct PyGoogleException {
     range: TextRange,
-    r#type: Py<PyTypedToken>,
-    description: Option<Py<PyTypedToken>>,
+    r#type: Py<PyToken>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -515,11 +515,11 @@ impl PyGoogleException {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn r#type(&self, py: Python<'_>) -> Py<PyTypedToken> {
+    fn r#type(&self, py: Python<'_>) -> Py<PyToken> {
         self.r#type.clone_ref(py)
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -547,8 +547,8 @@ fn build_google_exception(
 #[pyclass(frozen, name = "GoogleWarning")]
 struct PyGoogleWarning {
     range: TextRange,
-    warning_type: Py<PyTypedToken>,
-    description: Option<Py<PyTypedToken>>,
+    warning_type: Py<PyToken>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -558,11 +558,11 @@ impl PyGoogleWarning {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn warning_type(&self, py: Python<'_>) -> Py<PyTypedToken> {
+    fn warning_type(&self, py: Python<'_>) -> Py<PyToken> {
         self.warning_type.clone_ref(py)
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -586,8 +586,8 @@ fn build_google_warning(py: Python<'_>, wrn: &gn::GoogleWarning<'_>, source: &st
 #[pyclass(frozen, name = "GoogleSeeAlsoItem")]
 struct PyGoogleSeeAlsoItem {
     range: TextRange,
-    names: Vec<Py<PyTypedToken>>,
-    description: Option<Py<PyTypedToken>>,
+    names: Vec<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -597,11 +597,11 @@ impl PyGoogleSeeAlsoItem {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn names(&self, py: Python<'_>) -> Vec<Py<PyTypedToken>> {
+    fn names(&self, py: Python<'_>) -> Vec<Py<PyToken>> {
         self.names.iter().map(|n| n.clone_ref(py)).collect()
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self) -> &'static str {
@@ -629,9 +629,9 @@ fn build_google_see_also_item(
 #[pyclass(frozen, name = "GoogleAttribute")]
 struct PyGoogleAttribute {
     range: TextRange,
-    name: Py<PyTypedToken>,
-    r#type: Option<Py<PyTypedToken>>,
-    description: Option<Py<PyTypedToken>>,
+    name: Py<PyToken>,
+    r#type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -641,15 +641,15 @@ impl PyGoogleAttribute {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn name(&self, py: Python<'_>) -> Py<PyTypedToken> {
+    fn name(&self, py: Python<'_>) -> Py<PyToken> {
         self.name.clone_ref(py)
     }
     #[getter]
-    fn r#type(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn r#type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.r#type.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -678,9 +678,9 @@ fn build_google_attribute(
 #[pyclass(frozen, name = "GoogleMethod")]
 struct PyGoogleMethod {
     range: TextRange,
-    name: Py<PyTypedToken>,
-    r#type: Option<Py<PyTypedToken>>,
-    description: Option<Py<PyTypedToken>>,
+    name: Py<PyToken>,
+    r#type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -690,15 +690,15 @@ impl PyGoogleMethod {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn name(&self, py: Python<'_>) -> Py<PyTypedToken> {
+    fn name(&self, py: Python<'_>) -> Py<PyToken> {
         self.name.clone_ref(py)
     }
     #[getter]
-    fn r#type(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn r#type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.r#type.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -725,7 +725,7 @@ fn build_google_method(py: Python<'_>, mtd: &gn::GoogleMethod<'_>, source: &str)
 struct PyGoogleSection {
     range: TextRange,
     section_kind: PyGoogleSectionKind,
-    header_name: Py<PyTypedToken>,
+    header_name: Py<PyToken>,
     args: Vec<Py<PyGoogleArg>>,
     returns: Option<Py<PyGoogleReturn>>,
     yields: Option<Py<PyGoogleYield>>,
@@ -734,7 +734,7 @@ struct PyGoogleSection {
     see_also_items: Vec<Py<PyGoogleSeeAlsoItem>>,
     attributes: Vec<Py<PyGoogleAttribute>>,
     methods: Vec<Py<PyGoogleMethod>>,
-    body_text: Option<Py<PyTypedToken>>,
+    body_text: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -748,7 +748,7 @@ impl PyGoogleSection {
         self.section_kind
     }
     #[getter]
-    fn header_name(&self, py: Python<'_>) -> Py<PyTypedToken> {
+    fn header_name(&self, py: Python<'_>) -> Py<PyToken> {
         self.header_name.clone_ref(py)
     }
     #[getter]
@@ -784,7 +784,7 @@ impl PyGoogleSection {
         self.methods.iter().map(|m| m.clone_ref(py)).collect()
     }
     #[getter]
-    fn body_text(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn body_text(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.body_text.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -846,9 +846,9 @@ fn build_google_section(py: Python<'_>, sec: &gn::GoogleSection<'_>, source: &st
 #[pyclass(frozen, name = "GoogleDocstring")]
 struct PyGoogleDocstring {
     range: TextRange,
-    summary: Option<Py<PyTypedToken>>,
-    extended_summary: Option<Py<PyTypedToken>>,
-    stray_lines: Vec<Py<PyTypedToken>>,
+    summary: Option<Py<PyToken>>,
+    extended_summary: Option<Py<PyToken>>,
+    stray_lines: Vec<Py<PyToken>>,
     sections: Vec<Py<PyGoogleSection>>,
     source: String,
     /// Cached CST — avoids re-parsing when `walk()` is called.
@@ -862,15 +862,15 @@ impl PyGoogleDocstring {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn summary(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn summary(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.summary.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn extended_summary(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn extended_summary(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.extended_summary.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn stray_lines(&self, py: Python<'_>) -> Vec<Py<PyTypedToken>> {
+    fn stray_lines(&self, py: Python<'_>) -> Vec<Py<PyToken>> {
         self.stray_lines.iter().map(|t| t.clone_ref(py)).collect()
     }
     #[getter]
@@ -946,8 +946,8 @@ fn build_google_docstring(py: Python<'_>, parsed: Parsed) -> PyResult<Py<PyGoogl
 #[pyclass(frozen, name = "NumPyDeprecation")]
 struct PyNumPyDeprecation {
     range: TextRange,
-    version: Py<PyTypedToken>,
-    description: Option<Py<PyTypedToken>>,
+    version: Py<PyToken>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -957,11 +957,11 @@ impl PyNumPyDeprecation {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn version(&self, py: Python<'_>) -> Py<PyTypedToken> {
+    fn version(&self, py: Python<'_>) -> Py<PyToken> {
         self.version.clone_ref(py)
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -989,11 +989,11 @@ fn build_numpy_deprecation(
 #[pyclass(frozen, name = "NumPyParameter")]
 struct PyNumPyParameter {
     range: TextRange,
-    names: Vec<Py<PyTypedToken>>,
-    r#type: Option<Py<PyTypedToken>>,
-    description: Option<Py<PyTypedToken>>,
-    optional: Option<Py<PyTypedToken>>,
-    default_value: Option<Py<PyTypedToken>>,
+    names: Vec<Py<PyToken>>,
+    r#type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
+    optional: Option<Py<PyToken>>,
+    default_value: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -1003,23 +1003,23 @@ impl PyNumPyParameter {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn names(&self, py: Python<'_>) -> Vec<Py<PyTypedToken>> {
+    fn names(&self, py: Python<'_>) -> Vec<Py<PyToken>> {
         self.names.iter().map(|n| n.clone_ref(py)).collect()
     }
     #[getter]
-    fn r#type(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn r#type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.r#type.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn optional(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn optional(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.optional.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn default_value(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn default_value(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.default_value.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -1051,9 +1051,9 @@ fn build_numpy_parameter(py: Python<'_>, prm: &nn::NumPyParameter<'_>, source: &
 #[pyclass(frozen, name = "NumPyReturns")]
 struct PyNumPyReturns {
     range: TextRange,
-    name: Option<Py<PyTypedToken>>,
-    return_type: Option<Py<PyTypedToken>>,
-    description: Option<Py<PyTypedToken>>,
+    name: Option<Py<PyToken>>,
+    return_type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -1063,15 +1063,15 @@ impl PyNumPyReturns {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn name(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn name(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.name.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn return_type(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn return_type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.return_type.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self) -> &'static str {
@@ -1096,9 +1096,9 @@ fn build_numpy_returns(py: Python<'_>, rtn: &nn::NumPyReturns<'_>, source: &str)
 #[pyclass(frozen, name = "NumPyYields")]
 struct PyNumPyYields {
     range: TextRange,
-    name: Option<Py<PyTypedToken>>,
-    return_type: Option<Py<PyTypedToken>>,
-    description: Option<Py<PyTypedToken>>,
+    name: Option<Py<PyToken>>,
+    return_type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -1108,15 +1108,15 @@ impl PyNumPyYields {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn name(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn name(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.name.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn return_type(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn return_type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.return_type.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self) -> &'static str {
@@ -1141,8 +1141,8 @@ fn build_numpy_yields(py: Python<'_>, yld: &nn::NumPyYields<'_>, source: &str) -
 #[pyclass(frozen, name = "NumPyException")]
 struct PyNumPyException {
     range: TextRange,
-    r#type: Py<PyTypedToken>,
-    description: Option<Py<PyTypedToken>>,
+    r#type: Py<PyToken>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -1152,11 +1152,11 @@ impl PyNumPyException {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn r#type(&self, py: Python<'_>) -> Py<PyTypedToken> {
+    fn r#type(&self, py: Python<'_>) -> Py<PyToken> {
         self.r#type.clone_ref(py)
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -1180,8 +1180,8 @@ fn build_numpy_exception(py: Python<'_>, exc: &nn::NumPyException<'_>, source: &
 #[pyclass(frozen, name = "NumPyWarning")]
 struct PyNumPyWarning {
     range: TextRange,
-    r#type: Py<PyTypedToken>,
-    description: Option<Py<PyTypedToken>>,
+    r#type: Py<PyToken>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -1191,11 +1191,11 @@ impl PyNumPyWarning {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn r#type(&self, py: Python<'_>) -> Py<PyTypedToken> {
+    fn r#type(&self, py: Python<'_>) -> Py<PyToken> {
         self.r#type.clone_ref(py)
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -1219,8 +1219,8 @@ fn build_numpy_warning(py: Python<'_>, wrn: &nn::NumPyWarning<'_>, source: &str)
 #[pyclass(frozen, name = "NumPySeeAlsoItem")]
 struct PyNumPySeeAlsoItem {
     range: TextRange,
-    names: Vec<Py<PyTypedToken>>,
-    description: Option<Py<PyTypedToken>>,
+    names: Vec<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -1230,11 +1230,11 @@ impl PyNumPySeeAlsoItem {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn names(&self, py: Python<'_>) -> Vec<Py<PyTypedToken>> {
+    fn names(&self, py: Python<'_>) -> Vec<Py<PyToken>> {
         self.names.iter().map(|n| n.clone_ref(py)).collect()
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self) -> &'static str {
@@ -1262,8 +1262,8 @@ fn build_numpy_see_also_item(
 #[pyclass(frozen, name = "NumPyReference")]
 struct PyNumPyReference {
     range: TextRange,
-    number: Option<Py<PyTypedToken>>,
-    content: Option<Py<PyTypedToken>>,
+    number: Option<Py<PyToken>>,
+    content: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -1273,11 +1273,11 @@ impl PyNumPyReference {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn number(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn number(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.number.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn content(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn content(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.content.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self) -> &'static str {
@@ -1301,9 +1301,9 @@ fn build_numpy_reference(py: Python<'_>, r: &nn::NumPyReference<'_>, source: &st
 #[pyclass(frozen, name = "NumPyAttribute")]
 struct PyNumPyAttribute {
     range: TextRange,
-    name: Py<PyTypedToken>,
-    r#type: Option<Py<PyTypedToken>>,
-    description: Option<Py<PyTypedToken>>,
+    name: Py<PyToken>,
+    r#type: Option<Py<PyToken>>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -1313,15 +1313,15 @@ impl PyNumPyAttribute {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn name(&self, py: Python<'_>) -> Py<PyTypedToken> {
+    fn name(&self, py: Python<'_>) -> Py<PyToken> {
         self.name.clone_ref(py)
     }
     #[getter]
-    fn r#type(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn r#type(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.r#type.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -1346,8 +1346,8 @@ fn build_numpy_attribute(py: Python<'_>, att: &nn::NumPyAttribute<'_>, source: &
 #[pyclass(frozen, name = "NumPyMethod")]
 struct PyNumPyMethod {
     range: TextRange,
-    name: Py<PyTypedToken>,
-    description: Option<Py<PyTypedToken>>,
+    name: Py<PyToken>,
+    description: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -1357,11 +1357,11 @@ impl PyNumPyMethod {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn name(&self, py: Python<'_>) -> Py<PyTypedToken> {
+    fn name(&self, py: Python<'_>) -> Py<PyToken> {
         self.name.clone_ref(py)
     }
     #[getter]
-    fn description(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn description(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.description.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -1387,7 +1387,7 @@ fn build_numpy_method(py: Python<'_>, mtd: &nn::NumPyMethod<'_>, source: &str) -
 struct PyNumPySection {
     range: TextRange,
     section_kind: PyNumPySectionKind,
-    header_name: Py<PyTypedToken>,
+    header_name: Py<PyToken>,
     parameters: Vec<Py<PyNumPyParameter>>,
     returns: Vec<Py<PyNumPyReturns>>,
     yields: Vec<Py<PyNumPyYields>>,
@@ -1397,7 +1397,7 @@ struct PyNumPySection {
     references: Vec<Py<PyNumPyReference>>,
     attributes: Vec<Py<PyNumPyAttribute>>,
     methods: Vec<Py<PyNumPyMethod>>,
-    body_text: Option<Py<PyTypedToken>>,
+    body_text: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -1411,7 +1411,7 @@ impl PyNumPySection {
         self.section_kind
     }
     #[getter]
-    fn header_name(&self, py: Python<'_>) -> Py<PyTypedToken> {
+    fn header_name(&self, py: Python<'_>) -> Py<PyToken> {
         self.header_name.clone_ref(py)
     }
     #[getter]
@@ -1451,7 +1451,7 @@ impl PyNumPySection {
         self.methods.iter().map(|m| m.clone_ref(py)).collect()
     }
     #[getter]
-    fn body_text(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn body_text(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.body_text.as_ref().map(|t| t.clone_ref(py))
     }
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -1524,8 +1524,8 @@ fn build_numpy_section(py: Python<'_>, sec: &nn::NumPySection<'_>, source: &str)
 #[pyclass(frozen, name = "NumPyDocstring")]
 struct PyNumPyDocstring {
     range: TextRange,
-    summary: Option<Py<PyTypedToken>>,
-    extended_summary: Option<Py<PyTypedToken>>,
+    summary: Option<Py<PyToken>>,
+    extended_summary: Option<Py<PyToken>>,
     deprecation: Option<Py<PyNumPyDeprecation>>,
     sections: Vec<Py<PyNumPySection>>,
     source: String,
@@ -1540,11 +1540,11 @@ impl PyNumPyDocstring {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn summary(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn summary(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.summary.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn extended_summary(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn extended_summary(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.extended_summary.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
@@ -1625,8 +1625,8 @@ fn build_numpy_docstring(py: Python<'_>, parsed: Parsed) -> PyResult<Py<PyNumPyD
 #[pyclass(frozen, name = "PlainDocstring")]
 struct PyPlainDocstring {
     range: TextRange,
-    summary: Option<Py<PyTypedToken>>,
-    extended_summary: Option<Py<PyTypedToken>>,
+    summary: Option<Py<PyToken>>,
+    extended_summary: Option<Py<PyToken>>,
     source: String,
 }
 
@@ -1637,11 +1637,11 @@ impl PyPlainDocstring {
         Py::new(py, PyTextRange::from(self.range))
     }
     #[getter]
-    fn summary(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn summary(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.summary.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
-    fn extended_summary(&self, py: Python<'_>) -> Option<Py<PyTypedToken>> {
+    fn extended_summary(&self, py: Python<'_>) -> Option<Py<PyToken>> {
         self.extended_summary.as_ref().map(|t| t.clone_ref(py))
     }
     #[getter]
@@ -2538,7 +2538,13 @@ fn walk_google_cst(py: Python<'_>, arc: &Arc<Parsed>, visitor: &Py<PyAny>, activ
         Some(d) => d,
         None => return Ok(()),
     };
-    let ctx = Py::new(py, PyWalkContext { source: source.to_string(), style: PyStyle::Google })?;
+    let ctx = Py::new(
+        py,
+        PyWalkContext {
+            source: source.to_string(),
+            style: PyStyle::Google,
+        },
+    )?;
 
     if active.google_docstring {
         let obj = build_google_docstring_node(py, &doc, source, Arc::clone(arc))?;
@@ -2609,7 +2615,13 @@ fn walk_numpy_cst(py: Python<'_>, arc: &Arc<Parsed>, visitor: &Py<PyAny>, active
         Some(d) => d,
         None => return Ok(()),
     };
-    let ctx = Py::new(py, PyWalkContext { source: source.to_string(), style: PyStyle::NumPy })?;
+    let ctx = Py::new(
+        py,
+        PyWalkContext {
+            source: source.to_string(),
+            style: PyStyle::NumPy,
+        },
+    )?;
 
     if active.numpy_docstring {
         let obj = build_numpy_docstring_node(py, &doc, source, Arc::clone(arc))?;
@@ -2696,7 +2708,13 @@ fn walk_plain_cst(
         return Ok(());
     }
     let source = plain_doc.borrow(py).source.clone();
-    let ctx = Py::new(py, PyWalkContext { source, style: PyStyle::Plain })?;
+    let ctx = Py::new(
+        py,
+        PyWalkContext {
+            source,
+            style: PyStyle::Plain,
+        },
+    )?;
     dispatch_with_ctx(py, visitor, "visit_plain_docstring", plain_doc, &ctx)?;
     Ok(())
 }
@@ -2777,7 +2795,7 @@ fn pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyNumPySectionKind>()?;
     m.add_class::<PyTextRange>()?;
     m.add_class::<PyLineColumn>()?;
-    m.add_class::<PyTypedToken>()?;
+    m.add_class::<PyToken>()?;
     m.add_class::<PyWalkContext>()?;
     // Google CST wrappers
     m.add_class::<PyGoogleDocstring>()?;
