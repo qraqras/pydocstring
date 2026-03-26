@@ -40,7 +40,12 @@ class TestParseGoogle:
         sections = doc.sections
         assert len(sections) == 1
         assert sections[0].section_kind == pydocstring.GoogleSectionKind.ARGS
-        args = sections[0].args
+
+        class Collector:
+            def __init__(self): self.args = []
+            def visit_google_arg(self, arg, ctx): self.args.append(arg)
+
+        args = pydocstring.walk(doc, Collector()).args
         assert len(args) == 2
         assert args[0].name.text == "x"
         assert args[0].type.text == "int"
@@ -54,7 +59,12 @@ class TestParseGoogle:
         )
         section = doc.sections[0]
         assert section.section_kind == pydocstring.GoogleSectionKind.RETURNS
-        ret = section.returns
+
+        class Collector:
+            def __init__(self): self.ret = None
+            def visit_google_return(self, ret, ctx): self.ret = ret
+
+        ret = pydocstring.walk(doc, Collector()).ret
         assert ret is not None
         assert ret.return_type.text == "bool"
         assert ret.description.text == "True if successful."
@@ -65,7 +75,12 @@ class TestParseGoogle:
         )
         section = doc.sections[0]
         assert section.section_kind == pydocstring.GoogleSectionKind.RAISES
-        excepts = section.exceptions
+
+        class Collector:
+            def __init__(self): self.excepts = []
+            def visit_google_exception(self, exc, ctx): self.excepts.append(exc)
+
+        excepts = pydocstring.walk(doc, Collector()).excepts
         assert len(excepts) == 1
         assert excepts[0].type.text == "ValueError"
         assert excepts[0].description.text == "If x is negative."
@@ -79,7 +94,14 @@ class TestParseGoogle:
         doc = pydocstring.parse_google("Summary.\n\nNotes:\n    Some free text.")
         section = doc.sections[0]
         assert section.section_kind == pydocstring.GoogleSectionKind.NOTES
-        assert section.body_text is not None
+
+        class Collector:
+            def __init__(self): self.sections = []
+            def visit_google_section(self, sec, ctx): self.sections.append(sec)
+
+        sections = pydocstring.walk(doc, Collector()).sections
+        assert len(sections) == 1
+        assert sections[0].section_kind == pydocstring.GoogleSectionKind.NOTES
 
     def test_pretty_print(self):
         doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x: Desc.")
@@ -102,7 +124,12 @@ class TestParseGoogle:
         )
         section = doc.sections[0]
         assert section.section_kind == pydocstring.GoogleSectionKind.YIELDS
-        yld = section.yields
+
+        class Collector:
+            def __init__(self): self.yld = None
+            def visit_google_yield(self, yld, ctx): self.yld = yld
+
+        yld = pydocstring.walk(doc, Collector()).yld
         assert yld is not None
         assert yld.return_type.text == "int"
 
@@ -130,7 +157,12 @@ class TestParseNumPy:
         sections = doc.sections
         assert len(sections) == 1
         assert sections[0].section_kind == pydocstring.NumPySectionKind.PARAMETERS
-        params = sections[0].parameters
+
+        class Collector:
+            def __init__(self): self.params = []
+            def visit_numpy_parameter(self, prm, ctx): self.params.append(prm)
+
+        params = pydocstring.walk(doc, Collector()).params
         assert len(params) == 2
         assert [n.text for n in params[0].names] == ["x"]
         assert params[0].type.text == "int"
@@ -143,7 +175,12 @@ class TestParseNumPy:
         )
         section = doc.sections[0]
         assert section.section_kind == pydocstring.NumPySectionKind.RETURNS
-        returns = section.returns
+
+        class Collector:
+            def __init__(self): self.returns = []
+            def visit_numpy_returns(self, rtn, ctx): self.returns.append(rtn)
+
+        returns = pydocstring.walk(doc, Collector()).returns
         assert len(returns) == 1
         assert returns[0].return_type.text == "bool"
         assert returns[0].description.text == "True if successful."
@@ -154,7 +191,12 @@ class TestParseNumPy:
         )
         section = doc.sections[0]
         assert section.section_kind == pydocstring.NumPySectionKind.RAISES
-        excepts = section.exceptions
+
+        class Collector:
+            def __init__(self): self.excepts = []
+            def visit_numpy_exception(self, exc, ctx): self.excepts.append(exc)
+
+        excepts = pydocstring.walk(doc, Collector()).excepts
         assert len(excepts) == 1
         assert excepts[0].type.text == "ValueError"
 

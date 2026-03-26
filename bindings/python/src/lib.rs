@@ -6,6 +6,7 @@ use pydocstring_core::parse::google::kind::GoogleSectionKind;
 use pydocstring_core::parse::google::nodes as gn;
 use pydocstring_core::parse::numpy::kind::NumPySectionKind;
 use pydocstring_core::parse::numpy::nodes as nn;
+use pydocstring_core::parse::visitor::{DocstringVisitor, walk_node as core_walk_node};
 use pydocstring_core::syntax::{Parsed, SyntaxToken};
 use pydocstring_core::text::TextRange;
 use std::sync::Arc;
@@ -720,21 +721,12 @@ fn build_google_method(py: Python<'_>, mtd: &gn::GoogleMethod<'_>, source: &str)
 
 // ─── GoogleSection ───────────────────────────────────────────────────────────
 
-/// A section in a Google-style docstring; all child items are built eagerly.
+/// A thin wrapper for a Google section node (no eager child allocation).
 #[pyclass(frozen, name = "GoogleSection")]
 struct PyGoogleSection {
     range: TextRange,
     section_kind: PyGoogleSectionKind,
     header_name: Py<PyToken>,
-    args: Vec<Py<PyGoogleArg>>,
-    returns: Option<Py<PyGoogleReturn>>,
-    yields: Option<Py<PyGoogleYield>>,
-    exceptions: Vec<Py<PyGoogleException>>,
-    warnings: Vec<Py<PyGoogleWarning>>,
-    see_also_items: Vec<Py<PyGoogleSeeAlsoItem>>,
-    attributes: Vec<Py<PyGoogleAttribute>>,
-    methods: Vec<Py<PyGoogleMethod>>,
-    body_text: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -751,92 +743,18 @@ impl PyGoogleSection {
     fn header_name(&self, py: Python<'_>) -> Py<PyToken> {
         self.header_name.clone_ref(py)
     }
-    #[getter]
-    fn args(&self, py: Python<'_>) -> Vec<Py<PyGoogleArg>> {
-        self.args.iter().map(|a| a.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn returns(&self, py: Python<'_>) -> Option<Py<PyGoogleReturn>> {
-        self.returns.as_ref().map(|r| r.clone_ref(py))
-    }
-    #[getter]
-    fn yields(&self, py: Python<'_>) -> Option<Py<PyGoogleYield>> {
-        self.yields.as_ref().map(|y| y.clone_ref(py))
-    }
-    #[getter]
-    fn exceptions(&self, py: Python<'_>) -> Vec<Py<PyGoogleException>> {
-        self.exceptions.iter().map(|e| e.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn warnings(&self, py: Python<'_>) -> Vec<Py<PyGoogleWarning>> {
-        self.warnings.iter().map(|w| w.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn see_also_items(&self, py: Python<'_>) -> Vec<Py<PyGoogleSeeAlsoItem>> {
-        self.see_also_items.iter().map(|s| s.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn attributes(&self, py: Python<'_>) -> Vec<Py<PyGoogleAttribute>> {
-        self.attributes.iter().map(|a| a.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn methods(&self, py: Python<'_>) -> Vec<Py<PyGoogleMethod>> {
-        self.methods.iter().map(|m| m.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn body_text(&self, py: Python<'_>) -> Option<Py<PyToken>> {
-        self.body_text.as_ref().map(|t| t.clone_ref(py))
-    }
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("GoogleSection({:?})", self.header_name.borrow(py).text)
     }
 }
 
 fn build_google_section(py: Python<'_>, sec: &gn::GoogleSection<'_>, source: &str) -> PyResult<Py<PyGoogleSection>> {
-    let section_kind = google_section_kind_to_py(sec.section_kind(source));
-    let header_name = mk_token(py, sec.header().name(), source)?;
-    let args = sec
-        .args()
-        .map(|a| build_google_arg(py, &a, source))
-        .collect::<PyResult<_>>()?;
-    let returns = sec.returns().map(|r| build_google_return(py, &r, source)).transpose()?;
-    let yields = sec.yields().map(|y| build_google_yield(py, &y, source)).transpose()?;
-    let exceptions = sec
-        .exceptions()
-        .map(|e| build_google_exception(py, &e, source))
-        .collect::<PyResult<_>>()?;
-    let warnings = sec
-        .warnings()
-        .map(|w| build_google_warning(py, &w, source))
-        .collect::<PyResult<_>>()?;
-    let see_also_items = sec
-        .see_also_items()
-        .map(|s| build_google_see_also_item(py, &s, source))
-        .collect::<PyResult<_>>()?;
-    let attributes = sec
-        .attributes()
-        .map(|a| build_google_attribute(py, &a, source))
-        .collect::<PyResult<_>>()?;
-    let methods = sec
-        .methods()
-        .map(|m| build_google_method(py, &m, source))
-        .collect::<PyResult<_>>()?;
-    let body_text = mk_token_opt(py, sec.body_text(), source)?;
     Py::new(
         py,
         PyGoogleSection {
             range: *sec.syntax().range(),
-            section_kind,
-            header_name,
-            args,
-            returns,
-            yields,
-            exceptions,
-            warnings,
-            see_also_items,
-            attributes,
-            methods,
-            body_text,
+            section_kind: google_section_kind_to_py(sec.section_kind(source)),
+            header_name: mk_token(py, sec.header().name(), source)?,
         },
     )
 }
@@ -1382,22 +1300,12 @@ fn build_numpy_method(py: Python<'_>, mtd: &nn::NumPyMethod<'_>, source: &str) -
 
 // ─── NumPySection ────────────────────────────────────────────────────────────
 
-/// A section in a NumPy-style docstring; all child items are built eagerly.
+/// A thin wrapper for a NumPy section node (no eager child allocation).
 #[pyclass(frozen, name = "NumPySection")]
 struct PyNumPySection {
     range: TextRange,
     section_kind: PyNumPySectionKind,
     header_name: Py<PyToken>,
-    parameters: Vec<Py<PyNumPyParameter>>,
-    returns: Vec<Py<PyNumPyReturns>>,
-    yields: Vec<Py<PyNumPyYields>>,
-    exceptions: Vec<Py<PyNumPyException>>,
-    warnings: Vec<Py<PyNumPyWarning>>,
-    see_also_items: Vec<Py<PyNumPySeeAlsoItem>>,
-    references: Vec<Py<PyNumPyReference>>,
-    attributes: Vec<Py<PyNumPyAttribute>>,
-    methods: Vec<Py<PyNumPyMethod>>,
-    body_text: Option<Py<PyToken>>,
 }
 
 #[pymethods]
@@ -1414,107 +1322,18 @@ impl PyNumPySection {
     fn header_name(&self, py: Python<'_>) -> Py<PyToken> {
         self.header_name.clone_ref(py)
     }
-    #[getter]
-    fn parameters(&self, py: Python<'_>) -> Vec<Py<PyNumPyParameter>> {
-        self.parameters.iter().map(|p| p.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn returns(&self, py: Python<'_>) -> Vec<Py<PyNumPyReturns>> {
-        self.returns.iter().map(|r| r.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn yields(&self, py: Python<'_>) -> Vec<Py<PyNumPyYields>> {
-        self.yields.iter().map(|y| y.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn exceptions(&self, py: Python<'_>) -> Vec<Py<PyNumPyException>> {
-        self.exceptions.iter().map(|e| e.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn warnings(&self, py: Python<'_>) -> Vec<Py<PyNumPyWarning>> {
-        self.warnings.iter().map(|w| w.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn see_also_items(&self, py: Python<'_>) -> Vec<Py<PyNumPySeeAlsoItem>> {
-        self.see_also_items.iter().map(|s| s.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn references(&self, py: Python<'_>) -> Vec<Py<PyNumPyReference>> {
-        self.references.iter().map(|r| r.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn attributes(&self, py: Python<'_>) -> Vec<Py<PyNumPyAttribute>> {
-        self.attributes.iter().map(|a| a.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn methods(&self, py: Python<'_>) -> Vec<Py<PyNumPyMethod>> {
-        self.methods.iter().map(|m| m.clone_ref(py)).collect()
-    }
-    #[getter]
-    fn body_text(&self, py: Python<'_>) -> Option<Py<PyToken>> {
-        self.body_text.as_ref().map(|t| t.clone_ref(py))
-    }
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("NumPySection({:?})", self.header_name.borrow(py).text)
     }
 }
 
 fn build_numpy_section(py: Python<'_>, sec: &nn::NumPySection<'_>, source: &str) -> PyResult<Py<PyNumPySection>> {
-    let section_kind = numpy_section_kind_to_py(sec.section_kind(source));
-    let header_name = mk_token(py, sec.header().name(), source)?;
-    let parameters = sec
-        .parameters()
-        .map(|p| build_numpy_parameter(py, &p, source))
-        .collect::<PyResult<_>>()?;
-    let returns = sec
-        .returns()
-        .map(|r| build_numpy_returns(py, &r, source))
-        .collect::<PyResult<_>>()?;
-    let yields = sec
-        .yields()
-        .map(|y| build_numpy_yields(py, &y, source))
-        .collect::<PyResult<_>>()?;
-    let exceptions = sec
-        .exceptions()
-        .map(|e| build_numpy_exception(py, &e, source))
-        .collect::<PyResult<_>>()?;
-    let warnings = sec
-        .warnings()
-        .map(|w| build_numpy_warning(py, &w, source))
-        .collect::<PyResult<_>>()?;
-    let see_also_items = sec
-        .see_also_items()
-        .map(|s| build_numpy_see_also_item(py, &s, source))
-        .collect::<PyResult<_>>()?;
-    let references = sec
-        .references()
-        .map(|r| build_numpy_reference(py, &r, source))
-        .collect::<PyResult<_>>()?;
-    let attributes = sec
-        .attributes()
-        .map(|a| build_numpy_attribute(py, &a, source))
-        .collect::<PyResult<_>>()?;
-    let methods = sec
-        .methods()
-        .map(|m| build_numpy_method(py, &m, source))
-        .collect::<PyResult<_>>()?;
-    let body_text = mk_token_opt(py, sec.body_text(), source)?;
     Py::new(
         py,
         PyNumPySection {
             range: *sec.syntax().range(),
-            section_kind,
-            header_name,
-            parameters,
-            returns,
-            yields,
-            exceptions,
-            warnings,
-            see_also_items,
-            references,
-            attributes,
-            methods,
-            body_text,
+            section_kind: numpy_section_kind_to_py(sec.section_kind(source)),
+            header_name: mk_token(py, sec.header().name(), source)?,
         },
     )
 }
@@ -2451,12 +2270,12 @@ impl PyWalkContext {
     }
 }
 
-/// Which `visit_*` methods the Python visitor defines.
+/// Which `visit_*` / `leave_*` methods the Python visitor defines.
 ///
 /// Collected **once per `walk()` call** by inspecting the visitor object,
 /// so `hasattr` is never called per-node.
 struct ActiveMethods {
-    // Google
+    // Google (visit)
     google_docstring: bool,
     google_section: bool,
     google_arg: bool,
@@ -2467,7 +2286,18 @@ struct ActiveMethods {
     google_see_also_item: bool,
     google_attribute: bool,
     google_method: bool,
-    // NumPy
+    // Google (leave)
+    leave_google_docstring: bool,
+    leave_google_section: bool,
+    leave_google_arg: bool,
+    leave_google_return: bool,
+    leave_google_yield: bool,
+    leave_google_exception: bool,
+    leave_google_warning: bool,
+    leave_google_see_also_item: bool,
+    leave_google_attribute: bool,
+    leave_google_method: bool,
+    // NumPy (visit)
     numpy_docstring: bool,
     numpy_deprecation: bool,
     numpy_section: bool,
@@ -2480,14 +2310,28 @@ struct ActiveMethods {
     numpy_reference: bool,
     numpy_attribute: bool,
     numpy_method: bool,
+    // NumPy (leave)
+    leave_numpy_docstring: bool,
+    leave_numpy_deprecation: bool,
+    leave_numpy_section: bool,
+    leave_numpy_parameter: bool,
+    leave_numpy_returns: bool,
+    leave_numpy_yields: bool,
+    leave_numpy_exception: bool,
+    leave_numpy_warning: bool,
+    leave_numpy_see_also_item: bool,
+    leave_numpy_reference: bool,
+    leave_numpy_attribute: bool,
+    leave_numpy_method: bool,
     // Plain
     plain_docstring: bool,
 }
 
-/// Inspect `visitor` once and return which `visit_*` methods it defines.
+/// Inspect `visitor` once and return which `visit_*` / `leave_*` methods it defines.
 fn collect_active(py: Python<'_>, visitor: &Py<PyAny>) -> PyResult<ActiveMethods> {
     let b = visitor.bind(py);
     Ok(ActiveMethods {
+        // Google (visit)
         google_docstring: b.hasattr("visit_google_docstring")?,
         google_section: b.hasattr("visit_google_section")?,
         google_arg: b.hasattr("visit_google_arg")?,
@@ -2498,6 +2342,18 @@ fn collect_active(py: Python<'_>, visitor: &Py<PyAny>) -> PyResult<ActiveMethods
         google_see_also_item: b.hasattr("visit_google_see_also_item")?,
         google_attribute: b.hasattr("visit_google_attribute")?,
         google_method: b.hasattr("visit_google_method")?,
+        // Google (leave)
+        leave_google_docstring: b.hasattr("leave_google_docstring")?,
+        leave_google_section: b.hasattr("leave_google_section")?,
+        leave_google_arg: b.hasattr("leave_google_arg")?,
+        leave_google_return: b.hasattr("leave_google_return")?,
+        leave_google_yield: b.hasattr("leave_google_yield")?,
+        leave_google_exception: b.hasattr("leave_google_exception")?,
+        leave_google_warning: b.hasattr("leave_google_warning")?,
+        leave_google_see_also_item: b.hasattr("leave_google_see_also_item")?,
+        leave_google_attribute: b.hasattr("leave_google_attribute")?,
+        leave_google_method: b.hasattr("leave_google_method")?,
+        // NumPy (visit)
         numpy_docstring: b.hasattr("visit_numpy_docstring")?,
         numpy_deprecation: b.hasattr("visit_numpy_deprecation")?,
         numpy_section: b.hasattr("visit_numpy_section")?,
@@ -2510,6 +2366,20 @@ fn collect_active(py: Python<'_>, visitor: &Py<PyAny>) -> PyResult<ActiveMethods
         numpy_reference: b.hasattr("visit_numpy_reference")?,
         numpy_attribute: b.hasattr("visit_numpy_attribute")?,
         numpy_method: b.hasattr("visit_numpy_method")?,
+        // NumPy (leave)
+        leave_numpy_docstring: b.hasattr("leave_numpy_docstring")?,
+        leave_numpy_deprecation: b.hasattr("leave_numpy_deprecation")?,
+        leave_numpy_section: b.hasattr("leave_numpy_section")?,
+        leave_numpy_parameter: b.hasattr("leave_numpy_parameter")?,
+        leave_numpy_returns: b.hasattr("leave_numpy_returns")?,
+        leave_numpy_yields: b.hasattr("leave_numpy_yields")?,
+        leave_numpy_exception: b.hasattr("leave_numpy_exception")?,
+        leave_numpy_warning: b.hasattr("leave_numpy_warning")?,
+        leave_numpy_see_also_item: b.hasattr("leave_numpy_see_also_item")?,
+        leave_numpy_reference: b.hasattr("leave_numpy_reference")?,
+        leave_numpy_attribute: b.hasattr("leave_numpy_attribute")?,
+        leave_numpy_method: b.hasattr("leave_numpy_method")?,
+        // Plain
         plain_docstring: b.hasattr("visit_plain_docstring")?,
     })
 }
@@ -2527,174 +2397,325 @@ fn dispatch_with_ctx<T: pyo3::PyClass>(
     Ok(())
 }
 
-/// Walk a Google-style CST, dispatching to Python for each active node kind.
+/// Walk the typed children of a Google section, dispatching visitor methods.
 ///
-/// Each Python object is built **at most once** and only when the visitor
-/// defines the corresponding `visit_*` method.  `hasattr` is never called
-/// here — all method existence checks were done upfront in `collect_active`.
-fn walk_google_cst(py: Python<'_>, arc: &Arc<Parsed>, visitor: &Py<PyAny>, active: &ActiveMethods) -> PyResult<()> {
-    let source = arc.source();
-    let doc = match gn::GoogleDocstring::cast(arc.root()) {
-        Some(d) => d,
-        None => return Ok(()),
-    };
-    let ctx = Py::new(
-        py,
-        PyWalkContext {
-            source: source.to_string(),
-            style: PyStyle::Google,
-        },
-    )?;
+/// Each child collection is built at most once and shared between
+/// `visit_google_section` and per-child `visit_google_*` calls via `clone_ref`.
+/// Walk the children of a section node, dispatching visitor methods.
+///
+/// Accepts either a `GOOGLE_SECTION` or `NUMPY_SECTION` node.  The section
+/// kind is read from `node.kind()` — no per-style function needed.
+/// Each child collection is built at most once and shared between the
+/// section object and per-child dispatches via `clone_ref`.
 
-    if active.google_docstring {
-        let obj = build_google_docstring_node(py, &doc, source, Arc::clone(arc))?;
-        dispatch_with_ctx(py, visitor, "visit_google_docstring", obj, &ctx)?;
-    }
+// =============================================================================
+// PyDispatcher — ANTLR-style Python dispatch via DocstringVisitor
+// =============================================================================
 
-    for sec in doc.sections() {
-        if active.google_section {
-            let obj = build_google_section(py, &sec, source)?;
-            dispatch_with_ctx(py, visitor, "visit_google_section", obj, &ctx)?;
-        }
-        if active.google_arg {
-            for arg in sec.args() {
-                let obj = build_google_arg(py, &arg, source)?;
-                dispatch_with_ctx(py, visitor, "visit_google_arg", obj, &ctx)?;
-            }
-        }
-        if active.google_return {
-            if let Some(rtn) = sec.returns() {
-                let obj = build_google_return(py, &rtn, source)?;
-                dispatch_with_ctx(py, visitor, "visit_google_return", obj, &ctx)?;
-            }
-        }
-        if active.google_yield {
-            if let Some(yld) = sec.yields() {
-                let obj = build_google_yield(py, &yld, source)?;
-                dispatch_with_ctx(py, visitor, "visit_google_yield", obj, &ctx)?;
-            }
-        }
-        if active.google_exception {
-            for exc in sec.exceptions() {
-                let obj = build_google_exception(py, &exc, source)?;
-                dispatch_with_ctx(py, visitor, "visit_google_exception", obj, &ctx)?;
-            }
-        }
-        if active.google_warning {
-            for wrn in sec.warnings() {
-                let obj = build_google_warning(py, &wrn, source)?;
-                dispatch_with_ctx(py, visitor, "visit_google_warning", obj, &ctx)?;
-            }
-        }
-        if active.google_see_also_item {
-            for sai in sec.see_also_items() {
-                let obj = build_google_see_also_item(py, &sai, source)?;
-                dispatch_with_ctx(py, visitor, "visit_google_see_also_item", obj, &ctx)?;
-            }
-        }
-        if active.google_attribute {
-            for att in sec.attributes() {
-                let obj = build_google_attribute(py, &att, source)?;
-                dispatch_with_ctx(py, visitor, "visit_google_attribute", obj, &ctx)?;
-            }
-        }
-        if active.google_method {
-            for mtd in sec.methods() {
-                let obj = build_google_method(py, &mtd, source)?;
-                dispatch_with_ctx(py, visitor, "visit_google_method", obj, &ctx)?;
-            }
-        }
-    }
-    Ok(())
+/// Implements `DocstringVisitor` from the core crate.
+///
+/// For every node kind the pattern is:
+/// 1. Call Python `visit_*` (enter) if the visitor defines it.
+/// 2. Recurse into children via `core_walk_node`.
+/// 3. Call Python `leave_*` (exit) if the visitor defines it.
+struct PyDispatcher<'py> {
+    py: Python<'py>,
+    arc: Arc<Parsed>,
+    visitor: Py<PyAny>,
+    active: ActiveMethods,
+    ctx: Py<PyWalkContext>,
 }
 
-/// Walk a NumPy-style CST, dispatching to Python for each active node kind.
-fn walk_numpy_cst(py: Python<'_>, arc: &Arc<Parsed>, visitor: &Py<PyAny>, active: &ActiveMethods) -> PyResult<()> {
-    let source = arc.source();
-    let doc = match nn::NumPyDocstring::cast(arc.root()) {
-        Some(d) => d,
-        None => return Ok(()),
-    };
-    let ctx = Py::new(
-        py,
-        PyWalkContext {
-            source: source.to_string(),
-            style: PyStyle::NumPy,
-        },
-    )?;
+impl<'py> DocstringVisitor for PyDispatcher<'py> {
+    type Error = PyErr;
 
-    if active.numpy_docstring {
-        let obj = build_numpy_docstring_node(py, &doc, source, Arc::clone(arc))?;
-        dispatch_with_ctx(py, visitor, "visit_numpy_docstring", obj, &ctx)?;
-    }
-    if active.numpy_deprecation {
-        if let Some(dep) = doc.deprecation() {
-            let obj = build_numpy_deprecation(py, &dep, source)?;
-            dispatch_with_ctx(py, visitor, "visit_numpy_deprecation", obj, &ctx)?;
+    // ── Google ────────────────────────────────────────────────────────────
+    fn visit_google_docstring(&mut self, source: &str, doc: &gn::GoogleDocstring<'_>) -> Result<(), PyErr> {
+        let need = self.active.google_docstring || self.active.leave_google_docstring;
+        let obj = if need { Some(build_google_docstring_node(self.py, doc, source, Arc::clone(&self.arc))?) } else { None };
+        if self.active.google_docstring {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_google_docstring", o.clone_ref(self.py), &self.ctx)?; }
         }
+        core_walk_node(source, doc.syntax(), self)?;
+        if self.active.leave_google_docstring {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_google_docstring", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
     }
 
-    for sec in doc.sections() {
-        if active.numpy_section {
-            let obj = build_numpy_section(py, &sec, source)?;
-            dispatch_with_ctx(py, visitor, "visit_numpy_section", obj, &ctx)?;
+    fn visit_google_section(&mut self, source: &str, sec: &gn::GoogleSection<'_>) -> Result<(), PyErr> {
+        let need = self.active.google_section || self.active.leave_google_section;
+        let obj = if need { Some(build_google_section(self.py, sec, source)?) } else { None };
+        if self.active.google_section {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_google_section", o.clone_ref(self.py), &self.ctx)?; }
         }
-        if active.numpy_parameter {
-            for prm in sec.parameters() {
-                let obj = build_numpy_parameter(py, &prm, source)?;
-                dispatch_with_ctx(py, visitor, "visit_numpy_parameter", obj, &ctx)?;
-            }
+        core_walk_node(source, sec.syntax(), self)?;
+        if self.active.leave_google_section {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_google_section", o.clone_ref(self.py), &self.ctx)?; }
         }
-        if active.numpy_returns {
-            for rtn in sec.returns() {
-                let obj = build_numpy_returns(py, &rtn, source)?;
-                dispatch_with_ctx(py, visitor, "visit_numpy_returns", obj, &ctx)?;
-            }
-        }
-        if active.numpy_yields {
-            for yld in sec.yields() {
-                let obj = build_numpy_yields(py, &yld, source)?;
-                dispatch_with_ctx(py, visitor, "visit_numpy_yields", obj, &ctx)?;
-            }
-        }
-        if active.numpy_exception {
-            for exc in sec.exceptions() {
-                let obj = build_numpy_exception(py, &exc, source)?;
-                dispatch_with_ctx(py, visitor, "visit_numpy_exception", obj, &ctx)?;
-            }
-        }
-        if active.numpy_warning {
-            for wrn in sec.warnings() {
-                let obj = build_numpy_warning(py, &wrn, source)?;
-                dispatch_with_ctx(py, visitor, "visit_numpy_warning", obj, &ctx)?;
-            }
-        }
-        if active.numpy_see_also_item {
-            for sai in sec.see_also_items() {
-                let obj = build_numpy_see_also_item(py, &sai, source)?;
-                dispatch_with_ctx(py, visitor, "visit_numpy_see_also_item", obj, &ctx)?;
-            }
-        }
-        if active.numpy_reference {
-            for r in sec.references() {
-                let obj = build_numpy_reference(py, &r, source)?;
-                dispatch_with_ctx(py, visitor, "visit_numpy_reference", obj, &ctx)?;
-            }
-        }
-        if active.numpy_attribute {
-            for att in sec.attributes() {
-                let obj = build_numpy_attribute(py, &att, source)?;
-                dispatch_with_ctx(py, visitor, "visit_numpy_attribute", obj, &ctx)?;
-            }
-        }
-        if active.numpy_method {
-            for mtd in sec.methods() {
-                let obj = build_numpy_method(py, &mtd, source)?;
-                dispatch_with_ctx(py, visitor, "visit_numpy_method", obj, &ctx)?;
-            }
-        }
+        Ok(())
     }
-    Ok(())
+
+    fn visit_google_arg(&mut self, source: &str, arg: &gn::GoogleArg<'_>) -> Result<(), PyErr> {
+        let need = self.active.google_arg || self.active.leave_google_arg;
+        let obj = if need { Some(build_google_arg(self.py, arg, source)?) } else { None };
+        if self.active.google_arg {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_google_arg", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, arg.syntax(), self)?;
+        if self.active.leave_google_arg {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_google_arg", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_google_return(&mut self, source: &str, rtn: &gn::GoogleReturn<'_>) -> Result<(), PyErr> {
+        let need = self.active.google_return || self.active.leave_google_return;
+        let obj = if need { Some(build_google_return(self.py, rtn, source)?) } else { None };
+        if self.active.google_return {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_google_return", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, rtn.syntax(), self)?;
+        if self.active.leave_google_return {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_google_return", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_google_yield(&mut self, source: &str, yld: &gn::GoogleYield<'_>) -> Result<(), PyErr> {
+        let need = self.active.google_yield || self.active.leave_google_yield;
+        let obj = if need { Some(build_google_yield(self.py, yld, source)?) } else { None };
+        if self.active.google_yield {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_google_yield", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, yld.syntax(), self)?;
+        if self.active.leave_google_yield {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_google_yield", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_google_exception(&mut self, source: &str, exc: &gn::GoogleException<'_>) -> Result<(), PyErr> {
+        let need = self.active.google_exception || self.active.leave_google_exception;
+        let obj = if need { Some(build_google_exception(self.py, exc, source)?) } else { None };
+        if self.active.google_exception {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_google_exception", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, exc.syntax(), self)?;
+        if self.active.leave_google_exception {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_google_exception", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_google_warning(&mut self, source: &str, wrn: &gn::GoogleWarning<'_>) -> Result<(), PyErr> {
+        let need = self.active.google_warning || self.active.leave_google_warning;
+        let obj = if need { Some(build_google_warning(self.py, wrn, source)?) } else { None };
+        if self.active.google_warning {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_google_warning", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, wrn.syntax(), self)?;
+        if self.active.leave_google_warning {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_google_warning", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_google_see_also_item(&mut self, source: &str, sai: &gn::GoogleSeeAlsoItem<'_>) -> Result<(), PyErr> {
+        let need = self.active.google_see_also_item || self.active.leave_google_see_also_item;
+        let obj = if need { Some(build_google_see_also_item(self.py, sai, source)?) } else { None };
+        if self.active.google_see_also_item {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_google_see_also_item", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, sai.syntax(), self)?;
+        if self.active.leave_google_see_also_item {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_google_see_also_item", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_google_attribute(&mut self, source: &str, att: &gn::GoogleAttribute<'_>) -> Result<(), PyErr> {
+        let need = self.active.google_attribute || self.active.leave_google_attribute;
+        let obj = if need { Some(build_google_attribute(self.py, att, source)?) } else { None };
+        if self.active.google_attribute {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_google_attribute", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, att.syntax(), self)?;
+        if self.active.leave_google_attribute {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_google_attribute", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_google_method(&mut self, source: &str, mtd: &gn::GoogleMethod<'_>) -> Result<(), PyErr> {
+        let need = self.active.google_method || self.active.leave_google_method;
+        let obj = if need { Some(build_google_method(self.py, mtd, source)?) } else { None };
+        if self.active.google_method {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_google_method", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, mtd.syntax(), self)?;
+        if self.active.leave_google_method {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_google_method", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    // ── NumPy ─────────────────────────────────────────────────────────────
+    fn visit_numpy_docstring(&mut self, source: &str, doc: &nn::NumPyDocstring<'_>) -> Result<(), PyErr> {
+        let need = self.active.numpy_docstring || self.active.leave_numpy_docstring;
+        let obj = if need { Some(build_numpy_docstring_node(self.py, doc, source, Arc::clone(&self.arc))?) } else { None };
+        if self.active.numpy_docstring {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_numpy_docstring", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, doc.syntax(), self)?;
+        if self.active.leave_numpy_docstring {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_numpy_docstring", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_numpy_deprecation(&mut self, source: &str, dep: &nn::NumPyDeprecation<'_>) -> Result<(), PyErr> {
+        let need = self.active.numpy_deprecation || self.active.leave_numpy_deprecation;
+        let obj = if need { Some(build_numpy_deprecation(self.py, dep, source)?) } else { None };
+        if self.active.numpy_deprecation {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_numpy_deprecation", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, dep.syntax(), self)?;
+        if self.active.leave_numpy_deprecation {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_numpy_deprecation", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_numpy_section(&mut self, source: &str, sec: &nn::NumPySection<'_>) -> Result<(), PyErr> {
+        let need = self.active.numpy_section || self.active.leave_numpy_section;
+        let obj = if need { Some(build_numpy_section(self.py, sec, source)?) } else { None };
+        if self.active.numpy_section {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_numpy_section", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, sec.syntax(), self)?;
+        if self.active.leave_numpy_section {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_numpy_section", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_numpy_parameter(&mut self, source: &str, prm: &nn::NumPyParameter<'_>) -> Result<(), PyErr> {
+        let need = self.active.numpy_parameter || self.active.leave_numpy_parameter;
+        let obj = if need { Some(build_numpy_parameter(self.py, prm, source)?) } else { None };
+        if self.active.numpy_parameter {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_numpy_parameter", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, prm.syntax(), self)?;
+        if self.active.leave_numpy_parameter {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_numpy_parameter", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_numpy_returns(&mut self, source: &str, rtn: &nn::NumPyReturns<'_>) -> Result<(), PyErr> {
+        let need = self.active.numpy_returns || self.active.leave_numpy_returns;
+        let obj = if need { Some(build_numpy_returns(self.py, rtn, source)?) } else { None };
+        if self.active.numpy_returns {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_numpy_returns", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, rtn.syntax(), self)?;
+        if self.active.leave_numpy_returns {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_numpy_returns", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_numpy_yields(&mut self, source: &str, yld: &nn::NumPyYields<'_>) -> Result<(), PyErr> {
+        let need = self.active.numpy_yields || self.active.leave_numpy_yields;
+        let obj = if need { Some(build_numpy_yields(self.py, yld, source)?) } else { None };
+        if self.active.numpy_yields {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_numpy_yields", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, yld.syntax(), self)?;
+        if self.active.leave_numpy_yields {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_numpy_yields", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_numpy_exception(&mut self, source: &str, exc: &nn::NumPyException<'_>) -> Result<(), PyErr> {
+        let need = self.active.numpy_exception || self.active.leave_numpy_exception;
+        let obj = if need { Some(build_numpy_exception(self.py, exc, source)?) } else { None };
+        if self.active.numpy_exception {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_numpy_exception", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, exc.syntax(), self)?;
+        if self.active.leave_numpy_exception {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_numpy_exception", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_numpy_warning(&mut self, source: &str, wrn: &nn::NumPyWarning<'_>) -> Result<(), PyErr> {
+        let need = self.active.numpy_warning || self.active.leave_numpy_warning;
+        let obj = if need { Some(build_numpy_warning(self.py, wrn, source)?) } else { None };
+        if self.active.numpy_warning {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_numpy_warning", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, wrn.syntax(), self)?;
+        if self.active.leave_numpy_warning {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_numpy_warning", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_numpy_see_also_item(&mut self, source: &str, sai: &nn::NumPySeeAlsoItem<'_>) -> Result<(), PyErr> {
+        let need = self.active.numpy_see_also_item || self.active.leave_numpy_see_also_item;
+        let obj = if need { Some(build_numpy_see_also_item(self.py, sai, source)?) } else { None };
+        if self.active.numpy_see_also_item {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_numpy_see_also_item", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, sai.syntax(), self)?;
+        if self.active.leave_numpy_see_also_item {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_numpy_see_also_item", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_numpy_reference(&mut self, source: &str, r#ref: &nn::NumPyReference<'_>) -> Result<(), PyErr> {
+        let need = self.active.numpy_reference || self.active.leave_numpy_reference;
+        let obj = if need { Some(build_numpy_reference(self.py, r#ref, source)?) } else { None };
+        if self.active.numpy_reference {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_numpy_reference", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, r#ref.syntax(), self)?;
+        if self.active.leave_numpy_reference {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_numpy_reference", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_numpy_attribute(&mut self, source: &str, att: &nn::NumPyAttribute<'_>) -> Result<(), PyErr> {
+        let need = self.active.numpy_attribute || self.active.leave_numpy_attribute;
+        let obj = if need { Some(build_numpy_attribute(self.py, att, source)?) } else { None };
+        if self.active.numpy_attribute {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_numpy_attribute", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, att.syntax(), self)?;
+        if self.active.leave_numpy_attribute {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_numpy_attribute", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
+
+    fn visit_numpy_method(&mut self, source: &str, mtd: &nn::NumPyMethod<'_>) -> Result<(), PyErr> {
+        let need = self.active.numpy_method || self.active.leave_numpy_method;
+        let obj = if need { Some(build_numpy_method(self.py, mtd, source)?) } else { None };
+        if self.active.numpy_method {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "visit_numpy_method", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        core_walk_node(source, mtd.syntax(), self)?;
+        if self.active.leave_numpy_method {
+            if let Some(ref o) = obj { dispatch_with_ctx(self.py, &self.visitor, "leave_numpy_method", o.clone_ref(self.py), &self.ctx)?; }
+        }
+        Ok(())
+    }
 }
 
 /// Walk a plain docstring, dispatching ``visit_plain_docstring`` if defined.
@@ -2755,16 +2776,26 @@ fn walk_plain_cst(
 #[pyfunction]
 fn walk(py: Python<'_>, doc: PyObject, visitor: PyObject) -> PyResult<PyObject> {
     let bound = doc.bind(py);
+    let active = collect_active(py, &visitor)?;
     if let Ok(google_doc) = bound.downcast::<PyGoogleDocstring>() {
         let arc = google_doc.borrow().parsed.clone();
-        let active = collect_active(py, &visitor)?;
-        walk_google_cst(py, &arc, &visitor, &active)?;
+        let source = arc.source().to_string();
+        let ctx = Py::new(py, PyWalkContext { source: source.clone(), style: PyStyle::Google })?;
+        let root = arc.root();
+        if let Some(doc_node) = gn::GoogleDocstring::cast(root) {
+            let mut dispatcher = PyDispatcher { py, arc: Arc::clone(&arc), visitor: visitor.clone_ref(py), active, ctx };
+            dispatcher.visit_google_docstring(&source, &doc_node)?;
+        }
     } else if let Ok(numpy_doc) = bound.downcast::<PyNumPyDocstring>() {
         let arc = numpy_doc.borrow().parsed.clone();
-        let active = collect_active(py, &visitor)?;
-        walk_numpy_cst(py, &arc, &visitor, &active)?;
+        let source = arc.source().to_string();
+        let ctx = Py::new(py, PyWalkContext { source: source.clone(), style: PyStyle::NumPy })?;
+        let root = arc.root();
+        if let Some(doc_node) = nn::NumPyDocstring::cast(root) {
+            let mut dispatcher = PyDispatcher { py, arc: Arc::clone(&arc), visitor: visitor.clone_ref(py), active, ctx };
+            dispatcher.visit_numpy_docstring(&source, &doc_node)?;
+        }
     } else if let Ok(plain_doc) = bound.downcast::<PyPlainDocstring>() {
-        let active = collect_active(py, &visitor)?;
         walk_plain_cst(py, plain_doc.clone().unbind(), &visitor, &active)?;
     } else {
         return Err(pyo3::exceptions::PyTypeError::new_err(
