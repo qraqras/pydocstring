@@ -534,7 +534,7 @@ class TestWalk:
             def __init__(self):
                 self.arg_names = []
 
-            def visit_google_arg(self, arg):
+            def visit_google_arg(self, arg, ctx):
                 self.arg_names.append(arg.name.text)
 
         collector = Collector()
@@ -549,24 +549,41 @@ class TestWalk:
             def __init__(self):
                 self.names = []
 
-            def visit_numpy_parameter(self, param):
+            def visit_numpy_parameter(self, param, ctx):
                 self.names.append(param.names[0].text)
 
         collector = Collector()
         pydocstring.walk(doc, collector)
         assert collector.names == ["x", "y"]
 
-    def test_walk_plain_is_noop(self):
+    def test_walk_plain_dispatches_plain_docstring(self):
         doc = pydocstring.parse_plain("Just a summary.")
 
         class Collector:
             def __init__(self):
                 self.called = False
 
-            def visit_google_arg(self, arg):
+            def visit_plain_docstring(self, plain_doc, ctx):
+                self.called = True
+                assert plain_doc.summary is not None
+                assert plain_doc.summary.text == "Just a summary."
+                assert ctx.style == pydocstring.Style.PLAIN
+
+        collector = Collector()
+        pydocstring.walk(doc, collector)
+        assert collector.called
+
+    def test_walk_plain_no_google_numpy_dispatch(self):
+        doc = pydocstring.parse_plain("Just a summary.")
+
+        class Collector:
+            def __init__(self):
+                self.called = False
+
+            def visit_google_arg(self, arg, ctx):
                 self.called = True
 
-            def visit_numpy_parameter(self, param):
+            def visit_numpy_parameter(self, param, ctx):
                 self.called = True
 
         collector = Collector()
@@ -586,7 +603,7 @@ class TestWalk:
 
         names = []
         class V:
-            def visit_google_arg(self, arg):
+            def visit_google_arg(self, arg, ctx):
                 names.append(arg.name.text)
 
         pydocstring.walk(doc, V())
@@ -600,7 +617,7 @@ class TestWalk:
 
         names = []
         class V:
-            def visit_numpy_parameter(self, param):
+            def visit_numpy_parameter(self, param, ctx):
                 names.append(param.names[0].text)
 
         pydocstring.walk(doc, V())
@@ -610,3 +627,65 @@ class TestWalk:
         """A visitor with no visit_* methods should not raise."""
         doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x: Desc.")
         pydocstring.walk(doc, object())
+
+    def test_walk_returns_visitor(self):
+        """walk() returns the visitor object."""
+        doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x (int): Desc.")
+
+        class V:
+            def visit_google_arg(self, arg, ctx):
+                pass
+
+        v = V()
+        result = pydocstring.walk(doc, v)
+        assert result is v
+
+    def test_ctx_line_col_google(self):
+        """ctx.line_col() returns correct LineColumn for a given offset."""
+        source = "Summary.\n\nArgs:\n    x (int): The value."
+        doc = pydocstring.parse_google(source)
+
+        line_cols = []
+
+        class V:
+            def visit_google_arg(self, arg, ctx):
+                lc = ctx.line_col(arg.range.start)
+                line_cols.append((lc.lineno, lc.col))
+
+        pydocstring.walk(doc, V())
+        assert len(line_cols) == 1
+        # arg starts on line 4 (1-based), col 4 (0-based, after 4 spaces)
+        assert line_cols[0] == (4, 4)
+
+    def test_ctx_style_google(self):
+        doc = pydocstring.parse_google("Summary.")
+        styles = []
+
+        class V:
+            def visit_google_docstring(self, d, ctx):
+                styles.append(ctx.style)
+
+        pydocstring.walk(doc, V())
+        assert styles == [pydocstring.Style.GOOGLE]
+
+    def test_ctx_style_numpy(self):
+        doc = pydocstring.parse_numpy("Summary.")
+        styles = []
+
+        class V:
+            def visit_numpy_docstring(self, d, ctx):
+                styles.append(ctx.style)
+
+        pydocstring.walk(doc, V())
+        assert styles == [pydocstring.Style.NUMPY]
+
+    def test_ctx_style_plain(self):
+        doc = pydocstring.parse_plain("Summary.")
+        styles = []
+
+        class V:
+            def visit_plain_docstring(self, d, ctx):
+                styles.append(ctx.style)
+
+        pydocstring.walk(doc, V())
+        assert styles == [pydocstring.Style.PLAIN]
