@@ -251,20 +251,38 @@ class TestTextRange:
 class TestLineColumn:
     def test_summary_start(self):
         doc = pydocstring.parse_plain("Summary.")
-        lc = doc.line_col(doc.summary.range.start)
-        assert lc.lineno == 1
-        assert lc.col == 0
+        result = []
+
+        class V(pydocstring.Visitor):
+            def enter_plain_docstring(self, node, ctx):
+                result.append(ctx.line_col(node.summary.range.start))
+
+        pydocstring.walk(doc, V())
+        assert result[0].lineno == 1
+        assert result[0].col == 0
 
     def test_extended_summary_start(self):
         doc = pydocstring.parse_plain("Summary.\n\nExtended.")
-        lc = doc.line_col(doc.extended_summary.range.start)
-        assert lc.lineno == 3
-        assert lc.col == 0
+        result = []
+
+        class V(pydocstring.Visitor):
+            def enter_plain_docstring(self, node, ctx):
+                result.append(ctx.line_col(node.extended_summary.range.start))
+
+        pydocstring.walk(doc, V())
+        assert result[0].lineno == 3
+        assert result[0].col == 0
 
     def test_repr(self):
         doc = pydocstring.parse_plain("Summary.")
-        lc = doc.line_col(0)
-        assert repr(lc) == "LineColumn(lineno=1, col=0)"
+        result = []
+
+        class V(pydocstring.Visitor):
+            def enter_plain_docstring(self, node, ctx):
+                result.append(ctx.line_col(0))
+
+        pydocstring.walk(doc, V())
+        assert repr(result[0]) == "LineColumn(lineno=1, col=0)"
 
 
 class TestModelTypes:
@@ -491,15 +509,27 @@ class TestParsePlain:
 
     def test_line_col_summary(self):
         doc = pydocstring.parse_plain("Summary.")
-        lc = doc.line_col(doc.summary.range.start)
-        assert lc.lineno == 1
-        assert lc.col == 0
+        result = []
+
+        class V(pydocstring.Visitor):
+            def enter_plain_docstring(self, node, ctx):
+                result.append(ctx.line_col(node.summary.range.start))
+
+        pydocstring.walk(doc, V())
+        assert result[0].lineno == 1
+        assert result[0].col == 0
 
     def test_line_col_extended_summary(self):
         doc = pydocstring.parse_plain("Summary.\n\nExtended.")
-        lc = doc.line_col(doc.extended_summary.range.start)
-        assert lc.lineno == 3
-        assert lc.col == 0
+        result = []
+
+        class V(pydocstring.Visitor):
+            def enter_plain_docstring(self, node, ctx):
+                result.append(ctx.line_col(node.extended_summary.range.start))
+
+        pydocstring.walk(doc, V())
+        assert result[0].lineno == 3
+        assert result[0].col == 0
 
     def test_detect_style_dispatches_to_plain(self):
         assert pydocstring.detect_style("Just a summary.") == pydocstring.Style.PLAIN

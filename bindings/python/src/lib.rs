@@ -56,32 +56,14 @@ impl PyLineColumn {
     }
 }
 
-fn byte_offset_to_line_col(source: &str, byte_offset: usize) -> PyResult<PyLineColumn> {
-    if byte_offset > source.len() {
-        return Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "offset {} is out of bounds (source length: {})",
-            byte_offset,
-            source.len()
-        )));
-    }
-    let mut lineno = 1u32;
-    let mut line_start = 0usize;
+fn build_line_starts(source: &str) -> Vec<u32> {
+    let mut starts = vec![0u32];
     for (i, b) in source.bytes().enumerate() {
-        if i >= byte_offset {
-            break;
-        }
         if b == b'\n' {
-            lineno += 1;
-            line_start = i + 1;
+            starts.push((i + 1) as u32);
         }
     }
-    if !source.is_char_boundary(byte_offset) || !source.is_char_boundary(line_start) {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "offset is not on a UTF-8 character boundary",
-        ));
-    }
-    let col = source[line_start..byte_offset].chars().count() as u32;
-    Ok(PyLineColumn { lineno, col })
+    starts
 }
 
 // ─── Token ──────────────────────────────────────────────────────────────────
@@ -804,9 +786,6 @@ impl PyGoogleDocstring {
     fn style(&self) -> PyStyle {
         PyStyle::Google
     }
-    fn line_col(&self, py: Python<'_>, offset: u32) -> PyResult<Py<PyLineColumn>> {
-        Py::new(py, byte_offset_to_line_col(&self.source, offset as usize)?)
-    }
     fn pretty_print(&self) -> String {
         self.parsed.pretty_print()
     }
@@ -1382,9 +1361,6 @@ impl PyNumPyDocstring {
     fn style(&self) -> PyStyle {
         PyStyle::NumPy
     }
-    fn line_col(&self, py: Python<'_>, offset: u32) -> PyResult<Py<PyLineColumn>> {
-        Py::new(py, byte_offset_to_line_col(&self.source, offset as usize)?)
-    }
     fn pretty_print(&self) -> String {
         self.parsed.pretty_print()
     }
@@ -1471,9 +1447,6 @@ impl PyPlainDocstring {
     #[getter]
     fn style(&self) -> PyStyle {
         PyStyle::Plain
-    }
-    fn line_col(&self, py: Python<'_>, offset: u32) -> PyResult<Py<PyLineColumn>> {
-        Py::new(py, byte_offset_to_line_col(&self.source, offset as usize)?)
     }
     fn pretty_print(&self) -> String {
         self.parsed.pretty_print()
@@ -2412,15 +2385,38 @@ fn py_emit_numpy(py: Python<'_>, doc: Py<PyModelDocstring>, base_indent: usize) 
 #[pyclass(frozen, name = "WalkContext")]
 struct PyWalkContext {
     source: String,
+    line_starts: Vec<u32>,
 }
 
 #[pymethods]
 impl PyWalkContext {
     /// Convert a byte offset into a ``LineColumn``.
     ///
-    /// Equivalent to calling ``doc.line_col(offset)`` on the owning docstring.
+    /// Returns a 1-based line number and 0-based column offset.
     fn line_col(&self, py: Python<'_>, offset: u32) -> PyResult<Py<PyLineColumn>> {
-        Py::new(py, byte_offset_to_line_col(&self.source, offset as usize)?)
+        let offset_usize = offset as usize;
+        if offset_usize > self.source.len() {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "offset {} is out of bounds (source length: {})",
+                offset,
+                self.source.len()
+            )));
+        }
+        let line = self.line_starts.partition_point(|&s| s <= offset) - 1;
+        let line_start = self.line_starts[line] as usize;
+        if !self.source.is_char_boundary(offset_usize) || !self.source.is_char_boundary(line_start) {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "offset is not on a UTF-8 character boundary",
+            ));
+        }
+        let col = self.source[line_start..offset_usize].chars().count() as u32;
+        Py::new(
+            py,
+            PyLineColumn {
+                lineno: line as u32 + 1,
+                col,
+            },
+        )
     }
     fn __repr__(&self) -> &'static str {
         "WalkContext(...)"
@@ -2988,7 +2984,14 @@ fn walk(py: Python<'_>, doc: PyObject, visitor: PyObject) -> PyResult<PyObject> 
 
     let source = arc.source().to_string();
     let root = arc.root();
-    let ctx = Py::new(py, PyWalkContext { source: source.clone() })?;
+    let line_starts = build_line_starts(&source);
+    let ctx = Py::new(
+        py,
+        PyWalkContext {
+            source: source.clone(),
+            line_starts,
+        },
+    )?;
 
     let mut dispatcher = PyDispatcher {
         py,
