@@ -2869,160 +2869,13 @@ fn walk(py: Python<'_>, doc: PyObject, visitor: PyObject) -> PyResult<PyObject> 
 // Module
 // =============================================================================
 
-/// Pure-Python source for the `Visitor` base class.
-///
-/// Every method is decorated with `_pydocstring_noop` which sets
-/// `__pydocstring_noop__ = True` on the function object.  `is_active_method`
-/// looks for this sentinel: if it is present the method has not been
-/// overridden and should not be dispatched.
-const VISITOR_CLASS_CODE: &str = r#"
-def _pydocstring_noop(fn):
-    fn.__pydocstring_noop__ = True
-    return fn
-
-_ALL_VISITOR_METHODS = frozenset([
-    "enter_google_docstring", "exit_google_docstring",
-    "enter_google_section",   "exit_google_section",
-    "enter_google_arg",       "exit_google_arg",
-    "enter_google_return",    "exit_google_return",
-    "enter_google_yield",     "exit_google_yield",
-    "enter_google_exception", "exit_google_exception",
-    "enter_google_warning",   "exit_google_warning",
-    "enter_google_see_also_item", "exit_google_see_also_item",
-    "enter_google_attribute", "exit_google_attribute",
-    "enter_google_method",    "exit_google_method",
-    "enter_numpy_docstring",  "exit_numpy_docstring",
-    "enter_numpy_deprecation","exit_numpy_deprecation",
-    "enter_numpy_section",    "exit_numpy_section",
-    "enter_numpy_parameter",  "exit_numpy_parameter",
-    "enter_numpy_returns",    "exit_numpy_returns",
-    "enter_numpy_yields",     "exit_numpy_yields",
-    "enter_numpy_exception",  "exit_numpy_exception",
-    "enter_numpy_warning",    "exit_numpy_warning",
-    "enter_numpy_see_also_item", "exit_numpy_see_also_item",
-    "enter_numpy_reference",  "exit_numpy_reference",
-    "enter_numpy_attribute",  "exit_numpy_attribute",
-    "enter_numpy_method",     "exit_numpy_method",
-    "enter_plain_docstring",  "exit_plain_docstring",
-])
-
-class Visitor:
-    """Base class for docstring visitors.
-
-    Subclass and override only the ``enter_*`` / ``exit_*`` methods you need.
-    Unoverridden methods are never called, so there is no dispatch overhead for
-    them during a ``walk()``.
-    """
-    # Visitor itself has no active methods.
-    __pydocstring_active__ = frozenset()
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        # Computed once at class-definition time and stored as a class variable.
-        # Rust reads this via a single extract() call — no per-instance cost.
-        cls.__pydocstring_active__ = frozenset(
-            name for name in _ALL_VISITOR_METHODS
-            if not getattr(getattr(cls, name, None), '__pydocstring_noop__', False)
-        )
-    # ── Google ────────────────────────────────────────────────────────────
-    @_pydocstring_noop
-    def enter_google_docstring(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_google_docstring(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_google_section(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_google_section(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_google_arg(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_google_arg(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_google_return(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_google_return(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_google_yield(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_google_yield(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_google_exception(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_google_exception(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_google_warning(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_google_warning(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_google_see_also_item(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_google_see_also_item(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_google_attribute(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_google_attribute(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_google_method(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_google_method(self, node, ctx): pass
-    # ── NumPy ─────────────────────────────────────────────────────────────
-    @_pydocstring_noop
-    def enter_numpy_docstring(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_numpy_docstring(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_numpy_deprecation(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_numpy_deprecation(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_numpy_section(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_numpy_section(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_numpy_parameter(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_numpy_parameter(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_numpy_returns(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_numpy_returns(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_numpy_yields(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_numpy_yields(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_numpy_exception(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_numpy_exception(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_numpy_warning(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_numpy_warning(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_numpy_see_also_item(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_numpy_see_also_item(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_numpy_reference(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_numpy_reference(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_numpy_attribute(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_numpy_attribute(self, node, ctx): pass
-    @_pydocstring_noop
-    def enter_numpy_method(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_numpy_method(self, node, ctx): pass
-    # ── Plain ─────────────────────────────────────────────────────────────
-    @_pydocstring_noop
-    def enter_plain_docstring(self, node, ctx): pass
-    @_pydocstring_noop
-    def exit_plain_docstring(self, node, ctx): pass
-"#;
+/// `Visitor` is defined in `python/pydocstring/_visitor.py`.
+/// `collect_active` reads `__pydocstring_active__` (a frozenset set by
+/// `Visitor.__init_subclass__`) once via a single PyO3 `extract` call
+/// and builds a pure-Rust `ActiveMethods` struct.
 
 #[pymodule]
-fn pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Functions
     m.add_function(wrap_pyfunction!(parse, m)?)?;
     m.add_function(wrap_pyfunction!(parse_google, m)?)?;
@@ -3077,10 +2930,5 @@ fn pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyModelAttribute>()?;
     m.add_class::<PyModelMethod>()?;
     m.add_class::<PyModelDeprecation>()?;
-    // Visitor base class (pure Python, defined via VISITOR_CLASS_CODE)
-    let py = m.py();
-    let globals = pyo3::types::PyDict::new_bound(py);
-    py.run_bound(VISITOR_CLASS_CODE, Some(&globals), None)?;
-    m.add("Visitor", globals.get_item("Visitor")?.expect("Visitor not defined"))?;
     Ok(())
 }

@@ -33,6 +33,7 @@ Documentation = "https://github.com/qraqras/pydocstring"
 
 [tool.maturin]
 manifest-path = "Cargo.toml"
-module-name = "pydocstring"
+module-name = "pydocstring._pydocstring"
+python-source = "python"
 features = ["pyo3/extension-module"]
-include = ["pydocstring.pyi", "LICENSE"]
+include = ["LICENSE"]
