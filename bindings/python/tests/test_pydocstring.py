@@ -1,3 +1,4 @@
+import pytest
 import pydocstring
 
 
@@ -41,9 +42,9 @@ class TestParseGoogle:
         assert len(sections) == 1
         assert sections[0].section_kind == pydocstring.GoogleSectionKind.ARGS
 
-        class Collector:
+        class Collector(pydocstring.Visitor):
             def __init__(self): self.args = []
-            def visit_google_arg(self, arg, ctx): self.args.append(arg)
+            def enter_google_arg(self, arg, ctx): self.args.append(arg)
 
         args = pydocstring.walk(doc, Collector()).args
         assert len(args) == 2
@@ -60,9 +61,9 @@ class TestParseGoogle:
         section = doc.sections[0]
         assert section.section_kind == pydocstring.GoogleSectionKind.RETURNS
 
-        class Collector:
+        class Collector(pydocstring.Visitor):
             def __init__(self): self.ret = None
-            def visit_google_return(self, ret, ctx): self.ret = ret
+            def enter_google_return(self, ret, ctx): self.ret = ret
 
         ret = pydocstring.walk(doc, Collector()).ret
         assert ret is not None
@@ -76,9 +77,9 @@ class TestParseGoogle:
         section = doc.sections[0]
         assert section.section_kind == pydocstring.GoogleSectionKind.RAISES
 
-        class Collector:
+        class Collector(pydocstring.Visitor):
             def __init__(self): self.excepts = []
-            def visit_google_exception(self, exc, ctx): self.excepts.append(exc)
+            def enter_google_exception(self, exc, ctx): self.excepts.append(exc)
 
         excepts = pydocstring.walk(doc, Collector()).excepts
         assert len(excepts) == 1
@@ -95,9 +96,9 @@ class TestParseGoogle:
         section = doc.sections[0]
         assert section.section_kind == pydocstring.GoogleSectionKind.NOTES
 
-        class Collector:
+        class Collector(pydocstring.Visitor):
             def __init__(self): self.sections = []
-            def visit_google_section(self, sec, ctx): self.sections.append(sec)
+            def enter_google_section(self, sec, ctx): self.sections.append(sec)
 
         sections = pydocstring.walk(doc, Collector()).sections
         assert len(sections) == 1
@@ -125,9 +126,9 @@ class TestParseGoogle:
         section = doc.sections[0]
         assert section.section_kind == pydocstring.GoogleSectionKind.YIELDS
 
-        class Collector:
+        class Collector(pydocstring.Visitor):
             def __init__(self): self.yld = None
-            def visit_google_yield(self, yld, ctx): self.yld = yld
+            def enter_google_yield(self, yld, ctx): self.yld = yld
 
         yld = pydocstring.walk(doc, Collector()).yld
         assert yld is not None
@@ -158,9 +159,9 @@ class TestParseNumPy:
         assert len(sections) == 1
         assert sections[0].section_kind == pydocstring.NumPySectionKind.PARAMETERS
 
-        class Collector:
+        class Collector(pydocstring.Visitor):
             def __init__(self): self.params = []
-            def visit_numpy_parameter(self, prm, ctx): self.params.append(prm)
+            def enter_numpy_parameter(self, prm, ctx): self.params.append(prm)
 
         params = pydocstring.walk(doc, Collector()).params
         assert len(params) == 2
@@ -176,9 +177,9 @@ class TestParseNumPy:
         section = doc.sections[0]
         assert section.section_kind == pydocstring.NumPySectionKind.RETURNS
 
-        class Collector:
+        class Collector(pydocstring.Visitor):
             def __init__(self): self.returns = []
-            def visit_numpy_returns(self, rtn, ctx): self.returns.append(rtn)
+            def enter_numpy_returns(self, rtn, ctx): self.returns.append(rtn)
 
         returns = pydocstring.walk(doc, Collector()).returns
         assert len(returns) == 1
@@ -192,9 +193,9 @@ class TestParseNumPy:
         section = doc.sections[0]
         assert section.section_kind == pydocstring.NumPySectionKind.RAISES
 
-        class Collector:
+        class Collector(pydocstring.Visitor):
             def __init__(self): self.excepts = []
-            def visit_numpy_exception(self, exc, ctx): self.excepts.append(exc)
+            def enter_numpy_exception(self, exc, ctx): self.excepts.append(exc)
 
         excepts = pydocstring.walk(doc, Collector()).excepts
         assert len(excepts) == 1
@@ -572,11 +573,11 @@ class TestWalk:
         source = "Summary.\n\nArgs:\n    x (int): The x value.\n    y (str): The y value."
         doc = pydocstring.parse_google(source)
 
-        class Collector:
+        class Collector(pydocstring.Visitor):
             def __init__(self):
                 self.arg_names = []
 
-            def visit_google_arg(self, arg, ctx):
+            def enter_google_arg(self, arg, ctx):
                 self.arg_names.append(arg.name.text)
 
         collector = Collector()
@@ -587,11 +588,11 @@ class TestWalk:
         source = "Summary.\n\nParameters\n----------\nx : int\n    Desc x.\ny : str\n    Desc y."
         doc = pydocstring.parse_numpy(source)
 
-        class Collector:
+        class Collector(pydocstring.Visitor):
             def __init__(self):
                 self.names = []
 
-            def visit_numpy_parameter(self, param, ctx):
+            def enter_numpy_parameter(self, param, ctx):
                 self.names.append(param.names[0].text)
 
         collector = Collector()
@@ -601,15 +602,14 @@ class TestWalk:
     def test_walk_plain_dispatches_plain_docstring(self):
         doc = pydocstring.parse_plain("Just a summary.")
 
-        class Collector:
+        class Collector(pydocstring.Visitor):
             def __init__(self):
                 self.called = False
 
-            def visit_plain_docstring(self, plain_doc, ctx):
+            def enter_plain_docstring(self, plain_doc, ctx):
                 self.called = True
                 assert plain_doc.summary is not None
                 assert plain_doc.summary.text == "Just a summary."
-                assert ctx.style == pydocstring.Style.PLAIN
 
         collector = Collector()
         pydocstring.walk(doc, collector)
@@ -618,14 +618,14 @@ class TestWalk:
     def test_walk_plain_no_google_numpy_dispatch(self):
         doc = pydocstring.parse_plain("Just a summary.")
 
-        class Collector:
+        class Collector(pydocstring.Visitor):
             def __init__(self):
                 self.called = False
 
-            def visit_google_arg(self, arg, ctx):
+            def enter_google_arg(self, arg, ctx):
                 self.called = True
 
-            def visit_numpy_parameter(self, param, ctx):
+            def enter_numpy_parameter(self, param, ctx):
                 self.called = True
 
         collector = Collector()
@@ -633,7 +633,6 @@ class TestWalk:
         assert not collector.called
 
     def test_walk_rejects_wrong_type(self):
-        import pytest
         with pytest.raises(TypeError):
             pydocstring.walk("not a docstring", object())
 
@@ -644,8 +643,8 @@ class TestWalk:
         assert isinstance(doc, pydocstring.GoogleDocstring)
 
         names = []
-        class V:
-            def visit_google_arg(self, arg, ctx):
+        class V(pydocstring.Visitor):
+            def enter_google_arg(self, arg, ctx):
                 names.append(arg.name.text)
 
         pydocstring.walk(doc, V())
@@ -658,24 +657,30 @@ class TestWalk:
         assert isinstance(doc, pydocstring.NumPyDocstring)
 
         names = []
-        class V:
-            def visit_numpy_parameter(self, param, ctx):
+        class V(pydocstring.Visitor):
+            def enter_numpy_parameter(self, param, ctx):
                 names.append(param.names[0].text)
 
         pydocstring.walk(doc, V())
         assert names == ["a"]
 
     def test_walk_visitor_without_methods_is_safe(self):
-        """A visitor with no visit_* methods should not raise."""
+        """A Visitor with no overrides should not raise."""
         doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x: Desc.")
-        pydocstring.walk(doc, object())
+        pydocstring.walk(doc, pydocstring.Visitor())
+
+    def test_walk_non_visitor_raises_type_error(self):
+        """Passing a non-Visitor object raises TypeError."""
+        doc = pydocstring.parse_google("Summary.")
+        with pytest.raises(TypeError, match="must subclass pydocstring.Visitor"):
+            pydocstring.walk(doc, object())
 
     def test_walk_returns_visitor(self):
         """walk() returns the visitor object."""
         doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x (int): Desc.")
 
-        class V:
-            def visit_google_arg(self, arg, ctx):
+        class V(pydocstring.Visitor):
+            def enter_google_arg(self, arg, ctx):
                 pass
 
         v = V()
@@ -689,8 +694,8 @@ class TestWalk:
 
         line_cols = []
 
-        class V:
-            def visit_google_arg(self, arg, ctx):
+        class V(pydocstring.Visitor):
+            def enter_google_arg(self, arg, ctx):
                 lc = ctx.line_col(arg.range.start)
                 line_cols.append((lc.lineno, lc.col))
 
@@ -699,35 +704,54 @@ class TestWalk:
         # arg starts on line 4 (1-based), col 4 (0-based, after 4 spaces)
         assert line_cols[0] == (4, 4)
 
-    def test_ctx_style_google(self):
-        doc = pydocstring.parse_google("Summary.")
-        styles = []
+    # ── Visitor base class tests ──────────────────────────────────────────
 
-        class V:
-            def visit_google_docstring(self, d, ctx):
-                styles.append(ctx.style)
+    def test_visitor_is_importable(self):
+        """pydocstring.Visitor exists and is instantiable."""
+        v = pydocstring.Visitor()
+        assert isinstance(v, pydocstring.Visitor)
 
+    def test_visitor_base_methods_not_dispatched(self):
+        """Unoverridden Visitor methods are not called during walk()."""
+        called = []
+
+        class V(pydocstring.Visitor):
+            pass  # override nothing
+
+        doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x: Desc.")
         pydocstring.walk(doc, V())
-        assert styles == [pydocstring.Style.GOOGLE]
+        assert called == []
 
-    def test_ctx_style_numpy(self):
-        doc = pydocstring.parse_numpy("Summary.")
-        styles = []
+    def test_visitor_overridden_method_is_dispatched(self):
+        """An overridden Visitor method is called during walk()."""
+        names = []
 
-        class V:
-            def visit_numpy_docstring(self, d, ctx):
-                styles.append(ctx.style)
+        class V(pydocstring.Visitor):
+            def enter_google_arg(self, node, ctx):
+                names.append(node.name.text)
 
+        doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x: Desc.\n    y: Desc.")
         pydocstring.walk(doc, V())
-        assert styles == [pydocstring.Style.NUMPY]
+        assert names == ["x", "y"]
 
-    def test_ctx_style_plain(self):
-        doc = pydocstring.parse_plain("Summary.")
-        styles = []
+    def test_visitor_only_overridden_methods_dispatched(self):
+        """Only overridden methods fire; base no-ops are silent."""
+        events = []
 
-        class V:
-            def visit_plain_docstring(self, d, ctx):
-                styles.append(ctx.style)
+        class V(pydocstring.Visitor):
+            def enter_google_arg(self, node, ctx):
+                events.append(("enter_arg", node.name.text))
+            # exit_google_arg intentionally NOT overridden
 
+        doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x: Desc.")
         pydocstring.walk(doc, V())
-        assert styles == [pydocstring.Style.PLAIN]
+        assert events == [("enter_arg", "x")]
+
+    def test_visitor_duck_typing_raises_type_error(self):
+        """Non-Visitor objects raise TypeError."""
+        class Duck:
+            def enter_google_arg(self, node, ctx): pass
+
+        doc = pydocstring.parse_google("Summary.\n\nArgs:\n    z: Desc.")
+        with pytest.raises(TypeError, match="must subclass pydocstring.Visitor"):
+            pydocstring.walk(doc, Duck())
