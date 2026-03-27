@@ -326,8 +326,8 @@ class TestModelTypes:
 class TestSection:
     def test_parameters_section(self):
         p = pydocstring.Parameter(["x"], type_annotation="int", description="Value.")
-        sec = pydocstring.Section("parameters", parameters=[p])
-        assert sec.kind == "parameters"
+        sec = pydocstring.Section(pydocstring.SectionKind.PARAMETERS, parameters=[p])
+        assert sec.kind == pydocstring.SectionKind.PARAMETERS
         params = sec.parameters
         assert len(params) == 1
         assert params[0].names == ["x"]
@@ -335,26 +335,26 @@ class TestSection:
 
     def test_returns_section(self):
         r = pydocstring.Return(type_annotation="bool", description="Success.")
-        sec = pydocstring.Section("returns", returns=[r])
-        assert sec.kind == "returns"
+        sec = pydocstring.Section(pydocstring.SectionKind.RETURNS, returns=[r])
+        assert sec.kind == pydocstring.SectionKind.RETURNS
         rets = sec.returns
         assert len(rets) == 1
         assert rets[0].type_annotation == "bool"
 
     def test_raises_section(self):
         e = pydocstring.ExceptionEntry("ValueError", description="Bad value.")
-        sec = pydocstring.Section("raises", exceptions=[e])
-        assert sec.kind == "raises"
+        sec = pydocstring.Section(pydocstring.SectionKind.RAISES, exceptions=[e])
+        assert sec.kind == pydocstring.SectionKind.RAISES
         assert len(sec.exceptions) == 1
         assert sec.exceptions[0].type_name == "ValueError"
 
     def test_free_text_section(self):
-        sec = pydocstring.Section("notes", body="Some notes here.")
-        assert sec.kind == "notes"
+        sec = pydocstring.Section(pydocstring.SectionKind.NOTES, body="Some notes here.")
+        assert sec.kind == pydocstring.SectionKind.NOTES
         assert sec.body == "Some notes here."
 
     def test_empty_accessors(self):
-        sec = pydocstring.Section("parameters", parameters=[])
+        sec = pydocstring.Section(pydocstring.SectionKind.PARAMETERS, parameters=[])
         assert sec.returns == []
         assert sec.exceptions == []
         assert sec.body is None
@@ -375,10 +375,10 @@ class TestDocstringModel:
 
     def test_with_sections(self):
         p = pydocstring.Parameter(["x"], type_annotation="int")
-        sec = pydocstring.Section("parameters", parameters=[p])
+        sec = pydocstring.Section(pydocstring.SectionKind.PARAMETERS, parameters=[p])
         doc = pydocstring.Docstring(summary="Brief.", sections=[sec])
         assert len(doc.sections) == 1
-        assert doc.sections[0].kind == "parameters"
+        assert doc.sections[0].kind == pydocstring.SectionKind.PARAMETERS
 
     def test_with_deprecation(self):
         dep = pydocstring.Deprecation("2.0", description="Removed.")
@@ -395,7 +395,7 @@ class TestToModel:
         model = doc.to_model()
         assert model.summary == "Summary."
         assert len(model.sections) == 1
-        assert model.sections[0].kind == "parameters"
+        assert model.sections[0].kind == pydocstring.SectionKind.PARAMETERS
         params = model.sections[0].parameters
         assert len(params) == 1
         assert params[0].names == ["x"]
@@ -409,7 +409,7 @@ class TestToModel:
         model = doc.to_model()
         assert model.summary == "Summary."
         assert len(model.sections) == 1
-        assert model.sections[0].kind == "parameters"
+        assert model.sections[0].kind == pydocstring.SectionKind.PARAMETERS
         params = model.sections[0].parameters
         assert len(params) == 1
         assert params[0].names == ["x"]
@@ -420,7 +420,7 @@ class TestToModel:
             "Summary.\n\nRaises:\n    ValueError: Bad input.\n"
         )
         model = doc.to_model()
-        assert model.sections[0].kind == "raises"
+        assert model.sections[0].kind == pydocstring.SectionKind.RAISES
         assert model.sections[0].exceptions[0].type_name == "ValueError"
 
     def test_google_to_model_returns(self):
@@ -428,7 +428,7 @@ class TestToModel:
             "Summary.\n\nReturns:\n    int: The result.\n"
         )
         model = doc.to_model()
-        assert model.sections[0].kind == "returns"
+        assert model.sections[0].kind == pydocstring.SectionKind.RETURNS
         rets = model.sections[0].returns
         assert len(rets) == 1
         assert rets[0].type_annotation == "int"

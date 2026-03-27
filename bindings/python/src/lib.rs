@@ -808,11 +808,10 @@ impl PyGoogleDocstring {
         Py::new(py, byte_offset_to_line_col(&self.source, offset as usize)?)
     }
     fn pretty_print(&self) -> String {
-        google::parse_google(&self.source).pretty_print()
+        self.parsed.pretty_print()
     }
     fn to_model(&self) -> PyResult<PyModelDocstring> {
-        let parsed = google::parse_google(&self.source);
-        pydocstring_core::parse::google::to_model::to_model(&parsed)
+        pydocstring_core::parse::google::to_model::to_model(&self.parsed)
             .map(|doc| PyModelDocstring { inner: doc })
             .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("failed to convert to model"))
     }
@@ -1387,11 +1386,10 @@ impl PyNumPyDocstring {
         Py::new(py, byte_offset_to_line_col(&self.source, offset as usize)?)
     }
     fn pretty_print(&self) -> String {
-        pydocstring_core::parse::numpy::parse_numpy(&self.source).pretty_print()
+        self.parsed.pretty_print()
     }
     fn to_model(&self) -> PyResult<PyModelDocstring> {
-        let parsed = pydocstring_core::parse::numpy::parse_numpy(&self.source);
-        pydocstring_core::parse::numpy::to_model::to_model(&parsed)
+        pydocstring_core::parse::numpy::to_model::to_model(&self.parsed)
             .map(|doc| PyModelDocstring { inner: doc })
             .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("failed to convert to model"))
     }
@@ -1478,11 +1476,10 @@ impl PyPlainDocstring {
         Py::new(py, byte_offset_to_line_col(&self.source, offset as usize)?)
     }
     fn pretty_print(&self) -> String {
-        pydocstring_core::parse::plain::parse_plain(&self.source).pretty_print()
+        self.parsed.pretty_print()
     }
     fn to_model(&self) -> PyResult<PyModelDocstring> {
-        let parsed = pydocstring_core::parse::plain::parse_plain(&self.source);
-        pydocstring_core::parse::plain::to_model::to_model(&parsed)
+        pydocstring_core::parse::plain::to_model::to_model(&self.parsed)
             .map(|doc| PyModelDocstring { inner: doc })
             .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("failed to convert to model"))
     }
@@ -1742,42 +1739,6 @@ impl PyModelMethod {
     }
 }
 
-// ─── Model section helpers ───────────────────────────────────────────────────
-
-fn free_section_kind_to_str(kind: &model::FreeSectionKind) -> &str {
-    match kind {
-        model::FreeSectionKind::Notes => "notes",
-        model::FreeSectionKind::Examples => "examples",
-        model::FreeSectionKind::Warnings => "warnings",
-        model::FreeSectionKind::Todo => "todo",
-        model::FreeSectionKind::Attention => "attention",
-        model::FreeSectionKind::Caution => "caution",
-        model::FreeSectionKind::Danger => "danger",
-        model::FreeSectionKind::Error => "error",
-        model::FreeSectionKind::Hint => "hint",
-        model::FreeSectionKind::Important => "important",
-        model::FreeSectionKind::Tip => "tip",
-        model::FreeSectionKind::Unknown(name) => name.as_str(),
-    }
-}
-
-fn str_to_free_section_kind(s: &str) -> model::FreeSectionKind {
-    match s {
-        "notes" => model::FreeSectionKind::Notes,
-        "examples" => model::FreeSectionKind::Examples,
-        "warnings" => model::FreeSectionKind::Warnings,
-        "todo" => model::FreeSectionKind::Todo,
-        "attention" => model::FreeSectionKind::Attention,
-        "caution" => model::FreeSectionKind::Caution,
-        "danger" => model::FreeSectionKind::Danger,
-        "error" => model::FreeSectionKind::Error,
-        "hint" => model::FreeSectionKind::Hint,
-        "important" => model::FreeSectionKind::Important,
-        "tip" => model::FreeSectionKind::Tip,
-        other => model::FreeSectionKind::Unknown(other.to_string()),
-    }
-}
-
 fn extract_parameters(py: Python<'_>, entries: &[Py<PyModelParameter>]) -> Vec<model::Parameter> {
     entries
         .iter()
@@ -1875,6 +1836,128 @@ fn extract_references(py: Python<'_>, entries: &[Py<PyModelReference>]) -> Vec<m
         .collect()
 }
 
+// ─── SectionKind ─────────────────────────────────────────────────────────────
+
+#[pyclass(eq, eq_int, frozen, hash, name = "SectionKind")]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum PySectionKind {
+    #[pyo3(name = "PARAMETERS")]
+    Parameters,
+    #[pyo3(name = "KEYWORD_PARAMETERS")]
+    KeywordParameters,
+    #[pyo3(name = "OTHER_PARAMETERS")]
+    OtherParameters,
+    #[pyo3(name = "RECEIVES")]
+    Receives,
+    #[pyo3(name = "RETURNS")]
+    Returns,
+    #[pyo3(name = "YIELDS")]
+    Yields,
+    #[pyo3(name = "RAISES")]
+    Raises,
+    #[pyo3(name = "WARNS")]
+    Warns,
+    #[pyo3(name = "ATTRIBUTES")]
+    Attributes,
+    #[pyo3(name = "METHODS")]
+    Methods,
+    #[pyo3(name = "SEE_ALSO")]
+    SeeAlso,
+    #[pyo3(name = "REFERENCES")]
+    References,
+    #[pyo3(name = "NOTES")]
+    Notes,
+    #[pyo3(name = "EXAMPLES")]
+    Examples,
+    #[pyo3(name = "WARNINGS")]
+    Warnings,
+    #[pyo3(name = "TODO")]
+    Todo,
+    #[pyo3(name = "ATTENTION")]
+    Attention,
+    #[pyo3(name = "CAUTION")]
+    Caution,
+    #[pyo3(name = "DANGER")]
+    Danger,
+    #[pyo3(name = "ERROR")]
+    Error,
+    #[pyo3(name = "HINT")]
+    Hint,
+    #[pyo3(name = "IMPORTANT")]
+    Important,
+    #[pyo3(name = "TIP")]
+    Tip,
+    #[pyo3(name = "UNKNOWN")]
+    Unknown,
+}
+
+fn py_section_kind_name(kind: PySectionKind) -> &'static str {
+    match kind {
+        PySectionKind::Parameters => "PARAMETERS",
+        PySectionKind::KeywordParameters => "KEYWORD_PARAMETERS",
+        PySectionKind::OtherParameters => "OTHER_PARAMETERS",
+        PySectionKind::Receives => "RECEIVES",
+        PySectionKind::Returns => "RETURNS",
+        PySectionKind::Yields => "YIELDS",
+        PySectionKind::Raises => "RAISES",
+        PySectionKind::Warns => "WARNS",
+        PySectionKind::Attributes => "ATTRIBUTES",
+        PySectionKind::Methods => "METHODS",
+        PySectionKind::SeeAlso => "SEE_ALSO",
+        PySectionKind::References => "REFERENCES",
+        PySectionKind::Notes => "NOTES",
+        PySectionKind::Examples => "EXAMPLES",
+        PySectionKind::Warnings => "WARNINGS",
+        PySectionKind::Todo => "TODO",
+        PySectionKind::Attention => "ATTENTION",
+        PySectionKind::Caution => "CAUTION",
+        PySectionKind::Danger => "DANGER",
+        PySectionKind::Error => "ERROR",
+        PySectionKind::Hint => "HINT",
+        PySectionKind::Important => "IMPORTANT",
+        PySectionKind::Tip => "TIP",
+        PySectionKind::Unknown => "UNKNOWN",
+    }
+}
+
+#[pymethods]
+impl PySectionKind {
+    fn __repr__(&self) -> String {
+        format!("SectionKind.{}", py_section_kind_name(*self))
+    }
+}
+
+fn section_to_py_kind(section: &model::Section) -> PySectionKind {
+    match section {
+        model::Section::Parameters(_) => PySectionKind::Parameters,
+        model::Section::KeywordParameters(_) => PySectionKind::KeywordParameters,
+        model::Section::OtherParameters(_) => PySectionKind::OtherParameters,
+        model::Section::Receives(_) => PySectionKind::Receives,
+        model::Section::Returns(_) => PySectionKind::Returns,
+        model::Section::Yields(_) => PySectionKind::Yields,
+        model::Section::Raises(_) => PySectionKind::Raises,
+        model::Section::Warns(_) => PySectionKind::Warns,
+        model::Section::Attributes(_) => PySectionKind::Attributes,
+        model::Section::Methods(_) => PySectionKind::Methods,
+        model::Section::SeeAlso(_) => PySectionKind::SeeAlso,
+        model::Section::References(_) => PySectionKind::References,
+        model::Section::FreeText { kind, .. } => match kind {
+            model::FreeSectionKind::Notes => PySectionKind::Notes,
+            model::FreeSectionKind::Examples => PySectionKind::Examples,
+            model::FreeSectionKind::Warnings => PySectionKind::Warnings,
+            model::FreeSectionKind::Todo => PySectionKind::Todo,
+            model::FreeSectionKind::Attention => PySectionKind::Attention,
+            model::FreeSectionKind::Caution => PySectionKind::Caution,
+            model::FreeSectionKind::Danger => PySectionKind::Danger,
+            model::FreeSectionKind::Error => PySectionKind::Error,
+            model::FreeSectionKind::Hint => PySectionKind::Hint,
+            model::FreeSectionKind::Important => PySectionKind::Important,
+            model::FreeSectionKind::Tip => PySectionKind::Tip,
+            model::FreeSectionKind::Unknown(_) => PySectionKind::Unknown,
+        },
+    }
+}
+
 // ─── Model Section ───────────────────────────────────────────────────────────
 
 #[pyclass(name = "Section")]
@@ -1886,11 +1969,12 @@ struct PyModelSection {
 #[pymethods]
 impl PyModelSection {
     #[new]
-    #[pyo3(signature = (kind, *, parameters=None, returns=None, exceptions=None, attributes=None, methods=None, see_also_entries=None, references=None, body=None))]
+    #[pyo3(signature = (kind, *, unknown_name=None, parameters=None, returns=None, exceptions=None, attributes=None, methods=None, see_also_entries=None, references=None, body=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         py: Python<'_>,
-        kind: &str,
+        kind: PySectionKind,
+        unknown_name: Option<String>,
         parameters: Option<Vec<Py<PyModelParameter>>>,
         returns: Option<Vec<Py<PyModelReturn>>>,
         exceptions: Option<Vec<Py<PyModelExceptionEntry>>>,
@@ -1901,24 +1985,78 @@ impl PyModelSection {
         body: Option<String>,
     ) -> PyResult<Self> {
         let inner = match kind {
-            "parameters" => model::Section::Parameters(extract_parameters(py, &parameters.unwrap_or_default())),
-            "keyword_parameters" => {
+            PySectionKind::Parameters => {
+                model::Section::Parameters(extract_parameters(py, &parameters.unwrap_or_default()))
+            }
+            PySectionKind::KeywordParameters => {
                 model::Section::KeywordParameters(extract_parameters(py, &parameters.unwrap_or_default()))
             }
-            "other_parameters" => {
+            PySectionKind::OtherParameters => {
                 model::Section::OtherParameters(extract_parameters(py, &parameters.unwrap_or_default()))
             }
-            "receives" => model::Section::Receives(extract_parameters(py, &parameters.unwrap_or_default())),
-            "returns" => model::Section::Returns(extract_returns(py, &returns.unwrap_or_default())),
-            "yields" => model::Section::Yields(extract_returns(py, &returns.unwrap_or_default())),
-            "raises" => model::Section::Raises(extract_exceptions(py, &exceptions.unwrap_or_default())),
-            "warns" => model::Section::Warns(extract_exceptions(py, &exceptions.unwrap_or_default())),
-            "attributes" => model::Section::Attributes(extract_attributes(py, &attributes.unwrap_or_default())),
-            "methods" => model::Section::Methods(extract_methods(py, &methods.unwrap_or_default())),
-            "see_also" => model::Section::SeeAlso(extract_see_also(py, &see_also_entries.unwrap_or_default())),
-            "references" => model::Section::References(extract_references(py, &references.unwrap_or_default())),
-            other => model::Section::FreeText {
-                kind: str_to_free_section_kind(other),
+            PySectionKind::Receives => {
+                model::Section::Receives(extract_parameters(py, &parameters.unwrap_or_default()))
+            }
+            PySectionKind::Returns => model::Section::Returns(extract_returns(py, &returns.unwrap_or_default())),
+            PySectionKind::Yields => model::Section::Yields(extract_returns(py, &returns.unwrap_or_default())),
+            PySectionKind::Raises => model::Section::Raises(extract_exceptions(py, &exceptions.unwrap_or_default())),
+            PySectionKind::Warns => model::Section::Warns(extract_exceptions(py, &exceptions.unwrap_or_default())),
+            PySectionKind::Attributes => {
+                model::Section::Attributes(extract_attributes(py, &attributes.unwrap_or_default()))
+            }
+            PySectionKind::Methods => model::Section::Methods(extract_methods(py, &methods.unwrap_or_default())),
+            PySectionKind::SeeAlso => {
+                model::Section::SeeAlso(extract_see_also(py, &see_also_entries.unwrap_or_default()))
+            }
+            PySectionKind::References => {
+                model::Section::References(extract_references(py, &references.unwrap_or_default()))
+            }
+            PySectionKind::Notes => model::Section::FreeText {
+                kind: model::FreeSectionKind::Notes,
+                body: body.unwrap_or_default(),
+            },
+            PySectionKind::Examples => model::Section::FreeText {
+                kind: model::FreeSectionKind::Examples,
+                body: body.unwrap_or_default(),
+            },
+            PySectionKind::Warnings => model::Section::FreeText {
+                kind: model::FreeSectionKind::Warnings,
+                body: body.unwrap_or_default(),
+            },
+            PySectionKind::Todo => model::Section::FreeText {
+                kind: model::FreeSectionKind::Todo,
+                body: body.unwrap_or_default(),
+            },
+            PySectionKind::Attention => model::Section::FreeText {
+                kind: model::FreeSectionKind::Attention,
+                body: body.unwrap_or_default(),
+            },
+            PySectionKind::Caution => model::Section::FreeText {
+                kind: model::FreeSectionKind::Caution,
+                body: body.unwrap_or_default(),
+            },
+            PySectionKind::Danger => model::Section::FreeText {
+                kind: model::FreeSectionKind::Danger,
+                body: body.unwrap_or_default(),
+            },
+            PySectionKind::Error => model::Section::FreeText {
+                kind: model::FreeSectionKind::Error,
+                body: body.unwrap_or_default(),
+            },
+            PySectionKind::Hint => model::Section::FreeText {
+                kind: model::FreeSectionKind::Hint,
+                body: body.unwrap_or_default(),
+            },
+            PySectionKind::Important => model::Section::FreeText {
+                kind: model::FreeSectionKind::Important,
+                body: body.unwrap_or_default(),
+            },
+            PySectionKind::Tip => model::Section::FreeText {
+                kind: model::FreeSectionKind::Tip,
+                body: body.unwrap_or_default(),
+            },
+            PySectionKind::Unknown => model::Section::FreeText {
+                kind: model::FreeSectionKind::Unknown(unknown_name.unwrap_or_default()),
                 body: body.unwrap_or_default(),
             },
         };
@@ -1926,21 +2064,18 @@ impl PyModelSection {
     }
 
     #[getter]
-    fn kind(&self) -> &str {
+    fn kind(&self) -> PySectionKind {
+        section_to_py_kind(&self.inner)
+    }
+
+    #[getter]
+    fn unknown_name(&self) -> Option<&str> {
         match &self.inner {
-            model::Section::Parameters(_) => "parameters",
-            model::Section::KeywordParameters(_) => "keyword_parameters",
-            model::Section::OtherParameters(_) => "other_parameters",
-            model::Section::Receives(_) => "receives",
-            model::Section::Returns(_) => "returns",
-            model::Section::Yields(_) => "yields",
-            model::Section::Raises(_) => "raises",
-            model::Section::Warns(_) => "warns",
-            model::Section::Attributes(_) => "attributes",
-            model::Section::Methods(_) => "methods",
-            model::Section::SeeAlso(_) => "see_also",
-            model::Section::References(_) => "references",
-            model::Section::FreeText { kind, .. } => free_section_kind_to_str(kind),
+            model::Section::FreeText {
+                kind: model::FreeSectionKind::Unknown(name),
+                ..
+            } => Some(name.as_str()),
+            _ => None,
         }
     }
 
@@ -2095,7 +2230,10 @@ impl PyModelSection {
     }
 
     fn __repr__(&self) -> String {
-        format!("Section({})", self.kind())
+        format!(
+            "Section(SectionKind.{})",
+            py_section_kind_name(section_to_py_kind(&self.inner))
+        )
     }
 }
 
@@ -2920,6 +3058,7 @@ fn _pydocstring(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Plain CST wrapper
     m.add_class::<PyPlainDocstring>()?;
     // Model IR
+    m.add_class::<PySectionKind>()?;
     m.add_class::<PyModelDocstring>()?;
     m.add_class::<PyModelSection>()?;
     m.add_class::<PyModelParameter>()?;

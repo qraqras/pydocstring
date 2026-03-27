@@ -546,10 +546,40 @@ class Method:
     ) -> None: ...
     def __repr__(self) -> str: ...
 
+class SectionKind:
+    """Style-independent section kind for the model IR."""
+    PARAMETERS: SectionKind
+    KEYWORD_PARAMETERS: SectionKind
+    OTHER_PARAMETERS: SectionKind
+    RECEIVES: SectionKind
+    RETURNS: SectionKind
+    YIELDS: SectionKind
+    RAISES: SectionKind
+    WARNS: SectionKind
+    ATTRIBUTES: SectionKind
+    METHODS: SectionKind
+    SEE_ALSO: SectionKind
+    REFERENCES: SectionKind
+    NOTES: SectionKind
+    EXAMPLES: SectionKind
+    WARNINGS: SectionKind
+    TODO: SectionKind
+    ATTENTION: SectionKind
+    CAUTION: SectionKind
+    DANGER: SectionKind
+    ERROR: SectionKind
+    HINT: SectionKind
+    IMPORTANT: SectionKind
+    TIP: SectionKind
+    UNKNOWN: SectionKind
+    def __repr__(self) -> str: ...
+
 class Section:
-    """A section in the model IR. ``kind`` is a lowercase string key."""
+    """A section in the model IR."""
     @property
-    def kind(self) -> str: ...
+    def kind(self) -> SectionKind: ...
+    @property
+    def unknown_name(self) -> str | None: ...
     @property
     def parameters(self) -> list[Parameter]: ...
     @property
@@ -568,8 +598,9 @@ class Section:
     def body(self) -> str | None: ...
     def __init__(
         self,
-        kind: str,
+        kind: SectionKind,
         *,
+        unknown_name: str | None = None,
         parameters: list[Parameter] | None = None,
         returns: list[Return] | None = None,
         exceptions: list[ExceptionEntry] | None = None,
