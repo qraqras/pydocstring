@@ -234,6 +234,29 @@ class TestToken:
         doc = pydocstring.parse_google("Summary.")
         assert not hasattr(doc.summary, "kind"), "Token must not expose a 'kind' field"
 
+    def test_is_missing_false_for_present_token(self):
+        doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x (int): Desc.")
+        args = []
+
+        class V(pydocstring.Visitor):
+            def enter_google_arg(self, arg, ctx):
+                args.append(arg)
+
+        pydocstring.walk(doc, V())
+        assert not args[0].type.is_missing()
+
+    def test_is_missing_true_for_empty_parens(self):
+        # "x ():" — brackets present but type content is absent
+        doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x (): Desc.")
+        args = []
+
+        class V(pydocstring.Visitor):
+            def enter_google_arg(self, arg, ctx):
+                args.append(arg)
+
+        pydocstring.walk(doc, V())
+        assert args[0].type.is_missing()
+
 
 class TestTextRange:
     def test_range_repr(self):
@@ -246,6 +269,21 @@ class TestTextRange:
         section = doc.sections[0]
         r = section.range
         assert r.start < r.end
+
+    def test_is_empty_false_for_normal_range(self):
+        doc = pydocstring.parse_google("Summary.")
+        assert not doc.summary.range.is_empty()
+
+    def test_is_empty_true_for_missing_token(self):
+        doc = pydocstring.parse_google("Summary.\n\nArgs:\n    x (): Desc.")
+        args = []
+
+        class V(pydocstring.Visitor):
+            def enter_google_arg(self, arg, ctx):
+                args.append(arg)
+
+        pydocstring.walk(doc, V())
+        assert args[0].type.range.is_empty()
 
 
 class TestLineColumn:

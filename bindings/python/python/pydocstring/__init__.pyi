@@ -16,6 +16,9 @@ class TextRange:
     """Byte range ``[start, end)`` within the source string."""
     start: int
     end: int
+    def is_empty(self) -> bool:
+        """Return ``True`` when ``start == end`` (zero-length placeholder)."""
+        ...
     def __repr__(self) -> str: ...
 
 class LineColumn:
@@ -100,6 +103,14 @@ class Token:
     def text(self) -> str: ...
     @property
     def range(self) -> TextRange: ...
+    def is_missing(self) -> bool:
+        """Return ``True`` when this token is a zero-length placeholder.
+
+        The parser inserts missing tokens for syntactically absent elements
+        such as the type in ``arg ():`` or a missing closing parenthesis.
+        Equivalent to ``token.range.is_empty()``.
+        """
+        ...
     def __repr__(self) -> str: ...
 
 class Style:

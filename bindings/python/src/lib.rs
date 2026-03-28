@@ -8,7 +8,7 @@ use pydocstring_core::parse::numpy::kind::NumPySectionKind;
 use pydocstring_core::parse::numpy::nodes as nn;
 use pydocstring_core::parse::plain::nodes as pn;
 use pydocstring_core::parse::visitor::{DocstringVisitor, walk as core_walk};
-use pydocstring_core::syntax::{Parsed, SyntaxElement, SyntaxNode, SyntaxToken};
+use pydocstring_core::syntax::{Parsed, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 use pydocstring_core::text::TextRange;
 use std::sync::Arc;
 
@@ -34,6 +34,13 @@ impl From<TextRange> for PyTextRange {
 
 #[pymethods]
 impl PyTextRange {
+    /// Whether the range is empty (``start == end``).
+    ///
+    /// An empty range is used as a zero-length placeholder for tokens that are
+    /// missing from the source (e.g. the type in ``arg ():``).
+    fn is_empty(&self) -> bool {
+        self.start == self.end
+    }
     fn __repr__(&self) -> String {
         format!("TextRange({}..{})", self.start, self.end)
     }
@@ -88,6 +95,15 @@ impl PyToken {
     fn range(&self, py: Python<'_>) -> PyResult<Py<PyTextRange>> {
         Py::new(py, PyTextRange::from(self.range))
     }
+    /// Whether this token is a zero-length placeholder inserted by the parser
+    /// to represent a syntactically missing element.
+    ///
+    /// For example, ``arg (int)`` without a closing ``)`` produces a missing
+    /// CLOSE_BRACKET token; ``arg ():`` produces a missing TYPE token.
+    /// Equivalent to ``token.range.is_empty()``.
+    fn is_missing(&self) -> bool {
+        self.range.is_empty()
+    }
     fn __repr__(&self) -> String {
         format!("Token({:?})", self.text)
     }
@@ -107,6 +123,19 @@ fn mk_token(py: Python<'_>, token: &SyntaxToken, source: &str) -> PyResult<Py<Py
 
 fn mk_token_opt(py: Python<'_>, token: Option<&SyntaxToken>, source: &str) -> PyResult<Option<Py<PyToken>>> {
     token.map(|t| mk_token(py, t, source)).transpose()
+}
+
+fn mk_token_or_missing(
+    py: Python<'_>,
+    present: Option<&SyntaxToken>,
+    node: &SyntaxNode,
+    kind: SyntaxKind,
+    source: &str,
+) -> PyResult<Option<Py<PyToken>>> {
+    match present {
+        Some(t) => Ok(Some(mk_token(py, t, source)?)),
+        None => mk_token_opt(py, node.find_missing(kind), source),
+    }
 }
 
 fn mk_tokens<'a>(
@@ -398,7 +427,7 @@ fn build_google_arg(py: Python<'_>, arg: &gn::GoogleArg<'_>, source: &str) -> Py
         PyGoogleArg {
             range: *arg.syntax().range(),
             name: mk_token(py, arg.name(), source)?,
-            r#type: mk_token_opt(py, arg.r#type(), source)?,
+            r#type: mk_token_or_missing(py, arg.r#type(), arg.syntax(), SyntaxKind::TYPE, source)?,
             description: mk_token_opt(py, arg.description(), source)?,
             optional: mk_token_opt(py, arg.optional(), source)?,
         },
@@ -935,10 +964,16 @@ fn build_numpy_parameter(py: Python<'_>, prm: &nn::NumPyParameter<'_>, source: &
         PyNumPyParameter {
             range: *prm.syntax().range(),
             names: mk_tokens(py, prm.names(), source)?,
-            r#type: mk_token_opt(py, prm.r#type(), source)?,
+            r#type: mk_token_or_missing(py, prm.r#type(), prm.syntax(), SyntaxKind::TYPE, source)?,
             description: mk_token_opt(py, prm.description(), source)?,
             optional: mk_token_opt(py, prm.optional(), source)?,
-            default_value: mk_token_opt(py, prm.default_value(), source)?,
+            default_value: mk_token_or_missing(
+                py,
+                prm.default_value(),
+                prm.syntax(),
+                SyntaxKind::DEFAULT_VALUE,
+                source,
+            )?,
         },
     )
 }
