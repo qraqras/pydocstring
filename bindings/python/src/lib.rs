@@ -104,6 +104,17 @@ impl PyToken {
     fn is_missing(&self) -> bool {
         self.range.is_empty()
     }
+    fn __eq__(&self, other: &PyToken) -> bool {
+        self.text == other.text && self.range == other.range
+    }
+    fn __hash__(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.text.hash(&mut hasher);
+        self.range.start().raw().hash(&mut hasher);
+        self.range.end().raw().hash(&mut hasher);
+        hasher.finish()
+    }
     fn __repr__(&self) -> String {
         format!("Token({:?})", self.text)
     }
@@ -2190,6 +2201,68 @@ impl PyModelSection {
         references: Option<Vec<Py<PyModelReference>>>,
         body: Option<String>,
     ) -> PyResult<Self> {
+        // Validate that only the relevant kwargs for this kind are supplied.
+        let kind_name = py_section_kind_name(kind);
+        macro_rules! reject {
+            ($cond:expr, $arg:literal) => {
+                if $cond {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                        "Section(SectionKind.{}) does not accept '{}'",
+                        kind_name, $arg
+                    )));
+                }
+            };
+        }
+
+        let uses_parameters = matches!(
+            kind,
+            PySectionKind::Parameters
+                | PySectionKind::KeywordParameters
+                | PySectionKind::OtherParameters
+                | PySectionKind::Receives
+        );
+        let uses_returns = matches!(kind, PySectionKind::Returns | PySectionKind::Yields);
+        let uses_exceptions = matches!(kind, PySectionKind::Raises | PySectionKind::Warns);
+        let uses_attributes = matches!(kind, PySectionKind::Attributes);
+        let uses_methods = matches!(kind, PySectionKind::Methods);
+        let uses_see_also = matches!(kind, PySectionKind::SeeAlso);
+        let uses_references = matches!(kind, PySectionKind::References);
+        let is_freetext = !uses_parameters
+            && !uses_returns
+            && !uses_exceptions
+            && !uses_attributes
+            && !uses_methods
+            && !uses_see_also
+            && !uses_references;
+
+        if !uses_parameters {
+            reject!(parameters.is_some(), "parameters");
+        }
+        if !uses_returns {
+            reject!(returns.is_some(), "returns");
+        }
+        if !uses_exceptions {
+            reject!(exceptions.is_some(), "exceptions");
+        }
+        if !uses_attributes {
+            reject!(attributes.is_some(), "attributes");
+        }
+        if !uses_methods {
+            reject!(methods.is_some(), "methods");
+        }
+        if !uses_see_also {
+            reject!(see_also_entries.is_some(), "see_also_entries");
+        }
+        if !uses_references {
+            reject!(references.is_some(), "references");
+        }
+        if !is_freetext {
+            reject!(body.is_some(), "body");
+        }
+        if !matches!(kind, PySectionKind::Unknown) {
+            reject!(unknown_name.is_some(), "unknown_name");
+        }
+
         let inner = match kind {
             PySectionKind::Parameters => {
                 model::Section::Parameters(extract_parameters(py, &parameters.unwrap_or_default()))
@@ -2545,6 +2618,35 @@ impl PyModelDocstring {
 }
 
 // =============================================================================
+// ParsedDocstring — typed return value for parse()
+// =============================================================================
+
+/// The three possible return values of [`parse`].
+///
+/// Implementing [`pyo3::IntoPyObject`] lets `parse` return a concrete Rust
+/// type while still handing Python a `GoogleDocstring`, `NumPyDocstring`, or
+/// `PlainDocstring` object at runtime.
+enum ParsedDocstring {
+    Google(Py<PyGoogleDocstring>),
+    NumPy(Py<PyNumPyDocstring>),
+    Plain(Py<PyPlainDocstring>),
+}
+
+impl<'py> pyo3::IntoPyObject<'py> for ParsedDocstring {
+    type Target = pyo3::types::PyAny;
+    type Output = pyo3::Bound<'py, pyo3::types::PyAny>;
+    type Error = pyo3::PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        match self {
+            ParsedDocstring::Google(d) => Ok(d.into_pyobject(py)?.into_any()),
+            ParsedDocstring::NumPy(d) => Ok(d.into_pyobject(py)?.into_any()),
+            ParsedDocstring::Plain(d) => Ok(d.into_pyobject(py)?.into_any()),
+        }
+    }
+}
+
+// =============================================================================
 // Module functions
 // =============================================================================
 
@@ -2571,14 +2673,14 @@ fn parse_plain(py: Python<'_>, input: &str) -> PyResult<Py<PyPlainDocstring>> {
 /// Returns a `GoogleDocstring`, `NumPyDocstring`, or `PlainDocstring`.
 /// Use `.style` on the result to distinguish them without `isinstance` checks.
 #[pyfunction]
-fn parse(py: Python<'_>, input: &str) -> PyResult<PyObject> {
+fn parse(py: Python<'_>, input: &str) -> PyResult<ParsedDocstring> {
     use pydocstring_core::syntax::SyntaxKind;
     let parsed = pydocstring_core::parse::parse(input);
     let kind = parsed.root().kind();
     match kind {
-        SyntaxKind::GOOGLE_DOCSTRING => Ok(build_google_docstring(py, parsed)?.into_any()),
-        SyntaxKind::NUMPY_DOCSTRING => Ok(build_numpy_docstring(py, parsed)?.into_any()),
-        _ => Ok(build_plain_docstring(py, parsed)?.into_any()),
+        SyntaxKind::GOOGLE_DOCSTRING => Ok(ParsedDocstring::Google(build_google_docstring(py, parsed)?)),
+        SyntaxKind::NUMPY_DOCSTRING => Ok(ParsedDocstring::NumPy(build_numpy_docstring(py, parsed)?)),
+        _ => Ok(ParsedDocstring::Plain(build_plain_docstring(py, parsed)?)),
     }
 }
 
