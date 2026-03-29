@@ -113,17 +113,17 @@ print(doc.summary.text)  # "Summary line."
 
 # Sections
 for section in doc.sections:
-    print(section.kind)  # "Args", "Returns", "Raises"
+    print(section.section_kind)  # GoogleSectionKind.ARGS, .RETURNS, .RAISES
 
-    for arg in section.args:
-        print(f"  {arg.name.text}: {arg.type.text} — {arg.description.text}")
+# Walk the tree to access entries
+from pydocstring import walk, Visitor
 
-    if section.returns:
-        r = section.returns
-        print(f"  -> {r.return_type.text}: {r.description.text}")
+class GoogleArgCollector(Visitor):
+    def __init__(self): self.args = []
+    def enter_google_arg(self, arg, ctx): self.args.append(arg)
 
-    for exc in section.exceptions:
-        print(f"  raises {exc.type.text}: {exc.description.text}")
+for arg in walk(doc, GoogleArgCollector()).args:
+    print(f"  {arg.name.text}: {arg.type.text} — {arg.description.text}")
 ```
 
 ### NumPy Style
@@ -149,28 +149,25 @@ bool
 print(doc.summary.text)  # "Summary line."
 
 for section in doc.sections:
-    print(section.kind)  # "Parameters", "Returns"
+    print(section.section_kind)  # NumPySectionKind.PARAMETERS, .RETURNS
 
-    for param in section.parameters:
-        names = [n.text for n in param.names]
-        print(f"  {names}: {param.type.text} — {param.description.text}")
+# Walk the tree to access entries
+class NumPyParamCollector(Visitor):
+    def __init__(self): self.params = []
+    def enter_numpy_parameter(self, p, ctx): self.params.append(p)
 
-    for ret in section.returns:
-        print(f"  -> {ret.return_type.text}: {ret.description.text}")
+for param in walk(doc, NumPyParamCollector()).params:
+    names = [n.text for n in param.names]
+    print(f"  {names}: {param.type.text} — {param.description.text}")
 ```
 
 ### AST Access
 
-Every parsed result exposes the full syntax tree via the `node` property:
+Use `pretty_print()` to visualise the full syntax tree:
 
 ```python
 doc = parse_google("Summary.\n\nArgs:\n    x (int): Value.")
 
-# Raw tree node
-print(doc.node.kind)      # "GOOGLE_DOCSTRING"
-print(doc.node.children)  # list of Node and Token objects
-
-# Pretty-printed tree
 print(doc.pretty_print())
 ```
 
@@ -198,16 +195,31 @@ GOOGLE_DOCSTRING@0..42 {
 
 ### Tree Traversal
 
-Use `walk()` for depth-first traversal of the syntax tree:
+Use `walk()` with a `Visitor` subclass for depth-first traversal. `walk()` returns
+the visitor instance so you can read results inline:
 
 ```python
-from pydocstring import parse_google, walk, Token
+from pydocstring import parse_google, walk, Visitor
 
 doc = parse_google("Summary.\n\nArgs:\n    x (int): Value.")
 
-for item in walk(doc.node):
-    if isinstance(item, Token) and item.kind == "NAME":
-        print(item.text)  # "Args", "x"
+class NameCollector(Visitor):
+    def __init__(self): self.names = []
+    def enter_google_arg(self, arg, ctx): self.names.append(arg.name.text)
+
+print(walk(doc, NameCollector()).names)  # ["x"]
+```
+
+`WalkContext` is passed as the second argument to every `enter_*` / `exit_*` hook
+and exposes `line_col(offset)` for O(log n) byte-offset-to-line/column conversion:
+
+```python
+class LocPrinter(Visitor):
+    def enter_google_arg(self, arg, ctx):
+        lc = ctx.line_col(arg.name.range.start)
+        print(f"{arg.name.text} at line {lc.lineno}, col {lc.col}")
+
+walk(doc, LocPrinter())
 ```
 
 ### Source Locations
@@ -225,7 +237,7 @@ print(token.range.start, token.range.end)  # 0 8
 Convert any parsed docstring into a style-independent intermediate representation for analysis or transformation:
 
 ```python
-from pydocstring import parse_google
+from pydocstring import parse_google, SectionKind
 
 parsed = parse_google("Summary.\n\nArgs:\n    x (int): The value.\n")
 doc = parsed.to_model()
@@ -233,7 +245,7 @@ doc = parsed.to_model()
 print(doc.summary)  # "Summary."
 
 for section in doc.sections:
-    if section.kind == "Parameters":
+    if section.kind == SectionKind.PARAMETERS:
         for param in section.parameters:
             print(param.names)            # ["x"]
             print(param.type_annotation)  # "int"
@@ -245,13 +257,13 @@ for section in doc.sections:
 Re-emit a `Docstring` model in any style — useful for style conversion or formatting:
 
 ```python
-from pydocstring import Docstring, Section, Parameter, emit_google, emit_numpy
+from pydocstring import Docstring, Section, SectionKind, Parameter, emit_google, emit_numpy
 
 doc = Docstring(
     summary="Brief summary.",
     sections=[
         Section(
-            "Parameters",
+            SectionKind.PARAMETERS,
             parameters=[
                 Parameter(
                     ["x"],
@@ -297,35 +309,49 @@ print(numpy_text)  # Contains "Parameters\n----------"
 
 ### Objects
 
-| Class             | Key Properties                                                                                                   |
-|-------------------|------------------------------------------------------------------------------------------------------------------|
-| `Style`           | `GOOGLE`, `NUMPY`, `PLAIN` (enum)                                                                                |
-| `GoogleDocstring` | `style`, `summary`, `extended_summary`, `sections`, `node`, `source`, `pretty_print()`, `to_model()`             |
-| `GoogleSection`   | `kind`, `args`, `returns`, `yields`, `exceptions`, `body_text`, `node`                                           |
-| `GoogleArg`       | `name`, `type`, `description`, `optional`                                                                        |
-| `GoogleReturns`   | `return_type`, `description`                                                                                     |
-| `GoogleYields`    | `return_type`, `description`                                                                                     |
-| `GoogleException` | `type`, `description`                                                                                            |
-| `PlainDocstring`  | `style`, `summary`, `extended_summary`, `node`, `source`, `pretty_print()`, `to_model()`                         |
-| `NumPyDocstring`  | `style`, `summary`, `extended_summary`, `sections`, `node`, `source`, `pretty_print()`, `to_model()`             |
-| `NumPySection`    | `kind`, `parameters`, `returns`, `yields`, `exceptions`, `body_text`, `node`                                     |
-| `NumPyParameter`  | `names`, `type`, `description`, `optional`, `default_value`                                                      |
-| `NumPyReturns`    | `name`, `return_type`, `description`                                                                             |
-| `NumPyYields`     | `name`, `return_type`, `description`                                                                             |
-| `NumPyException`  | `type`, `description`                                                                                            |
-| `Token`           | `kind`, `text`, `range`                                                                                          |
-| `Node`            | `kind`, `range`, `children`                                                                                      |
-| `TextRange`       | `start`, `end`                                                                                                   |
-| `Docstring`       | `summary`, `extended_summary`, `deprecation`, `sections`                                                         |
-| `Section` (model) | `kind`, `parameters`, `returns`, `exceptions`, `attributes`, `methods`, `see_also_entries`, `references`, `body` |
-| `Parameter`       | `names`, `type_annotation`, `description`, `is_optional`, `default_value`                                        |
-| `Return`          | `name`, `type_annotation`, `description`                                                                         |
-| `ExceptionEntry`  | `type_name`, `description`                                                                                       |
-| `Attribute`       | `name`, `type_annotation`, `description`                                                                         |
-| `Method`          | `name`, `type_annotation`, `description`                                                                         |
-| `SeeAlsoEntry`    | `names`, `description`                                                                                           |
-| `Reference`       | `number`, `content`                                                                                              |
-| `Deprecation`     | `version`, `description`                                                                                         |
+| Class                | Key Properties                                                                                                   |
+|----------------------|------------------------------------------------------------------------------------------------------------------|
+| `Style`              | `GOOGLE`, `NUMPY`, `PLAIN` (enum)                                                                                |
+| `GoogleSectionKind`  | `ARGS`, `RETURNS`, `YIELDS`, `RAISES`, `NOTES`, `EXAMPLES`, … (enum)                                            |
+| `NumPySectionKind`   | `PARAMETERS`, `RETURNS`, `YIELDS`, `RAISES`, `NOTES`, `EXAMPLES`, … (enum)                                      |
+| `GoogleDocstring`    | `style`, `summary`, `extended_summary`, `sections`, `source`, `pretty_print()`, `to_model()`                    |
+| `GoogleSection`      | `section_kind`, `header_name`, `range`                                                                           |
+| `GoogleArg`          | `name`, `type`, `description`, `optional`, `open_bracket`, `close_bracket`, `colon`                             |
+| `GoogleReturn`       | `return_type`, `description`, `colon`                                                                            |
+| `GoogleYield`        | `return_type`, `description`, `colon`                                                                            |
+| `GoogleException`    | `type`, `description`, `colon`                                                                                   |
+| `GoogleWarning`      | `type`, `description`, `colon`                                                                                   |
+| `GoogleSeeAlsoItem`  | `name`, `description`, `colon`                                                                                   |
+| `GoogleAttribute`    | `name`, `type`, `description`, `open_bracket`, `close_bracket`, `colon`                                         |
+| `GoogleMethod`       | `name`, `type`, `description`, `open_bracket`, `close_bracket`, `colon`                                         |
+| `PlainDocstring`     | `style`, `summary`, `extended_summary`, `source`, `pretty_print()`, `to_model()`                                |
+| `NumPyDocstring`     | `style`, `summary`, `extended_summary`, `sections`, `deprecation`, `source`, `pretty_print()`, `to_model()`     |
+| `NumPySection`       | `section_kind`, `header_name`, `range`                                                                           |
+| `NumPyParameter`     | `names`, `type`, `description`, `optional`, `default_value`, `colon`, `default_keyword`, `default_separator`    |
+| `NumPyReturns`       | `name`, `return_type`, `description`, `colon`                                                                    |
+| `NumPyYields`        | `name`, `return_type`, `description`, `colon`                                                                    |
+| `NumPyException`     | `type`, `description`, `colon`                                                                                   |
+| `NumPyWarning`       | `type`, `description`, `colon`                                                                                   |
+| `NumPySeeAlsoItem`   | `name`, `description`, `colon`                                                                                   |
+| `NumPyReference`     | `number`, `content`, `directive_marker`, `open_bracket`, `close_bracket`                                        |
+| `NumPyAttribute`     | `name`, `type`, `description`, `colon`                                                                           |
+| `NumPyMethod`        | `name`, `type`, `description`, `colon`                                                                           |
+| `NumPyDeprecation`   | `version`, `description`, `directive_marker`, `keyword`, `double_colon`                                         |
+| `Token`              | `text`, `range`, `is_missing()`                                                                                  |
+| `TextRange`          | `start`, `end`, `is_empty()`                                                                                     |
+| `Visitor`            | Base class; subclass and override `enter_*` / `exit_*` methods                                                   |
+| `WalkContext`        | `line_col(offset)` — passed as second arg to every `enter_*` / `exit_*` hook                                    |
+| `SectionKind`        | `PARAMETERS`, `RETURNS`, `RAISES`, `NOTES`, … (enum, 24 variants — model IR)                                    |
+| `Docstring`          | `summary`, `extended_summary`, `deprecation`, `sections`                                                         |
+| `Section` (model)    | `kind`, `parameters`, `returns`, `exceptions`, `attributes`, `methods`, `see_also_entries`, `references`, `body` |
+| `Parameter`          | `names`, `type_annotation`, `description`, `is_optional`, `default_value`                                        |
+| `Return`             | `name`, `type_annotation`, `description`                                                                         |
+| `ExceptionEntry`     | `type_name`, `description`                                                                                       |
+| `Attribute`          | `name`, `type_annotation`, `description`                                                                         |
+| `Method`             | `name`, `type_annotation`, `description`                                                                         |
+| `SeeAlsoEntry`       | `names`, `description`                                                                                           |
+| `Reference`          | `number`, `content`                                                                                              |
+| `Deprecation`        | `version`, `description`                                                                                         |
 
 ## Development
 

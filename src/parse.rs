@@ -11,6 +11,7 @@ pub mod google;
 pub mod numpy;
 pub mod plain;
 pub(crate) mod utils;
+pub mod visitor;
 
 // =============================================================================
 // Style

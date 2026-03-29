@@ -99,12 +99,6 @@ pub enum SyntaxKind {
     /// A single method entry.
     GOOGLE_METHOD,
 
-    // ── Plain node ─────────────────────────────────────────────────────
-    /// Root node for a plain docstring (summary/extended summary only,
-    /// no NumPy or Google style section markers).
-    /// Also used for unrecognised styles such as Sphinx.
-    PLAIN_DOCSTRING,
-
     // ── NumPy nodes ────────────────────────────────────────────────────
     /// Root node for a NumPy-style docstring.
     NUMPY_DOCSTRING,
@@ -132,6 +126,12 @@ pub enum SyntaxKind {
     NUMPY_ATTRIBUTE,
     /// A single method entry.
     NUMPY_METHOD,
+
+    // ── Plain node ─────────────────────────────────────────────────────
+    /// Root node for a plain docstring (summary/extended summary only,
+    /// no NumPy or Google style section markers).
+    /// Also used for unrecognised styles such as Sphinx.
+    PLAIN_DOCSTRING,
 }
 
 impl SyntaxKind {

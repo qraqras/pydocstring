@@ -8,4 +8,5 @@ pub mod nodes;
 pub mod parser;
 pub mod to_model;
 
+pub use nodes::PlainDocstring;
 pub use parser::parse_plain;
