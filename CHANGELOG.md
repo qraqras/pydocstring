@@ -5,6 +5,97 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-03-29
+
+### Added
+
+- `GoogleSectionKind` / `NumPySectionKind` enums — each section now carries a
+  `section_kind` property in place of a plain string, enabling exhaustive
+  pattern matching in Python.
+- `pydocstring.Visitor` base class — all `enter_*` / `exit_*` hook methods are
+  declared here; `walk()` now raises `TypeError` if the visitor does not
+  subclass `Visitor`.
+- `WalkContext` — second argument passed to every `enter_*` / `exit_*` method;
+  exposes `line_col(offset)` using a cached line-starts table for O(log n)
+  offset-to-line/column conversion.
+- `walk()` now returns the visitor instance (typed as `_VisitorT` in stubs),
+  enabling one-liner patterns like `collector = walk(doc, Collector())`.
+- `PlainDocstring` dispatch in `walk()` — `enter_plain_docstring` /
+  `exit_plain_docstring` are now called when walking a plain-style docstring.
+- All CST punctuation and structural tokens are now exposed on every node
+  object: `open_bracket`, `close_bracket`, `colon`, `directive_marker`,
+  `double_colon`, `default_keyword`, `default_separator`, etc.
+- `Token.is_missing()` — returns `True` for zero-length placeholder tokens
+  inserted by the parser for syntactically absent elements (e.g. an empty-
+  bracket type `arg (): desc`).
+- `TextRange.is_empty()` — returns `True` when `start == end`.
+- `SectionKind` enum (24 variants) on the style-independent model IR —
+  replaces the previous string-typed `Section.kind`.
+- `Section.unknown_name` getter — returns the raw section header string for
+  `SectionKind.UNKNOWN` entries.
+- Missing entry wrapper classes added to the Python bindings: `GoogleWarning`,
+  `GoogleSeeAlsoItem`, `GoogleAttribute`, `GoogleMethod`, `NumPyDeprecation`,
+  `NumPyWarning`, `NumPySeeAlsoItem`, `NumPyReference`, `NumPyAttribute`,
+  `NumPyMethod`.
+- `NumPyDocstring.deprecation` property — direct accessor for the deprecation
+  notice node.
+- `__all__` in `pydocstring/__init__.py` listing all public symbols.
+- `py.typed` marker (PEP 561) — the package now ships inline type stubs.
+- Rust core: `DocstringVisitor` gains an associated `Error` type; all
+  `visit_*` methods return `Result<(), Self::Error>`, and `walk_node`
+  propagates errors via `?`.
+
+### Changed
+
+- **Python bindings**: `GoogleReturns` renamed to `GoogleReturn`; `GoogleYields`
+  renamed to `GoogleYield` — consistent with the singular naming convention
+  used by all other entry wrapper types.
+- **Python bindings**: `parse()` now returns a typed
+  `GoogleDocstring | NumPyDocstring | PlainDocstring` union instead of an opaque
+  `object`.
+- `Token` now implements `__eq__` and `__hash__` so tokens can be used in sets
+  and as dictionary keys.
+- `pretty_print()` and `to_model()` on all docstring objects now use a cached
+  `Arc<Parsed>` internally, avoiding a redundant re-parse on every call.
+- `WalkContext.line_col()` replaces the former `doc.line_col()` method on
+  docstring objects; cost reduced from O(offset) linear scan to O(log L)
+  binary search.
+- Visitor package layout converted to a mixed Rust/Python maturin layout:
+  the `Visitor` base class is now defined in `pydocstring/_visitor.py` rather
+  than being embedded as a string in the Rust source.
+- Rust core: `walk` and `walk_node` are now in `parse::visitor` and
+  re-exported from `parse::google` and `parse::numpy`.
+
+### Fixed
+
+- `GoogleSection` and `NumPySection` stubs no longer declare 19 child accessor
+  properties that had no corresponding Rust implementation.
+
+### Breaking Changes
+
+**Python bindings**
+
+- Typed `*Section` classes (e.g. `GoogleArgsSection`, `NumPyParametersSection`)
+  removed; replaced by a single `GoogleSection` / `NumPySection` with a
+  `section_kind` property and per-kind accessor methods (`section.args()`,
+  `section.parameters()`, `section.returns()`, etc.).
+- `cast_google_*` / `cast_numpy_*` methods on docstring objects removed.
+- Visitor hook methods renamed: `visit_*` → `enter_*`, `leave_*` → `exit_*`
+  (ANTLR convention).
+- `walk()` now requires the visitor to be a subclass of `pydocstring.Visitor`;
+  passing an arbitrary object raises `TypeError`.
+- `doc.line_col(offset)` removed from `GoogleDocstring`, `NumPyDocstring`, and
+  `PlainDocstring`; use `ctx.line_col(offset)` inside a visitor hook instead.
+- `Section.kind` is now a `SectionKind` enum value, not a string.
+- `GoogleReturns` / `GoogleYields` class names changed to `GoogleReturn` /
+  `GoogleYield`.
+
+**Rust core**
+
+- `DocstringVisitor`: all `visit_*` methods now return `Result<(), Self::Error>`
+  and require `type Error = ...;` in every implementation. Infallible
+  implementations should use `type Error = std::convert::Infallible`.
+
 ## [0.1.5] - 2026-03-22
 
 ### Added
