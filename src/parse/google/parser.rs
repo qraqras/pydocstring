@@ -159,29 +159,35 @@ fn parse_entry_header(cursor: &LineCursor, parse_type: bool) -> EntryHeader {
     // --- `name: desc` ---
     if let Some(colon_rel) = find_entry_colon(trimmed) {
         let name = trimmed[..colon_rel].trim_end();
-        let after_colon = &trimmed[colon_rel + 1..];
-        let desc = after_colon.trim_start();
-        let ws_after = after_colon.len() - desc.len();
-        let desc_start = entry_start + colon_rel + 1 + ws_after;
-        let colon_span = TextRange::from_offset_len(entry_start + colon_rel, 1);
-        let first_description = if desc.is_empty() {
-            None
-        } else {
-            Some(TextRange::from_offset_len(desc_start, desc.len()))
-        };
-        let range_end = if let Some(ref d) = first_description {
-            d.end()
-        } else {
-            colon_span.end()
-        };
-        let name_span = TextRange::from_offset_len(entry_start, name.len());
-        return EntryHeader {
-            range: TextRange::new(name_span.start(), range_end),
-            name: name_span,
-            type_info: None,
-            colon: Some(colon_span),
-            first_description,
-        };
+        // If the colon is at position 0 (e.g. RST-style `:param foo:`), the
+        // name would be empty which is invalid.  Fall through to the bare-name
+        // fallback so the whole line is preserved as-is rather than producing
+        // an empty NAME token that later panics in `required_token`.
+        if !name.is_empty() {
+            let after_colon = &trimmed[colon_rel + 1..];
+            let desc = after_colon.trim_start();
+            let ws_after = after_colon.len() - desc.len();
+            let desc_start = entry_start + colon_rel + 1 + ws_after;
+            let colon_span = TextRange::from_offset_len(entry_start + colon_rel, 1);
+            let first_description = if desc.is_empty() {
+                None
+            } else {
+                Some(TextRange::from_offset_len(desc_start, desc.len()))
+            };
+            let range_end = if let Some(ref d) = first_description {
+                d.end()
+            } else {
+                colon_span.end()
+            };
+            let name_span = TextRange::from_offset_len(entry_start, name.len());
+            return EntryHeader {
+                range: TextRange::new(name_span.start(), range_end),
+                name: name_span,
+                type_info: None,
+                colon: Some(colon_span),
+                first_description,
+            };
+        }
     }
 
     // --- Fallback: bare name ---

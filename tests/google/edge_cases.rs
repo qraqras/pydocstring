@@ -311,3 +311,29 @@ fn test_arg_no_description_space_before_colon_not_header() {
     assert!(a[2].r#type().is_none());
     assert_eq!(a[2].description().unwrap().text(result.source()), "A parameter.");
 }
+
+// =============================================================================
+// RST-style :param lines inside Args section
+// =============================================================================
+
+/// RST-style `:param foo:` lines inside a Google `Args:` section must not
+/// produce a GOOGLE_ARG with an empty NAME, which would panic when
+/// `required_token(NAME)` is called.  They should be treated as bare-name
+/// entries (fallback) so the line text is stored verbatim as the NAME token.
+///
+/// Regression test for: "required token NAME not found in GOOGLE_ARG".
+#[test]
+fn test_rst_style_param_in_args_no_panic() {
+    let input = "Summary.\n\nArgs:\n    :param int seconds: The seconds.\n    :param int nanoseconds: The nanoseconds.";
+    let result = parse_google(input);
+
+    let a = args(&result);
+    // Each RST-style line becomes a bare-name arg entry (no colon split).
+    assert_eq!(a.len(), 2);
+    // name() must not panic, and the full trimmed line is the name.
+    assert_eq!(a[0].name().text(result.source()), ":param int seconds: The seconds.");
+    assert_eq!(
+        a[1].name().text(result.source()),
+        ":param int nanoseconds: The nanoseconds."
+    );
+}

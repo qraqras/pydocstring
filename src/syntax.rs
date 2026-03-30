@@ -310,12 +310,22 @@ impl SyntaxNode {
 
     /// Return the first token child with the given kind.
     ///
+    /// Unlike [`find_token`] this also matches zero-length (missing) tokens,
+    /// so it never panics due to a token being present but empty.  Callers
+    /// that need to distinguish a real token from a placeholder should check
+    /// [`SyntaxToken::is_missing`] on the returned value.
+    ///
     /// # Panics
     ///
-    /// Panics if no such token exists.  This should only be used for tokens
-    /// that the parser guarantees to be present.
+    /// Panics only if no child token of the given kind exists at all, which
+    /// indicates a structural bug in the parser.
     pub fn required_token(&self, kind: SyntaxKind) -> &SyntaxToken {
-        self.find_token(kind)
+        self.children
+            .iter()
+            .find_map(|c| match c {
+                SyntaxElement::Token(t) if t.kind() == kind => Some(t),
+                _ => None,
+            })
             .unwrap_or_else(|| panic!("required token {:?} not found in {:?}", kind, self.kind))
     }
 
