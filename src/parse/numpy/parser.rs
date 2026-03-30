@@ -314,6 +314,14 @@ fn build_parameter_node(parts: &ParamHeaderParts, range: TextRange) -> SyntaxNod
     }
     if let Some(t) = parts.param_type {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::TYPE, t)));
+    } else if let Some(c) = parts.colon {
+        // Colon present but no type: zero-length placeholder so callers can
+        // distinguish `name :` (missing type) from `name` (no type at all).
+        let missing_pos = c.end();
+        children.push(SyntaxElement::Token(SyntaxToken::new(
+            SyntaxKind::TYPE,
+            TextRange::new(missing_pos, missing_pos),
+        )));
     }
     if let Some(opt) = parts.optional {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::OPTIONAL, opt)));
@@ -351,6 +359,14 @@ fn build_returns_node(
     }
     if let Some(rt) = return_type {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::RETURN_TYPE, rt)));
+    } else if let Some(c) = colon {
+        // Colon present but no return type: zero-length placeholder so callers
+        // can distinguish `name :` (missing type) from `type` (no name/colon).
+        let missing_pos = c.end();
+        children.push(SyntaxElement::Token(SyntaxToken::new(
+            SyntaxKind::RETURN_TYPE,
+            TextRange::new(missing_pos, missing_pos),
+        )));
     }
     SyntaxNode::new(SyntaxKind::NUMPY_RETURNS, range, children)
 }
@@ -370,6 +386,13 @@ fn build_yields_node(
     }
     if let Some(rt) = return_type {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::RETURN_TYPE, rt)));
+    } else if let Some(c) = colon {
+        // Colon present but no yield type: zero-length placeholder.
+        let missing_pos = c.end();
+        children.push(SyntaxElement::Token(SyntaxToken::new(
+            SyntaxKind::RETURN_TYPE,
+            TextRange::new(missing_pos, missing_pos),
+        )));
     }
     SyntaxNode::new(SyntaxKind::NUMPY_YIELDS, range, children)
 }
@@ -387,6 +410,13 @@ fn build_exception_node(
     }
     if let Some(d) = first_desc {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, d)));
+    } else if let Some(c) = colon {
+        // Colon present but no description: zero-length placeholder so callers
+        // can distinguish `Exc:` (missing description) from `Exc` (no colon).
+        children.push(SyntaxElement::Token(SyntaxToken::new(
+            SyntaxKind::DESCRIPTION,
+            TextRange::new(c.end(), c.end()),
+        )));
     }
     SyntaxNode::new(SyntaxKind::NUMPY_EXCEPTION, range, children)
 }
@@ -404,6 +434,12 @@ fn build_warning_node(
     }
     if let Some(d) = first_desc {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, d)));
+    } else if let Some(c) = colon {
+        // Colon present but no description: zero-length placeholder.
+        children.push(SyntaxElement::Token(SyntaxToken::new(
+            SyntaxKind::DESCRIPTION,
+            TextRange::new(c.end(), c.end()),
+        )));
     }
     SyntaxNode::new(SyntaxKind::NUMPY_WARNING, range, children)
 }
@@ -427,6 +463,12 @@ fn build_see_also_node(
     }
     if let Some(d) = description {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::DESCRIPTION, d)));
+    } else if let Some(c) = colon {
+        // Colon present but no description: zero-length placeholder.
+        children.push(SyntaxElement::Token(SyntaxToken::new(
+            SyntaxKind::DESCRIPTION,
+            TextRange::new(c.end(), c.end()),
+        )));
     }
     SyntaxNode::new(SyntaxKind::NUMPY_SEE_ALSO_ITEM, range, children)
 }
@@ -442,6 +484,14 @@ fn build_attribute_node(parts: &ParamHeaderParts, range: TextRange) -> SyntaxNod
     }
     if let Some(t) = parts.param_type {
         children.push(SyntaxElement::Token(SyntaxToken::new(SyntaxKind::TYPE, t)));
+    } else if let Some(c) = parts.colon {
+        // Colon present but no type: zero-length placeholder so callers can
+        // distinguish `attr :` (missing type) from `attr` (no type at all).
+        let missing_pos = c.end();
+        children.push(SyntaxElement::Token(SyntaxToken::new(
+            SyntaxKind::TYPE,
+            TextRange::new(missing_pos, missing_pos),
+        )));
     }
     SyntaxNode::new(SyntaxKind::NUMPY_ATTRIBUTE, range, children)
 }

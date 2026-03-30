@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-03-30
+
+### Fixed
+
+- Google parser: prevent panic when an RST-style parameter line (e.g.
+  `:param int seconds: …`) is misclassified as a Google-style `Args:` entry.
+  `parse_entry_header` now falls through to the bare-name branch whenever
+  the colon is at position 0, avoiding an empty `NAME` token.
+- `required_token` no longer panics on zero-length (missing) placeholder
+  tokens. It now scans children directly and panics only when the token kind
+  is completely absent — indicating a structural bug in the parser — rather
+  than when the token is present but zero-length.
+- NumPy parser: all `build_*_node` functions now emit zero-length placeholder
+  tokens for grammatically expected but source-absent tokens, matching the
+  convention already used by the Google `build_arg_node`.
+  Affected builders: `build_parameter_node` (TYPE), `build_returns_node`
+  (RETURN_TYPE), `build_yields_node` (RETURN_TYPE), `build_exception_node`
+  (DESCRIPTION), `build_warning_node` (DESCRIPTION), `build_see_also_node`
+  (DESCRIPTION), `build_attribute_node` (TYPE).
+  Callers can now reliably use `find_missing()` to distinguish
+  "expected but absent" from "not applicable".
+
 ## [0.1.6] - 2026-03-29
 
 ### Added
