@@ -169,6 +169,25 @@ fn test_stray_lines() {
     assert_eq!(parameters(&result).len(), 1);
 }
 
+#[test]
+fn test_stray_line_between_sections() {
+    // stray line 1 is at indent 0 inside Parameters section (after a blank line).
+    // stray line 2 is at indent 0 inside Returns section (after a blank line).
+    let input = "Summary.\n\nParameters\n----------\na : int\n    desc.\n\nstray line 1\n\nReturns\n-------\nbool\n    desc\n\nstray line 2\n";
+    let result = parse_numpy(input);
+    let p = parameters(&result);
+    assert_eq!(p.len(), 1, "stray line must not become a parameter");
+    assert_eq!(p[0].names().next().unwrap().text(result.source()), "a");
+    let r = returns(&result);
+    assert!(!r.is_empty(), "Returns section must be parsed");
+    let desc = r[0].description().unwrap().text(result.source());
+    assert!(
+        !desc.contains("stray"),
+        "stray line must not be in Returns desc, got {:?}",
+        desc
+    );
+}
+
 // =============================================================================
 // Display impl
 // =============================================================================

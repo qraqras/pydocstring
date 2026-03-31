@@ -51,6 +51,7 @@ fn try_detect_header(cursor: &LineCursor) -> Option<SectionHeaderInfo> {
         kind,
         name: cursor.make_line_range(cursor.line, header_col, header_trimmed.len()),
         underline: cursor.make_line_range(cursor.line + 1, underline_col, underline_trimmed.len()),
+        indent_columns: cursor.current_indent_columns(),
     })
 }
 
@@ -59,6 +60,7 @@ struct SectionHeaderInfo {
     kind: NumPySectionKind,
     name: TextRange,
     underline: TextRange,
+    indent_columns: usize,
 }
 
 // =============================================================================
@@ -1172,9 +1174,13 @@ pub fn parse_numpy(input: &str) -> Parsed {
     let mut current_header: Option<SectionHeaderInfo> = None;
     let mut current_body: Option<SectionBody> = None;
     let mut entry_indent: Option<usize> = None;
+    let mut had_blank_in_section: bool = false;
 
     while !cursor.is_eof() {
         if cursor.current_trimmed().is_empty() {
+            if current_body.is_some() {
+                had_blank_in_section = true;
+            }
             cursor.advance();
             continue;
         }
@@ -1189,8 +1195,26 @@ pub fn parse_numpy(input: &str) -> Parsed {
             current_body = Some(SectionBody::new(header_info.kind));
             current_header = Some(header_info);
             entry_indent = None;
+            had_blank_in_section = false;
             cursor.line += 2; // skip header + underline
             continue;
+        }
+
+        // Flush section if a blank line preceded a non-indented line.
+        // FreeText sections (Notes, Examples, etc.) may have same-indent paragraphs
+        // separated by blank lines — do not flush those.
+        if had_blank_in_section {
+            let is_freetext = matches!(current_body, Some(SectionBody::FreeText(_)));
+            if !is_freetext {
+                if let Some(ref h) = current_header {
+                    if cursor.current_indent_columns() <= h.indent_columns {
+                        let prev_header = current_header.take().unwrap();
+                        let section_node = flush_section(&cursor, prev_header, current_body.take().unwrap());
+                        root_children.push(SyntaxElement::Node(section_node));
+                    }
+                }
+            }
+            had_blank_in_section = false;
         }
 
         if let Some(ref mut body) = current_body {
