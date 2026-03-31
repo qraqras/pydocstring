@@ -316,6 +316,91 @@ fn test_arg_no_description_space_before_colon_not_header() {
 // RST-style :param lines inside Args section
 // =============================================================================
 
+// =============================================================================
+// Stray lines between sections
+// =============================================================================
+
+/// A non-section, non-indented line that appears after a blank line following
+/// a section's entries must NOT be absorbed into the previous section.
+/// It should become a STRAY_LINE, and the next real section must be parsed
+/// correctly.
+#[test]
+fn test_stray_line_between_args_and_returns() {
+    let input = "Summary.\n\nArgs:\n    a: desc.\n\nstray line 1\n\nReturns:\n    desc\n\nstray line 2";
+    let result = parse_google(input);
+
+    // Args section should contain exactly one entry.
+    let a = args(&result);
+    assert_eq!(a.len(), 1, "stray line must not become an arg entry");
+    assert_eq!(a[0].name().text(result.source()), "a");
+
+    // Returns section should be present and its description should not include
+    // the stray line.
+    let r = returns(&result).unwrap();
+    let desc = r.description().unwrap().text(result.source());
+    assert!(
+        !desc.contains("stray"),
+        "stray line must not be part of Returns description"
+    );
+}
+
+/// A blank-line-separated entry at greater indent than the header must still
+/// be absorbed into the same section (existing behaviour).
+#[test]
+fn test_blank_between_entries_within_section() {
+    let input = "Summary.\n\nArgs:\n    x (int): Value.\n\n    y (str): Name.\n\nReturns:\n    bool: Success.";
+    let result = parse_google(input);
+    assert_eq!(args(&result).len(), 2, "both entries should belong to Args");
+    assert!(returns(&result).is_some());
+}
+
+/// An arg description that has a blank line followed by a more-deeply-indented
+/// continuation must keep both parts in the description.
+#[test]
+fn test_arg_description_blank_line_with_continuation() {
+    // "        Second paragraph." is at 8 spaces — deeper than the entry (4).
+    let input = "Summary.\n\nArgs:\n    a: First paragraph.\n\n        Second paragraph.\n\nReturns:\n    bool: ok.\n";
+    let result = parse_google(input);
+    let a = args(&result);
+    assert_eq!(a.len(), 1, "should be exactly one arg");
+    let desc = a[0].description().unwrap().text(result.source());
+    assert!(desc.contains("First paragraph."), "desc = {:?}", desc);
+    assert!(desc.contains("Second paragraph."), "desc = {:?}", desc);
+    // Returns must still be parsed correctly.
+    assert!(returns(&result).is_some());
+}
+
+/// A FreeText section (Notes) with a blank line between two paragraphs at the
+/// same depth must keep both paragraphs in its body.
+#[test]
+fn test_freetext_description_blank_line_continuation() {
+    let input = "Summary.\n\nNotes:\n    Paragraph one.\n\n    Paragraph two.\n\nArgs:\n    x: val.\n";
+    let result = parse_google(input);
+    let sections = all_sections(&result);
+    // Notes section present
+    let notes_sec = sections
+        .iter()
+        .find(|s| s.header().name().text(result.source()) == "Notes");
+    assert!(notes_sec.is_some(), "Notes section should be present");
+    let body = notes_sec.unwrap().syntax().find_token(SyntaxKind::BODY_TEXT).unwrap();
+    let body_text = body.text(result.source());
+    assert!(body_text.contains("Paragraph one."), "body = {:?}", body_text);
+    assert!(body_text.contains("Paragraph two."), "body = {:?}", body_text);
+    // Args must still be parsed
+    assert_eq!(args(&result).len(), 1);
+}
+
+/// Returns description with blank line + continuation at deeper indent.
+#[test]
+fn test_returns_description_blank_line_continuation() {
+    let input = "Summary.\n\nReturns:\n    bool: Short desc.\n\n        Longer explanation.\n";
+    let result = parse_google(input);
+    let r = returns(&result).unwrap();
+    let desc = r.description().unwrap().text(result.source());
+    assert!(desc.contains("Short desc."), "desc = {:?}", desc);
+    assert!(desc.contains("Longer explanation."), "desc = {:?}", desc);
+}
+
 /// RST-style `:param foo:` lines inside a Google `Args:` section must not
 /// produce a GOOGLE_ARG with an empty NAME, which would panic when
 /// `required_token(NAME)` is called.  They should be treated as bare-name
