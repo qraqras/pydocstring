@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-03-31
+
+### Fixed
+
+- Google parser: a non-indented line following a blank line inside a section
+  was incorrectly absorbed into that section as a bogus entry (e.g. `stray
+  line 1` became an `Args` entry) or appended to the preceding
+  `Returns` description. The parser now flushes the current section when a
+  blank line is followed by a line whose indentation is at or below the
+  section header's indentation level.
+- NumPy parser: same fix applied. `FreeText` sections (Notes, Examples, etc.)
+  are exempt because their body lines legitimately share the same indentation
+  level as the section header.
+
 ## [0.1.7] - 2026-03-30
 
 ### Fixed
