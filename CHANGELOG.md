@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-04-01
+
+### Fixed
+
+- Google parser: stray lines without a preceding blank line were incorrectly
+  absorbed into the current section as bogus entries. The `had_blank_in_section`
+  flag is removed; instead, any non-blank line at or below the section header's
+  indentation level unconditionally flushes the current section, regardless of
+  whether a blank line preceded it.
+- NumPy parser: the `had_blank_in_section` flush introduced in v0.1.8 incorrectly
+  terminated a section when two entries were separated by a blank line (e.g.
+  `x : int\n\ny : float` inside a `Parameters` block). The flag is removed;
+  NumPy sections now end only when the next `name\n---` header is detected,
+  matching the NumPy docstring specification (stray lines inside NumPy sections
+  are a known limitation documented in the source).
+
 ## [0.1.8] - 2026-03-31
 
 ### Fixed

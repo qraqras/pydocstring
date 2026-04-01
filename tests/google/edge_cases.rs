@@ -401,6 +401,19 @@ fn test_returns_description_blank_line_continuation() {
     assert!(desc.contains("Longer explanation."), "desc = {:?}", desc);
 }
 
+/// Same as above but WITHOUT blank lines before the stray lines.
+#[test]
+fn test_stray_line_between_args_and_returns_no_blank() {
+    let input = "Summary.\n\nArgs:\n    a: desc.\nstray line 1\n\nReturns:\n    desc\nstray line 2\n";
+    let result = parse_google(input);
+    let a = args(&result);
+    assert_eq!(a.len(), 1, "stray line must not become an arg entry (no-blank case)");
+    assert_eq!(a[0].name().text(result.source()), "a");
+    let r = returns(&result).unwrap();
+    let desc = r.description().unwrap().text(result.source());
+    assert!(!desc.contains("stray"), "stray line must not be in Returns description");
+}
+
 /// RST-style `:param foo:` lines inside a Google `Args:` section must not
 /// produce a GOOGLE_ARG with an empty NAME, which would panic when
 /// `required_token(NAME)` is called.  They should be treated as bare-name

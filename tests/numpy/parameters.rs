@@ -151,6 +151,17 @@ x1, x2 : array_like
 }
 
 #[test]
+fn test_multiple_parameters_with_blank_line_between() {
+    // NumPy style allows a blank line between parameter entries.
+    let docstring = "Summary.\n\nParameters\n----------\nx : int\n    First.\n\ny : str\n    Second.\n";
+    let result = parse_numpy(docstring);
+    let p = parameters(&result);
+    assert_eq!(p.len(), 2, "both parameters should be in the same section");
+    assert_eq!(p[0].names().next().unwrap().text(result.source()), "x");
+    assert_eq!(p[1].names().next().unwrap().text(result.source()), "y");
+}
+
+#[test]
 fn test_description_with_colon_not_treated_as_param() {
     let docstring = r#"Brief summary.
 

@@ -724,10 +724,6 @@ pub fn parse_google(input: &str) -> Parsed {
     let mut current_header: Option<SectionHeaderInfo> = None;
     let mut current_body: Option<SectionBody> = None;
     let mut entry_indent: Option<usize> = None;
-    // Set when a blank line is encountered while inside a section.
-    // Used to terminate the section when the next non-blank line is at or
-    // below the section header's indentation level.
-    let mut had_blank_in_section: bool = false;
 
     while !line_cursor.is_eof() {
         // --- Blank lines ---
@@ -738,9 +734,6 @@ pub fn parse_google(input: &str) -> Parsed {
                     build_content_range(&line_cursor, summary_first, summary_last).unwrap(),
                 )));
                 summary_done = true;
-            }
-            if current_body.is_some() {
-                had_blank_in_section = true;
             }
             line_cursor.advance();
             continue;
@@ -788,20 +781,20 @@ pub fn parse_google(input: &str) -> Parsed {
             current_body = Some(SectionBody::new(header_info.kind));
             current_header = Some(header_info);
             entry_indent = None;
-            had_blank_in_section = false;
             line_cursor.advance();
             continue;
         }
 
-        // --- Flush section if a blank line preceded a non-indented line ---
-        // A blank line followed by a line at or below the section header's
-        // indentation level ends the current section.  Lines that are more
-        // indented than the header (e.g. a second entry inside an Args block
-        // separated from the first by a blank line) continue the section.
-        if had_blank_in_section {
-            if let Some(ref h) = current_header {
-                if line_cursor.current_indent_columns() <= h.indent_columns {
-                    let prev_header = current_header.take().unwrap();
+        // --- Flush section when a stray line is detected ---
+        // In Google style every section body line must be more indented than the
+        // section header. A line at or below the header's indent that is not itself
+        // a section header ends the current section unconditionally, regardless of
+        // whether a blank line preceded it.
+        {
+            let l = line_cursor.current_indent_columns();
+            let below_or_at_header = current_header.as_ref().is_some_and(|h| l <= h.indent_columns);
+            if below_or_at_header {
+                if let Some(prev_header) = current_header.take() {
                     flush_section(
                         &line_cursor,
                         &mut root_children,
@@ -810,7 +803,6 @@ pub fn parse_google(input: &str) -> Parsed {
                     );
                 }
             }
-            had_blank_in_section = false;
         }
 
         // --- Process line based on current state ---
