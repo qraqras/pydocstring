@@ -724,6 +724,7 @@ pub fn parse_google(input: &str) -> Parsed {
     let mut current_header: Option<SectionHeaderInfo> = None;
     let mut current_body: Option<SectionBody> = None;
     let mut entry_indent: Option<usize> = None;
+    let mut body_is_deeper: Option<bool> = None;
 
     while !line_cursor.is_eof() {
         // --- Blank lines ---
@@ -781,19 +782,28 @@ pub fn parse_google(input: &str) -> Parsed {
             current_body = Some(SectionBody::new(header_info.kind));
             current_header = Some(header_info);
             entry_indent = None;
+            body_is_deeper = None;
             line_cursor.advance();
             continue;
         }
 
         // --- Flush section when a stray line is detected ---
-        // In Google style every section body line must be more indented than the
-        // section header. A line at or below the header's indent that is not itself
-        // a section header ends the current section unconditionally, regardless of
-        // whether a blank line preceded it.
+        //
+        // body_is_deeper tracks whether the section body is indented deeper than
+        // the section header:
+        //   None        – no body line seen yet; flush only if STRICTLY shallower
+        //                 than the header (lets zero-indent first entries through)
+        //   Some(true)  – body is deeper; flush when line returns to header indent
+        //   Some(false) – body is at same/shallower level (zero-indent style);
+        //                 never flush by indent — rely on section-header detection
         {
             let l = line_cursor.current_indent_columns();
-            let below_or_at_header = current_header.as_ref().is_some_and(|h| l <= h.indent_columns);
-            if below_or_at_header {
+            let should_flush = current_header.as_ref().is_some_and(|h| match body_is_deeper {
+                None => l < h.indent_columns,
+                Some(true) => l <= h.indent_columns,
+                Some(false) => false,
+            });
+            if should_flush {
                 if let Some(prev_header) = current_header.take() {
                     flush_section(
                         &line_cursor,
@@ -802,11 +812,16 @@ pub fn parse_google(input: &str) -> Parsed {
                         current_body.take().unwrap(),
                     );
                 }
+                body_is_deeper = None;
             }
         }
 
         // --- Process line based on current state ---
         if let Some(ref mut body) = current_body {
+            if body_is_deeper.is_none() {
+                let entry_l = line_cursor.current_indent_columns();
+                body_is_deeper = Some(current_header.as_ref().is_some_and(|h| entry_l > h.indent_columns));
+            }
             body.process_line(&line_cursor, &mut entry_indent);
         } else if !summary_done {
             if summary_first.is_none() {

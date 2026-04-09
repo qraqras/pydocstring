@@ -15,6 +15,59 @@ fn test_indented_docstring() {
     assert_eq!(a[0].r#type().unwrap().text(result.source()), "int");
 }
 
+/// Args entries at the same indent level as the section header (indent 0)
+/// must be parsed as args, not silently dropped as stray lines.
+/// Regression test: previously `x` and `y` became STRAY_LINE tokens.
+#[test]
+fn test_args_entries_same_indent_as_header() {
+    let input = "Args:\nx (int): desc\ny (int): desc";
+    let result = parse_google(input);
+    let a = args(&result);
+    assert_eq!(a.len(), 2, "x and y must be parsed as args, not dropped as stray lines");
+    assert_eq!(a[0].name().text(result.source()), "x");
+    assert_eq!(a[0].r#type().unwrap().text(result.source()), "int");
+    assert_eq!(a[0].description().unwrap().text(result.source()), "desc");
+    assert_eq!(a[1].name().text(result.source()), "y");
+    assert_eq!(a[1].r#type().unwrap().text(result.source()), "int");
+    assert_eq!(a[1].description().unwrap().text(result.source()), "desc");
+}
+
+/// A stray line that appears AFTER properly-indented entries (at indent 4)
+/// must still end the section even though the section header is at indent 0.
+#[test]
+fn test_stray_still_flushed_after_indented_entries() {
+    let input = "Summary.\n\nArgs:\n    a (int): first.\nstray\n\nReturns:\n    int: result.";
+    let result = parse_google(input);
+    let a = args(&result);
+    assert_eq!(a.len(), 1, "stray must not become an arg entry");
+    assert_eq!(a[0].name().text(result.source()), "a");
+    assert!(returns(&result).is_some(), "Returns section must still be parsed");
+}
+
+/// Slightly mis-indented entries (3 spaces when first entry used 4) must be
+/// parsed as arg entries, not dropped as STRAY_LINE.
+/// The flush threshold is the section header's own indent, not body_min_indent.
+#[test]
+fn test_slightly_misindented_entry_not_stray() {
+    let input = "Args:\n    x: desc\n   y: desc";
+    let result = parse_google(input);
+    let a = args(&result);
+    assert_eq!(a.len(), 2, "y must be an arg entry, not a STRAY_LINE");
+    assert_eq!(a[0].name().text(result.source()), "x");
+    assert_eq!(a[1].name().text(result.source()), "y");
+}
+
+/// Same check with an indented section header (header at 4, entries at 8, one at 7).
+#[test]
+fn test_slightly_misindented_entry_not_stray_nested() {
+    let input = "    Args:\n        x: desc\n       y: desc";
+    let result = parse_google(input);
+    let a = args(&result);
+    assert_eq!(a.len(), 2, "y must be an arg entry, not a STRAY_LINE");
+    assert_eq!(a[0].name().text(result.source()), "x");
+    assert_eq!(a[1].name().text(result.source()), "y");
+}
+
 #[test]
 fn test_indented_summary_span() {
     let docstring = "    Summary.";
