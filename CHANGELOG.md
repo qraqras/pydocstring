@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] - 2026-04-09
+
+### Fixed
+
+- Google parser: section entries at the same indentation level as the section
+  header (e.g. zero-indented docstrings) were incorrectly emitted as
+  `STRAY_LINE` tokens and silently dropped. A new `body_is_deeper: Option<bool>`
+  flag is introduced to record, on the first body line, whether the body is
+  indented deeper than the header. The flush condition is now a three-way
+  decision: when no body line has been seen yet, flush only on a *strictly*
+  shallower line; when the body is deeper than the header, flush at the
+  header's indentation level (previous behaviour); when the body is at the
+  same level as the header, never flush by indentation (a following section
+  header detected by keyword is still recognised). This also makes the parser
+  tolerant of slightly mis-indented entries (e.g. 3-space indent when the
+  first entry used 4 spaces).
+
 ## [0.1.9] - 2026-04-01
 
 ### Fixed
