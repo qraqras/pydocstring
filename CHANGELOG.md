@@ -317,8 +317,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero external crate dependencies
 - Python bindings via PyO3 (`pydocstring-rs`)
 
-[0.1.4]: https://github.com/qraqras/pydocstring/compare/v0.1.3...v0.1.4
-[0.1.3]: https://github.com/qraqras/pydocstring/compare/v0.1.2...v0.1.3
-[0.1.2]: https://github.com/qraqras/pydocstring/compare/v0.1.1...v0.1.2
-[0.1.1]: https://github.com/qraqras/pydocstring/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/qraqras/pydocstring/releases/tag/v0.1.0
+[0.1.4]: https://github.com/ryumasai/pydocstring/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/ryumasai/pydocstring/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/ryumasai/pydocstring/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/ryumasai/pydocstring/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/ryumasai/pydocstring/releases/tag/v0.1.0

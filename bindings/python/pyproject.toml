@@ -28,8 +28,8 @@ classifiers = [
 keywords = ["docstring", "parser", "google", "numpy", "documentation"]
 
 [project.urls]
-Repository = "https://github.com/qraqras/pydocstring"
-Documentation = "https://github.com/qraqras/pydocstring"
+Repository = "https://github.com/ryumasai/pydocstring"
+Documentation = "https://github.com/ryumasai/pydocstring"
 
 [tool.maturin]
 manifest-path = "Cargo.toml"
