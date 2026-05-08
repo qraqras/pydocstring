@@ -22,6 +22,7 @@ pub(crate) struct LineCursor<'a> {
     source: &'a str,
     offsets: Vec<usize>,
     total: usize,
+    indentation: usize,
     /// Current line index (0-based).
     pub line: usize,
 }
@@ -29,12 +30,13 @@ pub(crate) struct LineCursor<'a> {
 impl<'a> LineCursor<'a> {
     /// Create a new cursor over `source`, starting at line 0.
     pub fn new(source: &'a str) -> Self {
-        let offsets = build_line_offsets(source);
+        let (offsets, indentation) = build_line_offsets(source);
         let total = count_lines(source, &offsets);
         Self {
             source,
             offsets,
             total,
+            indentation,
             line: 0,
         }
     }
@@ -87,6 +89,11 @@ impl<'a> LineCursor<'a> {
     /// Trimmed text of the current line.
     pub fn current_trimmed(&self) -> &'a str {
         self.current_line_text().trim()
+    }
+
+    /// Rirght-trimmed text of the current line minus the global indentation.
+    pub fn current_trimmed_end(&self) -> &'a str {
+        &self.current_line_text().trim_end()[self.indentation..]
     }
 
     /// Leading-whitespace byte count of the current line.
@@ -227,14 +234,28 @@ pub(crate) fn indent_columns(line: &str) -> usize {
 // =============================================================================
 
 /// Build a table mapping each line index to its starting byte offset.
-fn build_line_offsets(input: &str) -> Vec<usize> {
+fn build_line_offsets(input: &str) -> (Vec<usize>, usize) {
     let mut offsets = vec![0usize];
+    let mut indent = usize::MAX;
+    let mut line: usize = 0;
+    let mut current_indent = 0;
+    let mut in_indentation = false;
     for (i, byte) in input.bytes().enumerate() {
-        if byte == b'\n' {
-            offsets.push(i + 1);
+        match byte {
+            b' ' | b'\t' if in_indentation => current_indent += 1,
+            b'\n' => {
+                offsets.push(i + 1);
+                if line > 0 && !in_indentation {
+                    indent = std::cmp::min(indent, current_indent);
+                }
+                line += 1;
+                current_indent = 0;
+                in_indentation = true;
+            }
+            _ => in_indentation = false,
         }
     }
-    offsets
+    (offsets, indent)
 }
 
 /// Number of text lines in source.
@@ -283,5 +304,16 @@ mod tests {
         assert_eq!(indent_len("\thello"), 1);
         assert_eq!(indent_len("    hello"), 4);
         assert_eq!(indent_len("  \thello"), 3);
+    }
+
+    #[test]
+    fn test_pep257_indentation() {
+        let (_, indentation) = build_line_offsets("Summary line
+
+        Description paragraph.
+
+        Args:
+            arg1: Arg description");
+        assert_eq!(indentation, 8)
     }
 }
