@@ -108,14 +108,18 @@ fn google_args_no_type() {
 
 #[test]
 fn google_returns() {
-    let parsed = parse_google("Summary.\n\nReturns:\n    int: The result.");
+    let parsed = parse_google("Summary.
+
+    Returns:
+        int: The result.
+        More description.");
     let doc = google_to_model(&parsed).unwrap();
     match &doc.sections[0] {
         Section::Returns(returns) => {
             assert_eq!(returns.len(), 1);
             assert_eq!(returns[0].name, None);
             assert_eq!(returns[0].type_annotation.as_deref(), Some("int"));
-            assert_eq!(returns[0].description.as_deref(), Some("The result."));
+            assert_eq!(returns[0].description.as_deref(), Some("The result.\nMore description."));
         }
         other => panic!("expected Returns, got {:?}", other),
     }
@@ -127,13 +131,19 @@ fn google_returns() {
 
 #[test]
 fn google_raises() {
-    let parsed = parse_google("Summary.\n\nRaises:\n    ValueError: If bad.");
+    let parsed = parse_google("Summary.
+
+    Raises:
+        ValueError: If bad.
+            More description.
+
+            Even more.");
     let doc = google_to_model(&parsed).unwrap();
     match &doc.sections[0] {
         Section::Raises(entries) => {
             assert_eq!(entries.len(), 1);
             assert_eq!(entries[0].type_name, "ValueError");
-            assert_eq!(entries[0].description.as_deref(), Some("If bad."));
+            assert_eq!(entries[0].description.as_deref(), Some("If bad.\nMore description.\n\nEven more."));
         }
         other => panic!("expected Raises, got {:?}", other),
     }
@@ -145,13 +155,17 @@ fn google_raises() {
 
 #[test]
 fn google_warns() {
-    let parsed = parse_google("Summary.\n\nWarns:\n    UserWarning: Watch out.");
+    let parsed = parse_google("Summary.
+
+    Warns:
+        UserWarning: Watch out.
+            Details.");
     let doc = google_to_model(&parsed).unwrap();
     match &doc.sections[0] {
         Section::Warns(entries) => {
             assert_eq!(entries.len(), 1);
             assert_eq!(entries[0].type_name, "UserWarning");
-            assert_eq!(entries[0].description.as_deref(), Some("Watch out."));
+            assert_eq!(entries[0].description.as_deref(), Some("Watch out.\nDetails."));
         }
         other => panic!("expected Warns, got {:?}", other),
     }
@@ -163,12 +177,21 @@ fn google_warns() {
 
 #[test]
 fn google_notes_section() {
-    let parsed = parse_google("Summary.\n\nNotes:\n    Some notes here.");
+    let parsed = parse_google("Summary.
+
+    Notes:
+        Some notes here.
+        More notes.
+
+        - Unordered list.
+          same item
+        - next item");
     let doc = google_to_model(&parsed).unwrap();
     match &doc.sections[0] {
         Section::FreeText { kind, body } => {
             assert_eq!(*kind, FreeSectionKind::Notes);
             assert!(!body.is_empty());
+            assert_eq!(body, "Some notes here.\nMore notes.\n\n- Unordered list.\n  same item\n- next item")
         }
         other => panic!("expected FreeText, got {:?}", other),
     }
@@ -181,13 +204,32 @@ fn google_notes_section() {
 #[test]
 fn google_multiple_sections() {
     let parsed = parse_google(
-        "Summary.\n\nArgs:\n    x (int): Val.\n\nReturns:\n    str: Result.\n\nRaises:\n    ValueError: Bad.",
+        "Summary.
+
+        Args:
+            x (int): Val.
+
+        Returns:
+            str: Result.
+        Raises:
+            ValueError: Bad.
+            KeyError: Very bad.
+                Only raised when key is not found.",
     );
     let doc = google_to_model(&parsed).unwrap();
     assert_eq!(doc.sections.len(), 3);
     assert!(matches!(&doc.sections[0], Section::Parameters(_)));
     assert!(matches!(&doc.sections[1], Section::Returns(_)));
-    assert!(matches!(&doc.sections[2], Section::Raises(_)));
+    match &doc.sections[2] {
+        Section::Raises(entries) => {
+            assert_eq!(entries.len(), 2);
+            assert_eq!(entries[0].type_name, "ValueError");
+            assert_eq!(entries[0].description.as_deref(), Some("Bad."));
+            assert_eq!(entries[1].type_name, "KeyError");
+            assert_eq!(entries[1].description.as_deref(), Some("Very bad.\nOnly raised when key is not found."));
+        },
+        other => panic!("expected Raises, got {:?}", other),
+    }
 }
 
 // =============================================================================

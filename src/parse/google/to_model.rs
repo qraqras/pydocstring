@@ -27,6 +27,26 @@ pub fn to_model(parsed: &Parsed) -> Option<Docstring> {
     })
 }
 
+fn convert_multiline_with_indentation(text: &str) -> String {
+    let description_indent = text.lines().skip(1).filter_map(|line| {
+        let trimmed_len = line.trim_start().len();
+        if trimmed_len == 0 {
+            None
+        } else {
+            Some(line.len() - trimmed_len)
+        }
+    }).min().unwrap_or(0);
+    let mut lines = text.lines();
+    let first_line = lines.next().unwrap().trim_end(); // at least one line => we can safely unwrap
+    lines.map(|line| {
+        if description_indent >= line.len() { // empty line
+            &line[0..0]
+        } else {
+            line[description_indent..].trim_end()
+        }
+    }).fold(first_line.to_owned(), |a, b| a + "\n" + b)
+}
+
 fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
     let kind = section.section_kind(source);
 
@@ -52,7 +72,7 @@ fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
                 .map(|r| Return {
                     name: None,
                     type_annotation: r.return_type().map(|t| t.text(source).to_owned()),
-                    description: r.description().map(|t| t.text(source).to_owned()),
+                    description: r.description().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect();
             Section::Returns(entries)
@@ -64,7 +84,7 @@ fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
                 .map(|r| Return {
                     name: None,
                     type_annotation: r.return_type().map(|t| t.text(source).to_owned()),
-                    description: r.description().map(|t| t.text(source).to_owned()),
+                    description: r.description().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect();
             Section::Yields(entries)
@@ -77,7 +97,7 @@ fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
                 .warnings()
                 .map(|w| ExceptionEntry {
                     type_name: w.warning_type().text(source).to_owned(),
-                    description: w.description().map(|t| t.text(source).to_owned()),
+                    description: w.description().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect(),
         ),
@@ -86,7 +106,7 @@ fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
                 .see_also_items()
                 .map(|item| SeeAlsoEntry {
                     names: item.names().map(|n| n.text(source).to_owned()).collect(),
-                    description: item.description().map(|t| t.text(source).to_owned()),
+                    description: item.description().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect(),
         ),
@@ -96,7 +116,7 @@ fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
                 .map(|a| Attribute {
                     name: a.name().text(source).to_owned(),
                     type_annotation: a.r#type().map(|t| t.text(source).to_owned()),
-                    description: a.description().map(|t| t.text(source).to_owned()),
+                    description: a.description().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect(),
         ),
@@ -106,7 +126,7 @@ fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
                 .map(|m| Method {
                     name: m.name().text(source).to_owned(),
                     type_annotation: m.r#type().map(|t| t.text(source).to_owned()),
-                    description: m.description().map(|t| t.text(source).to_owned()),
+                    description: m.description().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect(),
         ),
@@ -114,7 +134,7 @@ fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
         _ => {
             let body = section
                 .body_text()
-                .map(|t| t.text(source).to_owned())
+                .map(|t| convert_multiline_with_indentation(t.text(source)))
                 .unwrap_or_default();
             let free_kind = match kind {
                 GoogleSectionKind::Notes => FreeSectionKind::Notes,
@@ -142,26 +162,7 @@ fn convert_arg(arg: &crate::parse::google::nodes::GoogleArg<'_>, source: &str) -
     Parameter {
         names: vec![arg.name().text(source).to_owned()],
         type_annotation: arg.r#type().map(|t| t.text(source).to_owned()),
-        description: arg.description().map(|t| {
-            let text = t.text(source);
-            let description_indent = text.lines().skip(1).filter_map(|line| {
-                let trimmed_len = line.trim_start().len();
-                if trimmed_len == 0 {
-                    None
-                } else {
-                    Some(line.len() - trimmed_len)
-                }
-            }).min().unwrap_or(0);
-            let mut lines = text.lines();
-            let first_line = lines.next().unwrap().trim_end(); // at least one description line => we can safely unwrap
-            lines.map(|line| {
-                if description_indent >= line.len() { // empty line
-                    &line[0..0]
-                } else {
-                    line[description_indent..].trim_end()
-                }
-            }).fold(first_line.to_owned(), |a, b| a + "\n" + b)
-        }),
+        description: arg.description().map(|t| convert_multiline_with_indentation(t.text(source))),
         is_optional: arg.optional().is_some(),
         default_value: None,
     }
@@ -170,6 +171,6 @@ fn convert_arg(arg: &crate::parse::google::nodes::GoogleArg<'_>, source: &str) -
 fn convert_exception(exc: &crate::parse::google::nodes::GoogleException<'_>, source: &str) -> ExceptionEntry {
     ExceptionEntry {
         type_name: exc.r#type().text(source).to_owned(),
-        description: exc.description().map(|t| t.text(source).to_owned()),
+        description: exc.description().map(|t| convert_multiline_with_indentation(t.text(source))),
     }
 }
