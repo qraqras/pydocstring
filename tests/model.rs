@@ -19,10 +19,13 @@ fn google_summary_only() {
 
 #[test]
 fn google_summary_and_extended() {
-    let parsed = parse_google("Summary.\n\nExtended description\nspanning lines.");
+    let parsed = parse_google("Summary.
+
+    Extended description
+    spanning lines.");
     let doc = google_to_model(&parsed).unwrap();
     assert_eq!(doc.summary.as_deref(), Some("Summary."));
-    assert!(doc.extended_summary.is_some());
+    assert_eq!(doc.extended_summary.as_deref(), Some("Extended description\nspanning lines."));
 }
 
 // =============================================================================
@@ -62,6 +65,7 @@ fn google_args_optional() {
 #[test]
 fn google_args_multiple() {
     let parsed = parse_google("Summary.
+
         Args:
             x (int): First.
             y (str): Second.
@@ -270,7 +274,12 @@ fn numpy_summary_and_extended() {
 
 #[test]
 fn numpy_parameters_basic() {
-    let parsed = parse_numpy("Summary.\n\nParameters\n----------\nx : int\n    The value.");
+    let parsed = parse_numpy("Summary.
+
+    Parameters
+    ----------
+    x : int
+        The value.");
     let doc = numpy_to_model(&parsed).unwrap();
     assert_eq!(doc.sections.len(), 1);
     match &doc.sections[0] {
@@ -297,8 +306,49 @@ fn numpy_parameters_optional() {
 }
 
 #[test]
+fn numpy_parameters_multiple() {
+    let parsed = parse_numpy("Summary.
+
+        Parameters
+        ----------
+        x: int
+            First.
+        y: str
+            Second.
+            More description.
+        z
+            Third.
+            More description.
+
+            .. directive:: something
+               directive_option
+
+            continued description.");
+    let doc = numpy_to_model(&parsed).unwrap();
+    match &doc.sections[0] {
+        Section::Parameters(params) => {
+            assert_eq!(params.len(), 3);
+            assert_eq!(params[0].names, vec!["x"]);
+            assert_eq!(params[0].description.as_deref(), Some("First."));
+
+            assert_eq!(params[1].names, vec!["y"]);
+            assert_eq!(params[1].description.as_deref(), Some("Second.\nMore description."));
+
+            assert_eq!(params[2].names, vec!["z"]);
+            assert_eq!(params[2].description.as_deref(), Some("Third.\nMore description.\n\n.. directive:: something\n   directive_option\n\ncontinued description."));
+        }
+        other => panic!("expected Parameters, got {:?}", other),
+    }
+}
+
+#[test]
 fn numpy_parameters_multiple_names() {
-    let parsed = parse_numpy("Summary.\n\nParameters\n----------\nx, y : float\n    Values.");
+    let parsed = parse_numpy("Summary.
+
+    Parameters
+    ----------
+    x, y : float
+        Values.");
     let doc = numpy_to_model(&parsed).unwrap();
     match &doc.sections[0] {
         Section::Parameters(params) => {
@@ -310,7 +360,12 @@ fn numpy_parameters_multiple_names() {
 
 #[test]
 fn numpy_parameters_default_value() {
-    let parsed = parse_numpy("Summary.\n\nParameters\n----------\nx : int, default: 0\n    The value.");
+    let parsed = parse_numpy("Summary.
+
+    Parameters
+    ----------
+    x : int, default: 0
+        The value.");
     let doc = numpy_to_model(&parsed).unwrap();
     match &doc.sections[0] {
         Section::Parameters(params) => {
@@ -326,12 +381,19 @@ fn numpy_parameters_default_value() {
 
 #[test]
 fn numpy_returns() {
-    let parsed = parse_numpy("Summary.\n\nReturns\n-------\nresult : int\n    The result.");
+    let parsed = parse_numpy("Summary.
+
+    Returns
+    -------
+    result : int
+        The result.
+        More description.");
     let doc = numpy_to_model(&parsed).unwrap();
     match &doc.sections[0] {
         Section::Returns(returns) => {
             assert_eq!(returns.len(), 1);
             assert_eq!(returns[0].type_annotation.as_deref(), Some("int"));
+            assert_eq!(returns[0].description.as_deref(), Some("The result.\nMore description."))
         }
         other => panic!("expected Returns, got {:?}", other),
     }
@@ -343,12 +405,28 @@ fn numpy_returns() {
 
 #[test]
 fn numpy_raises() {
-    let parsed = parse_numpy("Summary.\n\nRaises\n------\nValueError\n    If bad.");
+    let parsed = parse_numpy("Summary.
+
+    Raises
+    ------
+    ValueError
+        If bad.
+    KeyError
+        If very bad.
+
+            blockquote
+
+        1. first item
+           still first item
+        2. second item");
     let doc = numpy_to_model(&parsed).unwrap();
     match &doc.sections[0] {
         Section::Raises(entries) => {
-            assert_eq!(entries.len(), 1);
+            assert_eq!(entries.len(), 2);
             assert_eq!(entries[0].type_name, "ValueError");
+            assert_eq!(entries[0].description.as_deref(), Some("If bad."));
+            assert_eq!(entries[1].type_name, "KeyError");
+            assert_eq!(entries[1].description.as_deref(), Some("If very bad.\n\n    blockquote\n\n1. first item\n   still first item\n2. second item"));
         }
         other => panic!("expected Raises, got {:?}", other),
     }
@@ -360,11 +438,14 @@ fn numpy_raises() {
 
 #[test]
 fn numpy_deprecation() {
-    let parsed = parse_numpy("Summary.\n\n.. deprecated:: 1.6.0\n    Use `other` instead.");
+    let parsed = parse_numpy("Summary.
+
+    .. deprecated:: 1.6.0
+       Use `other` instead.");
     let doc = numpy_to_model(&parsed).unwrap();
     let dep = doc.deprecation.as_ref().expect("should have deprecation");
     assert_eq!(dep.version, "1.6.0");
-    assert!(dep.description.is_some());
+    assert_eq!(dep.description.as_deref(), Some("Use `other` instead."));
 }
 
 // =============================================================================
@@ -373,7 +454,11 @@ fn numpy_deprecation() {
 
 #[test]
 fn numpy_notes_section() {
-    let parsed = parse_numpy("Summary.\n\nNotes\n-----\nSome notes here.");
+    let parsed = parse_numpy("Summary.
+
+    Notes
+    -----
+    Some notes here.");
     let doc = numpy_to_model(&parsed).unwrap();
     match &doc.sections[0] {
         Section::FreeText { kind, body } => {
@@ -391,7 +476,21 @@ fn numpy_notes_section() {
 #[test]
 fn numpy_multiple_sections() {
     let parsed = parse_numpy(
-        "Summary.\n\nParameters\n----------\nx : int\n    Val.\n\nReturns\n-------\nint\n    Result.\n\nRaises\n------\nValueError\n    Bad.",
+        "Summary.
+
+        Parameters
+        ----------
+        x : int
+            Val.
+        Returns
+        -------
+        int
+            Result.
+
+        Raises
+        ------
+        ValueError
+            Bad.",
     );
     let doc = numpy_to_model(&parsed).unwrap();
     assert_eq!(doc.sections.len(), 3);
@@ -406,8 +505,16 @@ fn numpy_multiple_sections() {
 
 #[test]
 fn same_ir_from_both_styles() {
-    let google = parse_google("Summary.\n\nArgs:\n    x (int): The value.");
-    let numpy = parse_numpy("Summary.\n\nParameters\n----------\nx : int\n    The value.");
+    let google = parse_google("Summary.
+
+    Args:
+        x (int): The value.");
+    let numpy = parse_numpy("Summary.
+
+    Parameters
+    ----------
+    x : int
+        The value.");
 
     let g = google_to_model(&google).unwrap();
     let n = numpy_to_model(&numpy).unwrap();

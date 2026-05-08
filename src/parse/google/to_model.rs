@@ -5,6 +5,7 @@ use crate::model::{
 };
 use crate::parse::google::kind::GoogleSectionKind;
 use crate::parse::google::nodes::{GoogleDocstring, GoogleSection};
+use crate::parse::utils::convert_multiline_with_indentation;
 use crate::syntax::Parsed;
 
 /// Build a [`Docstring`] from a Google-style [`Parsed`] result.
@@ -15,7 +16,7 @@ pub fn to_model(parsed: &Parsed) -> Option<Docstring> {
     let root = GoogleDocstring::cast(parsed.root())?;
 
     let summary = root.summary().map(|t| t.text(source).to_owned());
-    let extended_summary = root.extended_summary().map(|t| t.text(source).to_owned());
+    let extended_summary = root.extended_summary().map(|t| convert_multiline_with_indentation(t.text(source)));
 
     let sections = root.sections().map(|s| convert_section(&s, source)).collect();
 
@@ -25,26 +26,6 @@ pub fn to_model(parsed: &Parsed) -> Option<Docstring> {
         deprecation: None,
         sections,
     })
-}
-
-fn convert_multiline_with_indentation(text: &str) -> String {
-    let description_indent = text.lines().skip(1).filter_map(|line| {
-        let trimmed_len = line.trim_start().len();
-        if trimmed_len == 0 {
-            None
-        } else {
-            Some(line.len() - trimmed_len)
-        }
-    }).min().unwrap_or(0);
-    let mut lines = text.lines();
-    let first_line = lines.next().unwrap().trim_end(); // at least one line => we can safely unwrap
-    lines.map(|line| {
-        if description_indent >= line.len() { // empty line
-            &line[0..0]
-        } else {
-            line[description_indent..].trim_end()
-        }
-    }).fold(first_line.to_owned(), |a, b| a + "\n" + b)
 }
 
 fn convert_section(section: &GoogleSection<'_>, source: &str) -> Section {
