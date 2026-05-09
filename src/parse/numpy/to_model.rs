@@ -6,6 +6,7 @@ use crate::model::{
 };
 use crate::parse::numpy::kind::NumPySectionKind;
 use crate::parse::numpy::nodes::{NumPyDocstring, NumPySection};
+use crate::parse::utils::convert_multiline_with_indentation;
 use crate::syntax::Parsed;
 
 /// Build a [`Docstring`] from a NumPy-style [`Parsed`] result.
@@ -54,7 +55,7 @@ fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
                 .map(|r| Return {
                     name: r.name().map(|t| t.text(source).to_owned()),
                     type_annotation: r.return_type().map(|t| t.text(source).to_owned()),
-                    description: r.description().map(|t| t.text(source).to_owned()),
+                    description: r.description().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect();
             Section::Returns(entries)
@@ -65,7 +66,7 @@ fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
                 .map(|r| Return {
                     name: r.name().map(|t| t.text(source).to_owned()),
                     type_annotation: r.return_type().map(|t| t.text(source).to_owned()),
-                    description: r.description().map(|t| t.text(source).to_owned()),
+                    description: r.description().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect();
             Section::Yields(entries)
@@ -75,7 +76,7 @@ fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
                 .exceptions()
                 .map(|e| ExceptionEntry {
                     type_name: e.r#type().text(source).to_owned(),
-                    description: e.description().map(|t| t.text(source).to_owned()),
+                    description: e.description().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect(),
         ),
@@ -84,7 +85,7 @@ fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
                 .warnings()
                 .map(|w| ExceptionEntry {
                     type_name: w.r#type().text(source).to_owned(),
-                    description: w.description().map(|t| t.text(source).to_owned()),
+                    description: w.description().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect(),
         ),
@@ -93,7 +94,7 @@ fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
                 .see_also_items()
                 .map(|item| SeeAlsoEntry {
                     names: item.names().map(|n| n.text(source).to_owned()).collect(),
-                    description: item.description().map(|t| t.text(source).to_owned()),
+                    description: item.description().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect(),
         ),
@@ -102,7 +103,7 @@ fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
                 .references()
                 .map(|r| Reference {
                     number: r.number().map(|t| t.text(source).to_owned()),
-                    content: r.content().map(|t| t.text(source).to_owned()),
+                    content: r.content().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect(),
         ),
@@ -112,7 +113,7 @@ fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
                 .map(|a| Attribute {
                     name: a.name().text(source).to_owned(),
                     type_annotation: a.r#type().map(|t| t.text(source).to_owned()),
-                    description: a.description().map(|t| t.text(source).to_owned()),
+                    description: a.description().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect(),
         ),
@@ -122,7 +123,7 @@ fn convert_section(section: &NumPySection<'_>, source: &str) -> Section {
                 .map(|m| Method {
                     name: m.name().text(source).to_owned(),
                     type_annotation: None,
-                    description: m.description().map(|t| t.text(source).to_owned()),
+                    description: m.description().map(|t| convert_multiline_with_indentation(t.text(source))),
                 })
                 .collect(),
         ),
@@ -148,7 +149,7 @@ fn convert_parameter(param: &crate::parse::numpy::nodes::NumPyParameter<'_>, sou
     Parameter {
         names: param.names().map(|n| n.text(source).to_owned()).collect(),
         type_annotation: param.r#type().map(|t| t.text(source).to_owned()),
-        description: param.description().map(|t| t.text(source).to_owned()),
+        description: param.description().map(|t| convert_multiline_with_indentation(t.text(source))),
         is_optional: param.optional().is_some(),
         default_value: param.default_value().map(|t| t.text(source).to_owned()),
     }
