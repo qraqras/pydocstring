@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 // ─── TextRange ──────────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "TextRange")]
+#[pyclass(frozen, skip_from_py_object, name = "TextRange")]
 #[derive(Clone, Copy)]
 struct PyTextRange {
     #[pyo3(get)]
@@ -48,7 +48,7 @@ impl PyTextRange {
 
 // ─── LineColumn ─────────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "LineColumn")]
+#[pyclass(frozen, skip_from_py_object, name = "LineColumn")]
 struct PyLineColumn {
     #[pyo3(get)]
     lineno: u32,
@@ -79,7 +79,7 @@ fn build_line_starts(source: &str) -> Vec<u32> {
 ///
 /// The field name on the parent object (e.g. `.name`, `.description`) implies
 /// the semantic kind; no redundant `kind` field is exposed.
-#[pyclass(frozen, name = "Token")]
+#[pyclass(frozen, skip_from_py_object, name = "Token")]
 struct PyToken {
     text: String,
     range: TextRange,
@@ -159,7 +159,7 @@ fn mk_tokens<'a>(
 
 // ─── Style ──────────────────────────────────────────────────────────────────
 
-#[pyclass(eq, eq_int, frozen, name = "Style")]
+#[pyclass(eq, eq_int, frozen, skip_from_py_object, name = "Style")]
 #[derive(Clone, PartialEq)]
 enum PyStyle {
     #[pyo3(name = "GOOGLE")]
@@ -190,7 +190,7 @@ impl PyStyle {
 
 // ─── GoogleSectionKind ───────────────────────────────────────────────────────
 
-#[pyclass(eq, eq_int, frozen, hash, name = "GoogleSectionKind")]
+#[pyclass(eq, eq_int, frozen, skip_from_py_object, hash, name = "GoogleSectionKind")]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum PyGoogleSectionKind {
     #[pyo3(name = "ARGS")]
@@ -309,7 +309,7 @@ fn google_section_kind_to_py(kind: GoogleSectionKind) -> PyGoogleSectionKind {
 
 // ─── NumPySectionKind ────────────────────────────────────────────────────────
 
-#[pyclass(eq, eq_int, frozen, hash, name = "NumPySectionKind")]
+#[pyclass(eq, eq_int, frozen, skip_from_py_object, hash, name = "NumPySectionKind")]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum PyNumPySectionKind {
     #[pyo3(name = "PARAMETERS")]
@@ -396,7 +396,7 @@ fn numpy_section_kind_to_py(kind: NumPySectionKind) -> PyNumPySectionKind {
 
 // ─── GoogleArg ───────────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "GoogleArg")]
+#[pyclass(frozen, skip_from_py_object, name = "GoogleArg")]
 struct PyGoogleArg {
     range: TextRange,
     name: Py<PyToken>,
@@ -471,7 +471,7 @@ fn build_google_arg(py: Python<'_>, arg: &gn::GoogleArg<'_>, source: &str) -> Py
 
 // ─── GoogleReturn ────────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "GoogleReturn")]
+#[pyclass(frozen, skip_from_py_object, name = "GoogleReturn")]
 struct PyGoogleReturn {
     range: TextRange,
     return_type: Option<Py<PyToken>>,
@@ -516,7 +516,7 @@ fn build_google_return(py: Python<'_>, rtn: &gn::GoogleReturn<'_>, source: &str)
 
 // ─── GoogleYield ─────────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "GoogleYield")]
+#[pyclass(frozen, skip_from_py_object, name = "GoogleYield")]
 struct PyGoogleYield {
     range: TextRange,
     return_type: Option<Py<PyToken>>,
@@ -561,7 +561,7 @@ fn build_google_yield(py: Python<'_>, yld: &gn::GoogleYield<'_>, source: &str) -
 
 // ─── GoogleException ─────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "GoogleException")]
+#[pyclass(frozen, skip_from_py_object, name = "GoogleException")]
 struct PyGoogleException {
     range: TextRange,
     r#type: Py<PyToken>,
@@ -610,7 +610,7 @@ fn build_google_exception(
 
 // ─── GoogleWarning ───────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "GoogleWarning")]
+#[pyclass(frozen, skip_from_py_object, name = "GoogleWarning")]
 struct PyGoogleWarning {
     range: TextRange,
     warning_type: Py<PyToken>,
@@ -655,7 +655,7 @@ fn build_google_warning(py: Python<'_>, wrn: &gn::GoogleWarning<'_>, source: &st
 
 // ─── GoogleSeeAlsoItem ───────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "GoogleSeeAlsoItem")]
+#[pyclass(frozen, skip_from_py_object, name = "GoogleSeeAlsoItem")]
 struct PyGoogleSeeAlsoItem {
     range: TextRange,
     names: Vec<Py<PyToken>>,
@@ -704,7 +704,7 @@ fn build_google_see_also_item(
 
 // ─── GoogleAttribute ─────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "GoogleAttribute")]
+#[pyclass(frozen, skip_from_py_object, name = "GoogleAttribute")]
 struct PyGoogleAttribute {
     range: TextRange,
     name: Py<PyToken>,
@@ -777,7 +777,7 @@ fn build_google_attribute(
 
 // ─── GoogleMethod ────────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "GoogleMethod")]
+#[pyclass(frozen, skip_from_py_object, name = "GoogleMethod")]
 struct PyGoogleMethod {
     range: TextRange,
     name: Py<PyToken>,
@@ -847,7 +847,7 @@ fn build_google_method(py: Python<'_>, mtd: &gn::GoogleMethod<'_>, source: &str)
 // ─── GoogleSection ───────────────────────────────────────────────────────────
 
 /// A thin wrapper for a Google section node (no eager child allocation).
-#[pyclass(frozen, name = "GoogleSection")]
+#[pyclass(frozen, skip_from_py_object, name = "GoogleSection")]
 struct PyGoogleSection {
     range: TextRange,
     section_kind: PyGoogleSectionKind,
@@ -886,7 +886,7 @@ fn build_google_section(py: Python<'_>, sec: &gn::GoogleSection<'_>, source: &st
 
 // ─── GoogleDocstring ─────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "GoogleDocstring")]
+#[pyclass(frozen, skip_from_py_object, name = "GoogleDocstring")]
 struct PyGoogleDocstring {
     range: TextRange,
     summary: Option<Py<PyToken>>,
@@ -982,7 +982,7 @@ fn build_google_docstring(py: Python<'_>, parsed: Parsed) -> PyResult<Py<PyGoogl
 
 // ─── NumPyDeprecation ────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "NumPyDeprecation")]
+#[pyclass(frozen, skip_from_py_object, name = "NumPyDeprecation")]
 struct PyNumPyDeprecation {
     range: TextRange,
     directive_marker: Option<Py<PyToken>>,
@@ -1043,7 +1043,7 @@ fn build_numpy_deprecation(
 
 // ─── NumPyParameter ──────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "NumPyParameter")]
+#[pyclass(frozen, skip_from_py_object, name = "NumPyParameter")]
 struct PyNumPyParameter {
     range: TextRange,
     names: Vec<Py<PyToken>>,
@@ -1129,7 +1129,7 @@ fn build_numpy_parameter(py: Python<'_>, prm: &nn::NumPyParameter<'_>, source: &
 
 // ─── NumPyReturns ────────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "NumPyReturns")]
+#[pyclass(frozen, skip_from_py_object, name = "NumPyReturns")]
 struct PyNumPyReturns {
     range: TextRange,
     name: Option<Py<PyToken>>,
@@ -1180,7 +1180,7 @@ fn build_numpy_returns(py: Python<'_>, rtn: &nn::NumPyReturns<'_>, source: &str)
 
 // ─── NumPyYields ─────────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "NumPyYields")]
+#[pyclass(frozen, skip_from_py_object, name = "NumPyYields")]
 struct PyNumPyYields {
     range: TextRange,
     name: Option<Py<PyToken>>,
@@ -1231,7 +1231,7 @@ fn build_numpy_yields(py: Python<'_>, yld: &nn::NumPyYields<'_>, source: &str) -
 
 // ─── NumPyException ──────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "NumPyException")]
+#[pyclass(frozen, skip_from_py_object, name = "NumPyException")]
 struct PyNumPyException {
     range: TextRange,
     r#type: Py<PyToken>,
@@ -1276,7 +1276,7 @@ fn build_numpy_exception(py: Python<'_>, exc: &nn::NumPyException<'_>, source: &
 
 // ─── NumPyWarning ────────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "NumPyWarning")]
+#[pyclass(frozen, skip_from_py_object, name = "NumPyWarning")]
 struct PyNumPyWarning {
     range: TextRange,
     r#type: Py<PyToken>,
@@ -1321,7 +1321,7 @@ fn build_numpy_warning(py: Python<'_>, wrn: &nn::NumPyWarning<'_>, source: &str)
 
 // ─── NumPySeeAlsoItem ────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "NumPySeeAlsoItem")]
+#[pyclass(frozen, skip_from_py_object, name = "NumPySeeAlsoItem")]
 struct PyNumPySeeAlsoItem {
     range: TextRange,
     names: Vec<Py<PyToken>>,
@@ -1370,7 +1370,7 @@ fn build_numpy_see_also_item(
 
 // ─── NumPyReference ──────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "NumPyReference")]
+#[pyclass(frozen, skip_from_py_object, name = "NumPyReference")]
 struct PyNumPyReference {
     range: TextRange,
     directive_marker: Option<Py<PyToken>>,
@@ -1427,7 +1427,7 @@ fn build_numpy_reference(py: Python<'_>, r: &nn::NumPyReference<'_>, source: &st
 
 // ─── NumPyAttribute ──────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "NumPyAttribute")]
+#[pyclass(frozen, skip_from_py_object, name = "NumPyAttribute")]
 struct PyNumPyAttribute {
     range: TextRange,
     name: Py<PyToken>,
@@ -1478,7 +1478,7 @@ fn build_numpy_attribute(py: Python<'_>, att: &nn::NumPyAttribute<'_>, source: &
 
 // ─── NumPyMethod ─────────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "NumPyMethod")]
+#[pyclass(frozen, skip_from_py_object, name = "NumPyMethod")]
 struct PyNumPyMethod {
     range: TextRange,
     name: Py<PyToken>,
@@ -1524,7 +1524,7 @@ fn build_numpy_method(py: Python<'_>, mtd: &nn::NumPyMethod<'_>, source: &str) -
 // ─── NumPySection ────────────────────────────────────────────────────────────
 
 /// A thin wrapper for a NumPy section node (no eager child allocation).
-#[pyclass(frozen, name = "NumPySection")]
+#[pyclass(frozen, skip_from_py_object, name = "NumPySection")]
 struct PyNumPySection {
     range: TextRange,
     section_kind: PyNumPySectionKind,
@@ -1563,7 +1563,7 @@ fn build_numpy_section(py: Python<'_>, sec: &nn::NumPySection<'_>, source: &str)
 
 // ─── NumPyDocstring ──────────────────────────────────────────────────────────
 
-#[pyclass(frozen, name = "NumPyDocstring")]
+#[pyclass(frozen, skip_from_py_object, name = "NumPyDocstring")]
 struct PyNumPyDocstring {
     range: TextRange,
     summary: Option<Py<PyToken>>,
@@ -1660,7 +1660,7 @@ fn build_numpy_docstring(py: Python<'_>, parsed: Parsed) -> PyResult<Py<PyNumPyD
 // Plain docstring
 // =============================================================================
 
-#[pyclass(frozen, name = "PlainDocstring")]
+#[pyclass(frozen, skip_from_py_object, name = "PlainDocstring")]
 struct PyPlainDocstring {
     range: TextRange,
     summary: Option<Py<PyToken>>,
@@ -1748,7 +1748,7 @@ fn build_plain_docstring_node(
 // Model IR types
 // =============================================================================
 
-#[pyclass(name = "Deprecation")]
+#[pyclass(from_py_object, name = "Deprecation")]
 #[derive(Clone)]
 struct PyModelDeprecation {
     #[pyo3(get, set)]
@@ -1769,7 +1769,7 @@ impl PyModelDeprecation {
     }
 }
 
-#[pyclass(name = "Parameter")]
+#[pyclass(from_py_object, name = "Parameter")]
 #[derive(Clone)]
 struct PyModelParameter {
     #[pyo3(get, set)]
@@ -1808,7 +1808,7 @@ impl PyModelParameter {
     }
 }
 
-#[pyclass(name = "Return")]
+#[pyclass(from_py_object, name = "Return")]
 #[derive(Clone)]
 struct PyModelReturn {
     #[pyo3(get, set)]
@@ -1837,7 +1837,7 @@ impl PyModelReturn {
     }
 }
 
-#[pyclass(name = "ExceptionEntry")]
+#[pyclass(from_py_object, name = "ExceptionEntry")]
 #[derive(Clone)]
 struct PyModelExceptionEntry {
     #[pyo3(get, set)]
@@ -1858,7 +1858,7 @@ impl PyModelExceptionEntry {
     }
 }
 
-#[pyclass(name = "SeeAlsoEntry")]
+#[pyclass(from_py_object, name = "SeeAlsoEntry")]
 #[derive(Clone)]
 struct PyModelSeeAlsoEntry {
     #[pyo3(get, set)]
@@ -1879,7 +1879,7 @@ impl PyModelSeeAlsoEntry {
     }
 }
 
-#[pyclass(name = "Reference")]
+#[pyclass(from_py_object, name = "Reference")]
 #[derive(Clone)]
 struct PyModelReference {
     #[pyo3(get, set)]
@@ -1902,7 +1902,7 @@ impl PyModelReference {
     }
 }
 
-#[pyclass(name = "Attribute")]
+#[pyclass(from_py_object, name = "Attribute")]
 #[derive(Clone)]
 struct PyModelAttribute {
     #[pyo3(get, set)]
@@ -1929,7 +1929,7 @@ impl PyModelAttribute {
     }
 }
 
-#[pyclass(name = "Method")]
+#[pyclass(from_py_object, name = "Method")]
 #[derive(Clone)]
 struct PyModelMethod {
     #[pyo3(get, set)]
@@ -2055,7 +2055,7 @@ fn extract_references(py: Python<'_>, entries: &[Py<PyModelReference>]) -> Vec<m
 
 // ─── SectionKind ─────────────────────────────────────────────────────────────
 
-#[pyclass(eq, eq_int, frozen, hash, name = "SectionKind")]
+#[pyclass(eq, eq_int, frozen, hash, from_py_object, name = "SectionKind")]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum PySectionKind {
     #[pyo3(name = "PARAMETERS")]
@@ -2177,7 +2177,7 @@ fn section_to_py_kind(section: &model::Section) -> PySectionKind {
 
 // ─── Model Section ───────────────────────────────────────────────────────────
 
-#[pyclass(name = "Section")]
+#[pyclass(from_py_object, name = "Section")]
 #[derive(Clone)]
 struct PyModelSection {
     inner: model::Section,
@@ -2518,7 +2518,7 @@ impl PyModelSection {
 
 // ─── Model Docstring ─────────────────────────────────────────────────────────
 
-#[pyclass(name = "Docstring")]
+#[pyclass(skip_from_py_object, name = "Docstring")]
 #[derive(Clone)]
 struct PyModelDocstring {
     inner: model::Docstring,
@@ -2588,7 +2588,7 @@ impl PyModelDocstring {
     }
     #[setter]
     fn set_deprecation(&mut self, dep: Option<Py<PyModelDeprecation>>) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             self.inner.deprecation = dep.map(|d| {
                 let d = d.borrow(py);
                 model::Deprecation {
@@ -2608,7 +2608,7 @@ impl PyModelDocstring {
     }
     #[setter]
     fn set_sections(&mut self, sections: Vec<Py<PyModelSection>>) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             self.inner.sections = sections.iter().map(|s| s.borrow(py).inner.clone()).collect();
         });
     }
@@ -2717,7 +2717,7 @@ fn py_emit_numpy(py: Python<'_>, doc: Py<PyModelDocstring>, base_indent: usize) 
 /// Context passed to every ``enter_*` / `exit_*`` method during a ``walk()`` call.
 ///
 /// Provides source-location helpers for the docstring currently being walked.
-#[pyclass(frozen, name = "WalkContext")]
+#[pyclass(frozen, skip_from_py_object, name = "WalkContext")]
 struct PyWalkContext {
     source: String,
     line_starts: Vec<u32>,
@@ -3301,15 +3301,15 @@ impl<'py> DocstringVisitor for PyDispatcher<'py> {
 /// Plain `enter_*` / `exit_*` methods:
 /// `enter_plain_docstring`
 #[pyfunction]
-fn walk(py: Python<'_>, doc: PyObject, visitor: PyObject) -> PyResult<PyObject> {
+fn walk(py: Python<'_>, doc: Py<PyAny>, visitor: Py<PyAny>) -> PyResult<Py<PyAny>> {
     let bound = doc.bind(py);
     let active = collect_active(py, &visitor)?;
 
-    let arc = if let Ok(d) = bound.downcast::<PyGoogleDocstring>() {
+    let arc = if let Ok(d) = bound.cast::<PyGoogleDocstring>() {
         d.borrow().parsed.clone()
-    } else if let Ok(d) = bound.downcast::<PyNumPyDocstring>() {
+    } else if let Ok(d) = bound.cast::<PyNumPyDocstring>() {
         d.borrow().parsed.clone()
-    } else if let Ok(d) = bound.downcast::<PyPlainDocstring>() {
+    } else if let Ok(d) = bound.cast::<PyPlainDocstring>() {
         d.borrow().parsed.clone()
     } else {
         return Err(pyo3::exceptions::PyTypeError::new_err(
